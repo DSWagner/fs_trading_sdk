@@ -54,6 +54,17 @@ export function BetFlowPage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initialisedRef = useRef(false);
+  // Keep refs to the live context and preview-payout executor so the preview
+  // effect below can call them without listing them as dependencies. Listing
+  // them in deps causes an infinite render loop, because the effect updates
+  // context state on every run, which produces a new ctx object on the next
+  // render, which retriggers the effect.
+  const ctxRef = useRef(ctx);
+  const previewPayoutRef = useRef(previewPayout);
+  useEffect(() => {
+    ctxRef.current = ctx;
+    previewPayoutRef.current = previewPayout;
+  });
 
   const promptIdx = useMemo(() => Math.floor(Math.random() * PROMPTS.length), []);
 
@@ -93,46 +104,47 @@ export function BetFlowPage() {
     [shape, prediction, spread, secondPeak],
   );
 
-  // Phase 1 + 2: preview belief (instant) + payout (debounced)
+  // Phase 1 + 2: preview belief (instant) + payout (debounced).
+  // Deps intentionally exclude ctx and previewPayout: see ctxRef comment above.
   useEffect(() => {
-    if (!market || !ctx) return;
+    const liveCtx = ctxRef.current;
+    if (!market || !liveCtx) return;
     let cancelled = false;
     try {
       const belief = buildBelief(market);
-      ctx.setPreviewBelief(belief);
+      liveCtx.setPreviewBelief(belief);
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(async () => {
         try {
-          const curve = await previewPayout(belief, collateral);
+          const curve = await previewPayoutRef.current(belief, collateral);
           if (!cancelled) {
             setPayout(curve);
-            ctx.setPreviewPayout(curve);
+            ctxRef.current?.setPreviewPayout(curve);
           }
         } catch (err) {
           if (err instanceof DOMException && err.name === 'AbortError') return;
           if (!cancelled) {
             setPayout(null);
-            ctx.setPreviewPayout(null);
+            ctxRef.current?.setPreviewPayout(null);
           }
         }
       }, 350);
     } catch {
-      // ignore — generator may throw on transient invalid state
+      // ignore: generator may throw on transient invalid state during slider drag
     }
     return () => {
       cancelled = true;
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [market, buildBelief, collateral, ctx, previewPayout]);
+  }, [market, buildBelief, collateral]);
 
+  // Clear preview state on unmount only (no ctx dep: see ctxRef comment).
   useEffect(() => {
     return () => {
-      if (ctx) {
-        ctx.setPreviewBelief(null);
-        ctx.setPreviewPayout(null);
-      }
+      ctxRef.current?.setPreviewBelief(null);
+      ctxRef.current?.setPreviewPayout(null);
     };
-  }, [ctx]);
+  }, []);
 
   const handleSubmit = useCallback(async () => {
     if (!market || !user) return;
