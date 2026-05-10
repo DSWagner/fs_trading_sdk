@@ -4,7 +4,16 @@ import { Polaroid, type PolaroidProps } from '../components/Polaroid';
 import { DevelopDemo } from '../components/DevelopDemo';
 import { StyleGallery } from '../components/StyleGallery';
 import { useIsMobile, useIsNarrow } from '../useMediaQuery';
+import { RARITY_ORDER, TIER_META } from '../rarity';
 
+/**
+ * Hero polaroids on the landing page. Curated to demonstrate the rarity
+ * system end-to-end at first glance: a Mythic, a Legendary, and a Rare
+ * receipt — each with the consensus the user was disagreeing with at bet
+ * time and the actual outcome — so the badge appears on every card and
+ * visitors immediately understand the gamification mechanic without
+ * reading any copy.
+ */
 const SAMPLE_RECEIPTS: PolaroidProps[] = [
   {
     marketId: 'demo-1',
@@ -22,7 +31,9 @@ const SAMPLE_RECEIPTS: PolaroidProps[] = [
     shape: 'gaussian',
     lowerBound: 0,
     upperBound: 100,
-    resolutionState: 'open',
+    resolutionState: 'resolved',
+    resolvedOutcome: 78,
+    consensusAtBet: 28,
     preset: 'sunset',
   },
   {
@@ -38,10 +49,12 @@ const SAMPLE_RECEIPTS: PolaroidProps[] = [
     spread: 30,
     conviction: 0.55,
     collateral: 12,
-    shape: 'bimodal',
+    shape: 'gaussian',
     lowerBound: 0,
     upperBound: 365,
-    resolutionState: 'open',
+    resolutionState: 'resolved',
+    resolvedOutcome: 180,
+    consensusAtBet: 70,
     preset: 'aurora',
   },
   {
@@ -59,7 +72,9 @@ const SAMPLE_RECEIPTS: PolaroidProps[] = [
     shape: 'gaussian',
     lowerBound: 0,
     upperBound: 24,
-    resolutionState: 'open',
+    resolutionState: 'resolved',
+    resolvedOutcome: 8,
+    consensusAtBet: 5,
     preset: 'rosegold',
   },
 ];
@@ -181,6 +196,8 @@ export function LandingPage() {
 
       <DevelopDemo />
 
+      <RarityIntro isMobile={isMobile} />
+
       <StyleGallery />
 
       <section style={{ marginTop: isMobile ? 56 : 96 }}>
@@ -223,6 +240,118 @@ export function LandingPage() {
         </div>
       </section>
     </div>
+  );
+}
+
+/**
+ * Visual primer for the rarity system. Sits between the develop animation
+ * and the style gallery so visitors see, in order:
+ *   1. Their receipt develops over time.
+ *   2. The rarer their contrarian + correct calls, the rarer the receipt.
+ *   3. The receipt can be styled with multiple palettes.
+ *
+ * Every tier is labelled with its color treatment so the badge palette on
+ * the hero polaroids reads as intentional, not decoration.
+ */
+function RarityIntro({ isMobile }: { isMobile: boolean }) {
+  return (
+    <section
+      style={{
+        marginTop: isMobile ? 48 : 80,
+        padding: isMobile ? '24px 18px' : '36px 32px',
+        background: palette.card,
+        border: `1px solid ${palette.rule}`,
+        borderRadius: 12,
+      }}
+      data-testid="rarity-intro"
+    >
+      <div
+        style={{
+          fontFamily: fonts.mono,
+          color: palette.ember,
+          fontSize: 11,
+          letterSpacing: 2,
+          textTransform: 'uppercase',
+          marginBottom: 8,
+        }}
+      >
+        Earn the rarity
+      </div>
+      <h2
+        style={{
+          fontFamily: fonts.display,
+          fontSize: isMobile ? 26 : 36,
+          fontWeight: 700,
+          color: palette.ink,
+          margin: 0,
+          marginBottom: 12,
+          letterSpacing: -0.5,
+          lineHeight: 1.1,
+        }}
+      >
+        Contrarian and right earns a rarer receipt.
+      </h2>
+      <p
+        style={{
+          fontFamily: fonts.body,
+          fontSize: isMobile ? 15 : 17,
+          color: palette.inkSoft,
+          lineHeight: 1.55,
+          margin: 0,
+          marginBottom: 24,
+          maxWidth: 720,
+        }}
+      >
+        When your bet resolves we compare two things: how far you strayed from the crowd, and how close
+        you ended up to the truth. Multiply them together and you get a tier — from Common to Mythic.
+        Receipts are stamped with what you earned.
+      </p>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: isMobile ? 'repeat(3, 1fr)' : 'repeat(6, 1fr)',
+          gap: 10,
+        }}
+      >
+        {RARITY_ORDER.map((tier) => {
+          const meta = TIER_META[tier];
+          return (
+            <div
+              key={tier}
+              data-testid={`landing-tier-${tier}`}
+              style={{
+                padding: '12px 8px',
+                background: meta.badgeFill,
+                border: `1px solid ${meta.badgeStroke}`,
+                borderRadius: 6,
+                textAlign: 'center',
+              }}
+            >
+              <div
+                style={{
+                  fontFamily: fonts.mono,
+                  fontSize: 9.5,
+                  letterSpacing: 1.4,
+                  color: meta.badgeText,
+                  marginBottom: 6,
+                }}
+              >
+                {meta.label.toUpperCase()}
+              </div>
+              <div
+                style={{
+                  width: 12,
+                  height: 12,
+                  borderRadius: '50%',
+                  background: meta.color,
+                  margin: '0 auto',
+                }}
+              />
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 

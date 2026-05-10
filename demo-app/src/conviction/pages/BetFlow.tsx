@@ -19,6 +19,7 @@ import { AuthGate } from '../components/AuthGate';
 import { Polaroid, POLAROID_PRESETS, type PolaroidPreset } from '../components/Polaroid';
 import { useIsMobile } from '../useMediaQuery';
 import { EditorialError, EditorialLoading } from '../components/EditorialState';
+import { potentialRarity, TIER_META, type Rarity } from '../rarity';
 
 type ShapeKind = 'gaussian' | 'range' | 'bimodal';
 
@@ -175,6 +176,7 @@ export function BetFlowPage() {
         lowerBound: market.config.lowerBound,
         upperBound: market.config.upperBound,
         preset,
+        consensusAtBet: market.consensusMean ?? null,
       });
       if (ctx) {
         ctx.setPreviewBelief(null);
@@ -452,6 +454,14 @@ export function BetFlowPage() {
               onChange={setCollateral}
               format={(v) => `$${v.toFixed(0)}`}
             />
+
+            <RarityHint
+              prediction={prediction}
+              consensusMean={market.consensusMean ?? null}
+              lowerBound={lowerBound}
+              upperBound={upperBound}
+              units={market.xAxisUnits ?? ''}
+            />
           </Section>
 
           <Section title="Step 3 · Style the receipt.">
@@ -670,6 +680,128 @@ const PRESET_SWATCH_COLORS: Record<PolaroidPreset, { sky: string; sun: string; g
   rosegold: { sky: 'linear-gradient(180deg, #2B1424 0%, #7A3450 55%, #F2B8C0 100%)', sun: '#FFE0B8', ground: '#321820' },
   noir: { sky: 'linear-gradient(180deg, #0A0A0A 0%, #252525 55%, #888888 100%)', sun: '#FFFFFF', ground: '#101010' },
 };
+
+/**
+ * Live readout of the rarity tier the user *would* earn if they end up
+ * right. Updates as they drag the prediction slider. Designed so the
+ * gamification mechanic is obvious without a tutorial: the further you
+ * stray from consensus, the rarer the receipt — but you have to be right.
+ */
+function RarityHint({
+  prediction,
+  consensusMean,
+  lowerBound,
+  upperBound,
+  units,
+}: {
+  prediction: number;
+  consensusMean: number | null;
+  lowerBound: number;
+  upperBound: number;
+  units: string;
+}) {
+  const tier: Rarity | null = potentialRarity({
+    prediction,
+    consensusMean,
+    lowerBound,
+    upperBound,
+  });
+  const meta = tier ? TIER_META[tier] : null;
+  const range = upperBound - lowerBound;
+  const disagreementPct =
+    consensusMean != null && range > 0
+      ? Math.round((Math.abs(prediction - consensusMean) / range) * 100)
+      : null;
+
+  if (!meta || !tier) {
+    return (
+      <div
+        style={{
+          marginTop: 12,
+          padding: '12px 14px',
+          background: palette.card,
+          border: `1px dashed ${palette.rule}`,
+          borderRadius: 8,
+          fontFamily: fonts.body,
+          fontSize: 13,
+          color: palette.inkMute,
+        }}
+      >
+        Rarity unlocks once the market has a crowd consensus.
+      </div>
+    );
+  }
+
+  const headline =
+    tier === 'common'
+      ? `In step with the crowd (${disagreementPct ?? 0}% off consensus)`
+      : `Earn a ${meta.label.toUpperCase()} receipt if you're right.`;
+
+  const sub =
+    tier === 'common'
+      ? 'Move the prediction further from consensus to chase rarer receipts.'
+      : tier === 'mythic'
+        ? `You're ${disagreementPct}% off consensus. Landing this is the highest tier in the game.`
+        : `You're ${disagreementPct}% off consensus. Rarity scales with how contrarian and how accurate you are.`;
+
+  return (
+    <div
+      style={{
+        marginTop: 14,
+        padding: '14px 16px',
+        background: meta.badgeFill,
+        border: `1.5px solid ${meta.badgeStroke}`,
+        borderRadius: 10,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 14,
+      }}
+      data-testid="rarity-hint"
+      data-tier={tier}
+    >
+      <div
+        style={{
+          flexShrink: 0,
+          padding: '6px 12px',
+          background: meta.color,
+          color: '#fff',
+          fontFamily: fonts.mono,
+          fontSize: 11,
+          fontWeight: 700,
+          letterSpacing: 1.4,
+          borderRadius: 999,
+        }}
+      >
+        {meta.label.toUpperCase()}
+      </div>
+      <div style={{ minWidth: 0 }}>
+        <div
+          style={{
+            fontFamily: fonts.display,
+            fontSize: 14,
+            fontWeight: 600,
+            color: meta.badgeText,
+            lineHeight: 1.25,
+          }}
+        >
+          {headline}
+        </div>
+        <div
+          style={{
+            fontFamily: fonts.body,
+            fontSize: 12,
+            color: meta.badgeText,
+            opacity: 0.75,
+            marginTop: 2,
+            lineHeight: 1.3,
+          }}
+        >
+          {sub} {units && consensusMean != null ? `(consensus µ ${consensusMean.toFixed(1)} ${units})` : ''}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function PresetSwatch({
   active,

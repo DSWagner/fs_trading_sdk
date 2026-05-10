@@ -41,6 +41,7 @@ export function EmbedPage() {
         lowerBound: market.config.lowerBound,
         upperBound: market.config.upperBound,
         preset: fromHash.preset,
+        consensusAtBet: fromHash.consensusAtBet ?? null,
       };
     }
     return null;
@@ -112,6 +113,7 @@ export function EmbedPage() {
           resolvedOutcome={(market as any)?.resolvedOutcome ?? null}
           width={300}
           preset={merged.preset}
+          consensusAtBet={(merged as any).consensusAtBet ?? null}
           interactive
         />
       </a>

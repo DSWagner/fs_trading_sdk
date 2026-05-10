@@ -17,6 +17,12 @@ export interface SharedPayload {
   createdAt?: string;
   marketTitle?: string;
   preset?: 'auto' | 'sunset' | 'twilight' | 'aurora' | 'botanical' | 'rosegold' | 'noir';
+  /**
+   * Consensus mean at the moment the bet was placed. Pinned so rarity is
+   * computed against the crowd state the user was disagreeing with then,
+   * not the live consensus when the receipt is viewed.
+   */
+  consensusAtBet?: number | null;
 }
 
 const PARAM_KEY = 'r';

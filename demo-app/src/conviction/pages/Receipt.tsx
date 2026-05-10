@@ -49,6 +49,7 @@ export function ReceiptPage() {
         lowerBound: market.config.lowerBound,
         upperBound: market.config.upperBound,
         preset: fromHash.preset,
+        consensusAtBet: fromHash.consensusAtBet ?? null,
       };
     }
     return null;
@@ -122,6 +123,7 @@ function ReceiptView({
     createdAt: merged.createdAt,
     marketTitle: merged.marketTitle,
     preset: merged.preset,
+    consensusAtBet: merged.consensusAtBet ?? null,
   };
 
   const shareUrl = buildShareUrl(
@@ -157,6 +159,9 @@ function ReceiptView({
       embedUrl,
       resolutionState: marketResolutionState,
       resolvedOutcome,
+      consensusAtBet: merged.consensusAtBet ?? null,
+      lowerBound: merged.lowerBound,
+      upperBound: merged.upperBound,
     });
     try {
       if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
@@ -208,6 +213,7 @@ function ReceiptView({
           width={isMobile ? 300 : 420}
           preset={merged.preset}
           animateDevelop
+          consensusAtBet={merged.consensusAtBet ?? null}
         />
       </div>
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>

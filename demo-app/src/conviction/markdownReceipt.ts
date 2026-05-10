@@ -8,6 +8,8 @@
  * lives at the share URL itself.
  */
 
+import { calculateRarity, TIER_META } from './rarity';
+
 export type MarkdownReceiptInput = {
   username: string;
   reasoning: string;
@@ -22,6 +24,10 @@ export type MarkdownReceiptInput = {
   embedUrl?: string;
   resolutionState?: string;
   resolvedOutcome?: number | null;
+  /** Consensus mean at bet time. Required for the rarity line. */
+  consensusAtBet?: number | null;
+  lowerBound?: number;
+  upperBound?: number;
 };
 
 const SHAPE_LABELS: Record<MarkdownReceiptInput['shape'], string> = {
@@ -53,6 +59,7 @@ export function buildMarkdownReceipt(input: MarkdownReceiptInput): string {
   const metaLine = `> **@${input.username}** \u00b7 predicted **${predictionPhrase}** \u00b7 stake ${stake} \u00b7 conviction ${conviction10}/10 \u00b7 ${shape} \u00b7 signed ${date}`;
 
   const outcomeLine = buildOutcomeLine(input);
+  const rarityLine = buildRarityLine(input);
 
   const titleLine = `> _on [${escapeMarkdownInline(input.marketTitle)}](${input.shareUrl})_`;
 
@@ -64,6 +71,9 @@ export function buildMarkdownReceipt(input: MarkdownReceiptInput): string {
   if (outcomeLine) {
     lines.push('>', outcomeLine);
   }
+  if (rarityLine) {
+    lines.push('>', rarityLine);
+  }
   lines.push('>', titleLine);
 
   let block = lines.join('\n');
@@ -73,6 +83,26 @@ export function buildMarkdownReceipt(input: MarkdownReceiptInput): string {
   }
 
   return block;
+}
+
+function buildRarityLine(input: MarkdownReceiptInput): string | null {
+  if (input.resolutionState !== 'resolved') return null;
+  if (input.resolvedOutcome == null || !Number.isFinite(input.resolvedOutcome)) return null;
+  if (input.consensusAtBet == null || !Number.isFinite(input.consensusAtBet)) return null;
+  if (input.lowerBound == null || input.upperBound == null) return null;
+
+  const r = calculateRarity({
+    prediction: input.prediction,
+    resolvedOutcome: input.resolvedOutcome,
+    consensusMean: input.consensusAtBet,
+    lowerBound: input.lowerBound,
+    upperBound: input.upperBound,
+  });
+
+  if (r.tier === 'common') return null;
+
+  const meta = TIER_META[r.tier];
+  return `> _Rarity_ \u00b7 **${meta.label}** \u00b7 ${r.caption}`;
 }
 
 function buildOutcomeLine(input: MarkdownReceiptInput): string | null {

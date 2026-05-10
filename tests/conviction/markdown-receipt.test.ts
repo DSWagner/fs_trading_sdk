@@ -24,6 +24,50 @@ const baseline: MarkdownReceiptInput = {
   embedUrl: 'https://example.com/embed/r/abc/123',
 };
 
+describe('buildMarkdownReceipt: rarity line', () => {
+  it('omits the rarity line for unresolved bets', () => {
+    const md = buildMarkdownReceipt(baseline);
+    expect(md).not.toMatch(/_Rarity_/);
+  });
+
+  it('omits the rarity line when consensusAtBet is missing', () => {
+    const md = buildMarkdownReceipt({
+      ...baseline,
+      resolutionState: 'resolved',
+      resolvedOutcome: 4,
+      lowerBound: 0,
+      upperBound: 10,
+    });
+    expect(md).not.toMatch(/_Rarity_/);
+  });
+
+  it('omits the rarity line when the tier is common', () => {
+    const md = buildMarkdownReceipt({
+      ...baseline,
+      resolutionState: 'resolved',
+      resolvedOutcome: 4,
+      consensusAtBet: 4,
+      lowerBound: 0,
+      upperBound: 10,
+    });
+    expect(md).not.toMatch(/_Rarity_/);
+  });
+
+  it('includes the rarity line when the bet earned a tier', () => {
+    const md = buildMarkdownReceipt({
+      ...baseline,
+      prediction: 8,
+      resolutionState: 'resolved',
+      resolvedOutcome: 8,
+      consensusAtBet: 3,
+      lowerBound: 0,
+      upperBound: 10,
+    });
+    expect(md).toMatch(/_Rarity_/);
+    expect(md.toLowerCase()).toMatch(/mythic|legendary|epic|rare|uncommon/);
+  });
+});
+
 describe('buildMarkdownReceipt: structural shape', () => {
   it('produces a string', () => {
     const md = buildMarkdownReceipt(baseline);

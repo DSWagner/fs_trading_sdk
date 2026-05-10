@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { palette, fonts } from '../theme';
+import { calculateRarity, TIER_META, type Rarity } from '../rarity';
 
 /**
  * The Polaroid — Conviction's signature receipt.
@@ -51,6 +52,12 @@ export interface PolaroidProps {
    * resolution moment is visible. Has no effect on still-open bets.
    */
   animateDevelop?: boolean;
+  /**
+   * Consensus mean at the moment the bet was placed. Required to compute
+   * rarity. When null/undefined the rarity badge is suppressed (the bet
+   * was placed before consensus tracking existed, or the engine had none).
+   */
+  consensusAtBet?: number | null;
 }
 
 export function Polaroid(props: PolaroidProps) {
@@ -73,9 +80,28 @@ export function Polaroid(props: PolaroidProps) {
     interactive = false,
     preset = 'auto',
     animateDevelop = false,
+    consensusAtBet = null,
   } = props;
 
   const developed = resolutionState === 'resolved';
+
+  // Rarity only exists for resolved bets that include both a final outcome and
+  // a recorded consensus-at-bet. For everything else we render the polaroid
+  // without any rarity treatment so the visual stays clean.
+  const rarity: Rarity | null = useMemo(() => {
+    if (!developed) return null;
+    if (resolvedOutcome == null || !Number.isFinite(resolvedOutcome)) return null;
+    if (consensusAtBet == null || !Number.isFinite(consensusAtBet)) return null;
+    const result = calculateRarity({
+      prediction,
+      resolvedOutcome,
+      consensusMean: consensusAtBet,
+      lowerBound,
+      upperBound,
+    });
+    return result.tier;
+  }, [developed, resolvedOutcome, consensusAtBet, prediction, lowerBound, upperBound]);
+  const rarityMeta = rarity ? TIER_META[rarity] : null;
 
   // Animated develop: when enabled and the receipt is settled, mount with a
   // desaturated/blurred filter and transition to "sharp" over ~900 ms so the
@@ -273,7 +299,22 @@ export function Polaroid(props: PolaroidProps) {
         </clipPath>
       </defs>
 
-      {/* Polaroid card body */}
+      {/* Polaroid card body. When the receipt has earned a rarity tier we
+          replace the hairline rule with a thicker, tier-colored stroke and
+          drop a soft outer glow inside the card padding. */}
+      {rarityMeta && rarityMeta.borderWidth > 0 && (
+        <rect
+          x={rarityMeta.borderWidth / 2}
+          y={rarityMeta.borderWidth / 2}
+          width={width - rarityMeta.borderWidth}
+          height={height - rarityMeta.borderWidth}
+          rx="6"
+          fill="none"
+          stroke={rarityMeta.color}
+          strokeWidth={rarityMeta.borderWidth + 2}
+          opacity="0.18"
+        />
+      )}
       <rect
         x="0"
         y="0"
@@ -281,8 +322,8 @@ export function Polaroid(props: PolaroidProps) {
         height={height}
         rx="6"
         fill={palette.card}
-        stroke={palette.rule}
-        strokeWidth="1"
+        stroke={rarityMeta && rarityMeta.borderWidth > 0 ? rarityMeta.color : palette.rule}
+        strokeWidth={rarityMeta && rarityMeta.borderWidth > 0 ? rarityMeta.borderWidth : 1}
       />
 
       {/* Photo area */}
@@ -419,6 +460,17 @@ export function Polaroid(props: PolaroidProps) {
               DEVELOPING
             </text>
           </g>
+        )}
+        {/* rarity stamp: top-right of the photo, only for resolved bets that
+            earned uncommon-or-higher. The badge sits on the photo (not the
+            polaroid card) so its colors read against the developed sky. */}
+        {rarityMeta && rarity && rarity !== 'common' && (
+          <RarityStamp
+            x={photoX + photoSize - 10}
+            y={photoY + 10}
+            tier={rarity}
+            polaroidWidth={width}
+          />
         )}
       </g>
 
@@ -903,6 +955,74 @@ interface ScaleStripProps {
  * prediction and outcome are close together. Bounds are dimmed so they read
  * as "context" rather than "data."
  */
+/**
+ * The rarity stamp. Renders as a small pill in the top-right of the photo,
+ * tinted by the tier's badge palette. Sits on the photo so colors read against
+ * the sky portion of the develop scene rather than the polaroid card.
+ */
+function RarityStamp({
+  x,
+  y,
+  tier,
+  polaroidWidth,
+}: {
+  x: number;
+  y: number;
+  tier: Rarity;
+  polaroidWidth: number;
+}) {
+  const meta = TIER_META[tier];
+  const fontSize = Math.max(8, Math.round(polaroidWidth * 0.026));
+  const padX = Math.round(fontSize * 0.85);
+  const padY = Math.round(fontSize * 0.45);
+  const label = meta.label.toUpperCase();
+  // Approximate label width in mono-ish font: 0.62 * fontSize per char.
+  const labelWidth = Math.round(label.length * fontSize * 0.62);
+  const pillWidth = labelWidth + padX * 2;
+  const pillHeight = fontSize + padY * 2;
+  const pillX = x - pillWidth;
+  const pillY = y;
+  const radius = pillHeight / 2;
+  return (
+    <g>
+      {meta.glowColor !== 'transparent' && (
+        <rect
+          x={pillX - 3}
+          y={pillY - 3}
+          width={pillWidth + 6}
+          height={pillHeight + 6}
+          rx={radius + 3}
+          fill={meta.glowColor}
+          opacity="0.55"
+        />
+      )}
+      <rect
+        x={pillX}
+        y={pillY}
+        width={pillWidth}
+        height={pillHeight}
+        rx={radius}
+        fill={meta.badgeFill}
+        stroke={meta.badgeStroke}
+        strokeWidth="1.5"
+      />
+      <text
+        x={pillX + pillWidth / 2}
+        y={pillY + pillHeight / 2}
+        textAnchor="middle"
+        dominantBaseline="central"
+        fontFamily={fonts.mono}
+        fontSize={fontSize}
+        fontWeight="700"
+        fill={meta.badgeText}
+        letterSpacing={Math.round(fontSize * 0.12)}
+      >
+        {label}
+      </text>
+    </g>
+  );
+}
+
 function ScaleStrip(props: ScaleStripProps) {
   const { x, y, width, height, lowerBound, upperBound, units, prediction, predictionT, outcome, outcomeT, polaroidWidth } = props;
   const axisY = y + Math.round(height * 0.55);

@@ -30,6 +30,13 @@ export interface BetRecord {
   lowerBound?: number;
   upperBound?: number;
   preset?: 'auto' | 'sunset' | 'twilight' | 'aurora' | 'botanical' | 'rosegold' | 'noir';
+  /**
+   * Consensus mean at the moment the bet was placed. Pinned in localStorage
+   * (and in the share-hash payload) so the rarity calculation reflects the
+   * crowd state the user was disagreeing with at bet time, not whatever the
+   * consensus has drifted to by the time the receipt is viewed.
+   */
+  consensusAtBet?: number | null;
 }
 
 interface Store {

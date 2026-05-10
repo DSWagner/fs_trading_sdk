@@ -28,6 +28,7 @@ If you want to *understand* Conviction, read top to bottom.
 15. [What is not done yet](#what-is-not-done-yet)
 16. [End-to-end testing without spending a cent](#end-to-end-testing-without-spending-a-cent)
 17. [Editorial polish pass (animation + voice + Markdown export)](#editorial-polish-pass-animation--voice--markdown-export)
+18. [Rarity tier system (gamification)](#rarity-tier-system-gamification)
 
 ---
 
@@ -1031,4 +1032,95 @@ For the absolute-newcomer reader.
 
 ---
 
-*Last updated: 2026-05-10 (empirical verification pass: Playwright + Chromium headless-browser script, 15/15 real-browser checks, 7 phase screenshots, caught two production bugs in the animation that fake-timer unit tests had missed; switched effect to useLayoutEffect to avoid mid-mount flash; transition style cleared in 'done' phase to prevent unintended re-animation; total 164 Conviction tests + 15 browser checks, all green). Update this file whenever behavior changes.*
+---
+
+## Rarity tier system (gamification)
+
+Every resolved receipt now earns a **rarity tier**. The mechanic is built directly on top of the data the SDK already exposes — there are no extra writes, no new state, no separate scoring service. Rarity is purely a derived UX value.
+
+### The mechanic, in one sentence
+
+You earn a rarer receipt when you both (a) disagreed meaningfully with the crowd at bet time and (b) turned out to be right. Consensus-following + correct is **Common**; contrarian + right is **Mythic**. Contrarian + wrong is just a miss (still Common). It is impossible to grind rarity by spamming bets — only by making contrarian calls that land.
+
+### Tiers
+
+| Tier | Score range | Visual treatment | Caption |
+|------|-------------|------------------|---------|
+| Common | < 0.04 | No stamp, hairline border | "In step with the crowd." |
+| Uncommon | 0.04–0.10 | Green stamp, 1px tinted border | "Slightly contrarian and right." |
+| Rare | 0.10–0.18 | Blue stamp, 2px tinted border + soft glow | "A non-consensus call that paid off." |
+| Epic | 0.18–0.30 | Purple stamp, 2px tinted border + glow | "You bet against the crowd and won." |
+| Legendary | 0.30–0.45 | Gold stamp, 3px tinted border + strong glow | "A rare contrarian call that landed." |
+| Mythic | ≥ 0.45 | Ember stamp, 3px tinted border + strongest glow | "You saw the future. The crowd did not." |
+
+### The formula
+
+```text
+range        = upperBound - lowerBound
+error        = |prediction - actual| / range
+accuracy     = max(0, 1 - error * 4)            -> 25% off collapses accuracy to 0
+disagreement = |prediction - consensusAtBet| / range, clamped to [0, 1]
+score        = disagreement * accuracy           -> both conditions are necessary
+```
+
+The `* 4` multiplier on `error` makes accuracy fall off aggressively so being close-but-not-precise does not push you into legendary territory. Multiplying disagreement by accuracy enforces that the rarer tiers require *both* contrarianism *and* correctness — exactly the editorial intent.
+
+### What appears where
+
+```mermaid
+flowchart LR
+    A[Bet placed<br/>consensus pinned] --> B[Receipt URL]
+    B --> C{Market<br/>resolved?}
+    C -->|No| D[Open receipt<br/>no rarity yet]
+    C -->|Yes| E[calculateRarity]
+    E --> F[Polaroid stamp<br/>top-right of photo]
+    E --> G[Markdown export<br/>'_Rarity_ • Mythic' line]
+    E --> H[Profile ledger<br/>tier counts + best receipt]
+    A --> I[BetFlow page<br/>RarityHint card]
+    I -.live-as-you-drag.-> J[Potential tier preview<br/>'Earn EPIC if right']
+```
+
+1. **Live hint on BetFlow**: a card under the slider stack shows the rarity tier the user *would* earn if they end up within 3% of the truth. The tier name updates in real time as the prediction slider moves. This is what makes the gamification self-explanatory — no tutorial needed.
+
+2. **Stamp on the Polaroid**: top-right of the photo, only on resolved receipts that earned uncommon-or-higher. Tinted to match the tier palette. Suppressed for Common so unstamped receipts read as "no special claim" rather than "low tier".
+
+3. **Tinted card border**: the polaroid card stroke widens (1 → 3px) and shifts to the tier color for rare-or-higher receipts, with a faint outer glow inside the card padding.
+
+4. **Profile rarity ledger**: a six-cell grid on the profile page showing how many of each tier the user has earned, plus a "Best receipt to date" link to their highest-scoring one.
+
+5. **Profile calibration card**: three buckets (low/medium/high conviction) showing the user's mean accuracy in each. Surfaces whether their high-conviction bets are actually their most accurate.
+
+6. **Markdown export**: when copied, the snippet includes a `_Rarity_ • Mythic • caption` line for uncommon-or-higher tiers.
+
+7. **Landing page**: a dedicated "Earn the rarity" section between the develop animation and the style gallery introduces the six tiers with their color treatments. The three hero polaroids are now Mythic / Legendary / Rare exemplars so new visitors immediately see the gamification on the page.
+
+### Data plumbing
+
+The crowd state the user was disagreeing with at bet time gets pinned in two places so the rarity is stable regardless of when the receipt is viewed:
+
+- **`BetRecord.consensusAtBet`** in `localStorage` (the user's own ledger).
+- **`SharedPayload.consensusAtBet`** in the URL hash fragment (the cross-device share copy).
+
+The Receipt and Embed pages read both, prefer the local record, and fall back to the hash payload. The Polaroid component is the single source of truth for the calculation: it imports `calculateRarity` from `rarity.ts`, derives the tier inside a `useMemo`, and gracefully returns `null` (no stamp, no border treatment) if either `consensusAtBet` or `resolvedOutcome` is missing.
+
+### Tests
+
+| File | Count | Covers |
+|------|-------|--------|
+| `tests/conviction/rarity.test.ts` | 34 | Every tier threshold, `potentialRarity` hint, missing-consensus fallback, NaN / Infinity / negative bounds, accuracy clamp, disagreement clamp, every caption, tier metadata sanity. |
+| `tests/conviction/polaroid-rarity.test.tsx` | 15 | Stamp suppression for open / no-consensus / common, stamp text matches calculated tier, all 6 tiers render without throwing, contrarian-but-wrong stays common. |
+| `tests/conviction/markdown-receipt.test.ts` (rarity section) | 4 | Rarity line absent for unresolved / no-consensus / common; rarity line present and contains tier name for uncommon-or-higher. |
+| `scripts/verify-conviction/verify-rarity.mjs` | Playwright | Real-browser: 6 tier cells on landing, at least one hero polaroid carries a rarity stamp in the DOM, the live RarityHint card escalates from `common` to a higher tier when the prediction slider is dragged to the extreme. |
+
+**Total Conviction tests: 217 passing locally** (rarity + polaroid + storage + hash + markdown + editorial + bet-journey + polaroid-render + live-engine). Plus 15+ Playwright real-browser checks across three verification scripts.
+
+### Why this raises the ceiling
+
+- **It compounds with the existing Polaroid aesthetic** instead of fighting it. The stamp is in-photo, in-frame; the border tints the same rounded rectangle that was already there.
+- **It rewards the exact behaviour the engine cares about**: contrarian, correct, calibrated. The mechanic and the underlying market math point in the same direction.
+- **It is fully derived**. No new APIs, no new persistence schema (just one extra optional field), no SDK changes. The competition rule "do not modify the SDK" is held strictly.
+- **It is legible without a guide.** The BetFlow hint shows the tier name the user is currently chasing, in real time, as a colored pill. New users learn the mechanic by playing with the slider.
+
+---
+
+*Last updated: 2026-05-11 (rarity tier system: 6 tiers from Common to Mythic, derived from disagreement × accuracy; live hint on BetFlow, stamp + tinted border on the Polaroid, ledger + best-receipt + calibration on Profile, dedicated landing-page section, line in the Markdown export; 49 new tests across 3 files all green; Playwright verification confirms live hint escalates from common to mythic when the slider is dragged; total 217 Conviction tests + 15+ browser checks). Update this file whenever behavior changes.*
