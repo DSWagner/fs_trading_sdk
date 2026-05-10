@@ -27,24 +27,35 @@ async function main() {
   await page.goto(`${BASE_URL}${href}`, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1500);
 
-  // Verify the polaroid and chart card render at IDENTICAL dimensions.
-  // The user explicitly asked for "same width and height" in a column
-  // stack — this assertion guards against future regressions.
+  // Verify the polaroid and chart card render at IDENTICAL dimensions
+  // AND that the form column ends at the same vertical position as the
+  // visualisations column. The user explicitly asked for "same width
+  // and height" in a column stack AND for the two halves of the page
+  // to "end at the same height" — these assertions guard against
+  // future regressions.
   const dims = await page.evaluate(() => {
     const aside = document.querySelector('aside[aria-label*="Live preview"]');
     const polaroid = aside?.querySelector('svg');
     const chartShell = aside?.querySelector('.conviction-chart-shell');
     const chartWrap = chartShell?.parentElement;
+    // The form column is the first grid child (the div that contains
+    // the H1 and the form fields, sibling of the aside).
+    const formCol = aside?.parentElement?.firstElementChild;
     return {
       polaroidW: Math.round(polaroid?.getBoundingClientRect().width ?? 0),
       polaroidH: Math.round(polaroid?.getBoundingClientRect().height ?? 0),
       chartW: Math.round(chartWrap?.getBoundingClientRect().width ?? 0),
       chartH: Math.round(chartWrap?.getBoundingClientRect().height ?? 0),
+      formH: Math.round(formCol?.getBoundingClientRect().height ?? 0),
+      asideH: Math.round(aside?.getBoundingClientRect().height ?? 0),
     };
   });
   console.log('PREVIEW DIMS', JSON.stringify(dims));
   if (dims.polaroidW !== dims.chartW || dims.polaroidH !== dims.chartH) {
     throw new Error(`Polaroid and chart card dimensions must match. Got ${JSON.stringify(dims)}`);
+  }
+  if (Math.abs(dims.formH - dims.asideH) > 4) {
+    throw new Error(`Form column and visualisations column must end at the same height. Got formH=${dims.formH}, asideH=${dims.asideH}`);
   }
 
   await page.screenshot({ path: join(OUT_DIR, 'betflow-before.png'), fullPage: false });

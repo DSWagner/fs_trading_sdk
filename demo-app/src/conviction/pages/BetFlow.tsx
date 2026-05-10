@@ -58,25 +58,26 @@ export function BetFlowPage() {
   const ctxRef = useRef(ctx);
   const previewPayoutRef = useRef(previewPayout);
 
-  // Measure the right preview column so the polaroid and chart can size
-  // themselves to fill that 50% half of the page. We pass the same
-  // width to both visualisations so they have IDENTICAL dimensions in
-  // the column stack (polaroid on top, chart on bottom).
+  // Measure BOTH halves of the page so we can:
+  //   1. Pass the right-column width to the polaroid so it fills 50%
+  //      of the page horizontally up to a 600 px cap.
+  //   2. Pass the LEFT-column (form) height so the polaroid + chart
+  //      shrink to fit within the form's natural height. The user
+  //      explicitly asked that the two columns end at the same vertical
+  //      position — no giant empty gap below the form, and no giant
+  //      empty gap below the chart.
   //
-  // We use a CALLBACK REF (not a normal ref + useEffect) so the
-  // ResizeObserver is set up the moment the aside mounts — which can
-  // happen after the component's first render (we early-return on
-  // loading/error states, then re-render with the aside attached). A
-  // useEffect with `[]` deps would miss that because it runs once on
-  // mount when the aside hasn't been rendered yet.
+  // We use CALLBACK REFS (not useEffect + plain ref) so the
+  // ResizeObservers are set up the moment the target element mounts —
+  // which can happen AFTER the component's first render thanks to
+  // loading/error early-returns. A useEffect with `[]` deps would miss
+  // that because it fires once when the element doesn't exist yet.
   const [previewColumnWidth, setPreviewColumnWidth] = useState<number>(520);
   const previewObserverRef = useRef<ResizeObserver | null>(null);
   const setPreviewColumnRef = useCallback((el: HTMLElement | null) => {
     previewObserverRef.current?.disconnect();
     previewObserverRef.current = null;
     if (!el || typeof ResizeObserver === 'undefined') return;
-    // Seed immediately with current width so we don't flash at the
-    // initial 520 state before the observer fires.
     setPreviewColumnWidth(Math.floor(el.getBoundingClientRect().width));
     const ro = new ResizeObserver((entries) => {
       for (const entry of entries) {
@@ -86,17 +87,52 @@ export function BetFlowPage() {
     ro.observe(el);
     previewObserverRef.current = ro;
   }, []);
+  const [formColumnHeight, setFormColumnHeight] = useState<number>(900);
+  const formObserverRef = useRef<ResizeObserver | null>(null);
+  const setFormColumnRef = useCallback((el: HTMLElement | null) => {
+    formObserverRef.current?.disconnect();
+    formObserverRef.current = null;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    setFormColumnHeight(Math.floor(el.getBoundingClientRect().height));
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setFormColumnHeight(Math.floor(entry.contentRect.height));
+      }
+    });
+    ro.observe(el);
+    formObserverRef.current = ro;
+  }, []);
   useEffect(() => {
     return () => {
       previewObserverRef.current?.disconnect();
       previewObserverRef.current = null;
+      formObserverRef.current?.disconnect();
+      formObserverRef.current = null;
     };
   }, []);
-  // Clamp to sane bounds so the polaroid never becomes microscopic or
-  // ridiculously huge. At a typical 1440 viewport the right column is
-  // ~680 px wide, so the polaroid hits the 600 cap.
-  const previewVisualWidth = Math.max(280, Math.min(600, previewColumnWidth));
+  // Chrome in the right column = header row + gap between header and
+  // polaroid + gap between polaroid and chart. We subtract this from
+  // formColumnHeight to compute the budget that the two visualisations
+  // can share. Each visualisation gets exactly half.
+  const RIGHT_COL_CHROME = 30 /* header */ + 16 /* header→polaroid gap */ + 16 /* polaroid→chart gap */;
+  const heightDerivedVisualHeight = Math.max(280, (formColumnHeight - RIGHT_COL_CHROME) / 2);
+  const heightDerivedVisualWidth = heightDerivedVisualHeight / 1.5;
+  // The polaroid width is whichever is SMALLER: the column width (so it
+  // never overflows horizontally), the height-derived width (so the
+  // stacked polaroid + chart fit inside formColumnHeight), and a 600 px
+  // hard cap (so the polaroid is never absurdly large on ultrawide
+  // monitors). Floor at 280 to keep text legible.
+  const previewVisualWidth = Math.max(
+    280,
+    Math.min(600, previewColumnWidth, heightDerivedVisualWidth),
+  );
   const previewVisualHeight = Math.round(previewVisualWidth * 1.5);
+  // Final right-column height: header + 2 visualisations + gaps. We
+  // also stretch the LEFT column to at least this height (min-height)
+  // so even if the form's natural content is shorter than the
+  // visualisations the two columns still end at the same vertical
+  // position.
+  const rightColumnTotalHeight = RIGHT_COL_CHROME + 2 * previewVisualHeight;
   useEffect(() => {
     ctxRef.current = ctx;
     previewPayoutRef.current = previewPayout;
@@ -429,14 +465,27 @@ export function BetFlowPage() {
           // shape chips, reasoning textarea, submit button). The right
           // column holds the polaroid stacked above the chart, both
           // sized to identical width and height so the right half of
-          // the page reads as a clean two-up vertical stack.
+          // the page reads as a clean two-up vertical stack. The two
+          // columns are forced to the SAME total height (whichever is
+          // taller wins, via min-height on both) so the page bottoms
+          // out cleanly with no orphaned empty space below either side.
           gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) minmax(0, 1fr)',
           gap: isMobile ? 24 : 32,
           marginTop: 16,
-          alignItems: 'start',
+          alignItems: 'stretch',
         }}
       >
-        <div>
+        <div
+          ref={setFormColumnRef}
+          style={{
+            // Stretch to at least the right-column height so the form
+            // never appears as a short skinny column with a giant empty
+            // area below it. If the form's natural content is already
+            // taller, this min-height is a no-op and the visualisations
+            // (which size themselves to formColumnHeight) grow to match.
+            minHeight: isMobile ? undefined : rightColumnTotalHeight,
+          }}
+        >
           <span style={{ fontFamily: fonts.mono, fontSize: 10.5, color: palette.ember, letterSpacing: 1.6 }}>
             STAKE A CONVICTION
           </span>

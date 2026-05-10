@@ -379,14 +379,22 @@ export function Polaroid(props: PolaroidProps) {
   // the photo's sun glow which is already conviction-aware.
 
   // Develop filter parameters — blur + saturation + brightness as a
-  // function of (1 - progress). At progress=0 the photo is heavily
-  // blurred and desaturated. At progress=1 the filter has no children.
+  // function of (1 - progress). At progress=0 the photo is blurred and
+  // slightly desaturated to read as "still developing". At progress=1
+  // the filter has no children (fully sharp + colourful).
+  //
+  // Saturation and sepia were aggressively cranked down (75% sat cut,
+  // 70% sepia overlay) which tinted EVERY rarity tier brown in the
+  // live preview, hiding the rarity-anchored sky colours entirely.
+  // The user explicitly asked to see the rarity sky colours
+  // (grey/green/blue/purple/gold/orange) clearly. Now the filter only
+  // mildly desaturates and applies a light sepia, so the rarity hue
+  // family stays unmistakable even during the develop animation.
   const developIntensity = clampUnit(1 - progress);
-  const photoBlur = (developIntensity * 2.4).toFixed(2);
-  const photoSat = (1 - developIntensity * 0.75).toFixed(2);
-  const photoBri = (1 - developIntensity * 0.14).toFixed(2);
-  // Sepia mix amount (0–0.7). Higher when undeveloped, none when fully developed.
-  const sepia = developIntensity * 0.7;
+  const photoBlur = (developIntensity * 1.8).toFixed(2);
+  const photoSat = (1 - developIntensity * 0.25).toFixed(2);
+  const photoBri = (1 - developIntensity * 0.10).toFixed(2);
+  const sepia = developIntensity * 0.18;
 
   return (
     <svg
@@ -606,27 +614,35 @@ export function Polaroid(props: PolaroidProps) {
         />
 
         {/* Reasoning quote — ONLY when developed + accurate. This is the
-            payoff for being right. Anchored to the GROUND area (below the
-            silhouette horizon) so it never covers the sky, suns, or hills.
-            The user explicitly asked for this: "the reasoning after
-            resolution is not covering the hills and the sky but rather
-            is always in the bottom half of the image covering only the
-            ground and not covering the beautiful sky and hills and sun
-            or moon or whatever it is." The quote anchor lives at
-            horizonY + small offset so it sits over the dark ground silhouette,
-            where its scrim integrates naturally and the text reads
-            cleanly against the muted earth tones. */}
-        {reasoningRevealed && reasoning.trim().length > 0 && (
-          <ReasoningQuote
-            x={photoX + 10}
-            y={photoY + photo.horizonY * photoSize + Math.round(photoSize * 0.06)}
-            width={photoSize - 20}
-            maxHeight={Math.max(0, (1 - photo.horizonY) * photoSize - Math.round(photoSize * 0.10))}
-            text={reasoning.trim()}
-            handle={username}
-            polaroidWidth={width}
-          />
-        )}
+            payoff for being right. Anchored DEEP in the lower portion of
+            the photo so it never visually competes with the sky, the
+            suns, or the silhouetted mountains/hills. The user explicitly
+            asked for this multiple times: the text must sit clearly
+            BELOW the horizon, leaving the sky and the silhouettes
+            entirely uncovered. We pick whichever is LOWER between (a)
+            72% down the photo and (b) horizonY + 16% — so as the
+            horizon rises higher in the frame, the quote follows it
+            down with more breathing room, never sitting at the
+            mountain base. */}
+        {reasoningRevealed && reasoning.trim().length > 0 && (() => {
+          const quoteAnchorFrac = Math.max(0.72, photo.horizonY + 0.16);
+          const quoteAnchorY = photoY + photoSize * quoteAnchorFrac;
+          const quoteMaxHeight = Math.max(
+            0,
+            (1 - quoteAnchorFrac) * photoSize - Math.round(photoSize * 0.06),
+          );
+          return (
+            <ReasoningQuote
+              x={photoX + 10}
+              y={quoteAnchorY}
+              width={photoSize - 20}
+              maxHeight={quoteMaxHeight}
+              text={reasoning.trim()}
+              handle={username}
+              polaroidWidth={width}
+            />
+          );
+        })()}
 
         {/* Developing stamp (only when NOT yet fully developed) */}
         {!reasoningRevealed && (
@@ -1228,36 +1244,41 @@ interface RarityVisual {
  */
 const RARITY_VISUAL: Record<Rarity, RarityVisual> = {
   common: {
-    // Warm sepia / cream — quiet, "just another receipt" tone.
-    baseHue: 36, hueSpan: 22, baseSat: 0.32,
-    accentHue: 30, accentSat: 0.40, accentLight: 0.55,
+    // Neutral GREY — like a basic loot drop in any game. Saturation
+    // pushed close to zero so the sky reads as monochrome stone tones.
+    // The hue still lives in a cool slate range so the small jitter
+    // gives subtle warm/cool variation between common receipts.
+    baseHue: 220, hueSpan: 30, baseSat: 0.06,
+    accentHue: 220, accentSat: 0.10, accentLight: 0.55,
   },
   uncommon: {
-    // Jade green — matches TIER_META.uncommon.color (#5DA37C).
-    baseHue: 145, hueSpan: 26, baseSat: 0.52,
-    accentHue: 150, accentSat: 0.55, accentLight: 0.55,
+    // GREEN — emerald / jade green, the classic "uncommon" colour.
+    baseHue: 142, hueSpan: 22, baseSat: 0.62,
+    accentHue: 148, accentSat: 0.68, accentLight: 0.55,
   },
   rare: {
-    // Azure / cobalt — matches TIER_META.rare.color (#3D80C2).
-    baseHue: 208, hueSpan: 24, baseSat: 0.62,
-    accentHue: 205, accentSat: 0.65, accentLight: 0.56,
+    // BLUE — azure / cobalt, classic "rare" colour.
+    baseHue: 212, hueSpan: 20, baseSat: 0.72,
+    accentHue: 210, accentSat: 0.78, accentLight: 0.58,
   },
   epic: {
-    // Violet / royal purple — matches TIER_META.epic.color (#8C4FC9).
-    baseHue: 272, hueSpan: 28, baseSat: 0.66,
-    accentHue: 285, accentSat: 0.70, accentLight: 0.62,
+    // PURPLE — violet / royal purple, classic "epic" colour.
+    baseHue: 276, hueSpan: 22, baseSat: 0.70,
+    accentHue: 290, accentSat: 0.78, accentLight: 0.64,
   },
   legendary: {
-    // Amber / gold — matches TIER_META.legendary.color (#D89B2C). High sat
-    // so the gold reads against a moody sky.
-    baseHue: 36, hueSpan: 24, baseSat: 0.82,
-    accentHue: 42, accentSat: 0.92, accentLight: 0.60,
+    // GOLDISH YELLOW — a clearly yellow-gold band, NOT the warm amber
+    // that previously sat at hue 36 (same as common sepia). Now anchored
+    // at hue 48, well into yellow territory, so the sky reads as a
+    // luminous gold dusk.
+    baseHue: 48, hueSpan: 18, baseSat: 0.86,
+    accentHue: 50, accentSat: 0.95, accentLight: 0.62,
   },
   mythic: {
-    // Ember / crimson — matches TIER_META.mythic.color (#C2410C). Highest
+    // WARM ORANGE — anchored at hue 24 (orange, not red). Highest
     // saturation, narrow hue band — instantly recognisable.
-    baseHue: 16, hueSpan: 20, baseSat: 0.92,
-    accentHue: 10, accentSat: 0.95, accentLight: 0.55,
+    baseHue: 24, hueSpan: 16, baseSat: 0.92,
+    accentHue: 20, accentSat: 0.98, accentLight: 0.58,
   },
 };
 
