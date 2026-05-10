@@ -31,7 +31,14 @@ export function ReceiptPage() {
 
   const merged = useMemo(() => {
     const base = local ?? null;
-    if (base) return base;
+    if (base) {
+      // Backfill expiresAt from the live market if it wasn't pinned on
+      // the original record (older versions of the app didn't store it).
+      if (base.expiresAt == null && market && (market as any).expiresAt) {
+        return { ...base, expiresAt: (market as any).expiresAt };
+      }
+      return base;
+    }
     if (fromHash && market) {
       return {
         marketId,
@@ -48,8 +55,8 @@ export function ReceiptPage() {
         marketUnits: market.xAxisUnits,
         lowerBound: market.config.lowerBound,
         upperBound: market.config.upperBound,
-        preset: fromHash.preset,
         consensusAtBet: fromHash.consensusAtBet ?? null,
+        expiresAt: fromHash.expiresAt ?? (market as any).expiresAt ?? null,
       };
     }
     return null;
@@ -122,8 +129,8 @@ function ReceiptView({
     collateral: merged.collateral,
     createdAt: merged.createdAt,
     marketTitle: merged.marketTitle,
-    preset: merged.preset,
     consensusAtBet: merged.consensusAtBet ?? null,
+    expiresAt: (merged as any).expiresAt ?? null,
   };
 
   const shareUrl = buildShareUrl(
@@ -184,7 +191,8 @@ function ReceiptView({
       await downloadPolaroidPng(polaroidRef.current, safeName);
       setDownloadState('done');
       setTimeout(() => setDownloadState('idle'), 1800);
-    } catch {
+    } catch (err) {
+      console.error('[Polaroid download] failed:', err);
       setDownloadState('error');
       setTimeout(() => setDownloadState('idle'), 2400);
     }
@@ -211,9 +219,9 @@ function ReceiptView({
           resolutionState={marketResolutionState}
           resolvedOutcome={resolvedOutcome}
           width={isMobile ? 300 : 420}
-          preset={merged.preset}
           animateDevelop
           consensusAtBet={merged.consensusAtBet ?? null}
+          expiresAt={(merged as any).expiresAt ?? null}
         />
       </div>
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>

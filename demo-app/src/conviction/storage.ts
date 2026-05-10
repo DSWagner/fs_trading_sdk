@@ -29,6 +29,12 @@ export interface BetRecord {
   marketUnits?: string;
   lowerBound?: number;
   upperBound?: number;
+  /**
+   * Legacy field. Step 3 (style picker) has been removed; palette is now
+   * derived from the receipt's seed plus its rarity tier. Kept as optional
+   * for backwards compatibility with localStorage entries from older
+   * versions — the value is read but ignored when present.
+   */
   preset?: 'auto' | 'sunset' | 'twilight' | 'aurora' | 'botanical' | 'rosegold' | 'noir';
   /**
    * Consensus mean at the moment the bet was placed. Pinned in localStorage
@@ -37,6 +43,12 @@ export interface BetRecord {
    * consensus has drifted to by the time the receipt is viewed.
    */
   consensusAtBet?: number | null;
+  /**
+   * ISO timestamp of when the market resolves. Pinned at bet time so the
+   * polaroid's time-based develop progression has a stable endpoint even
+   * if the engine later re-schedules the market. Null when unknown.
+   */
+  expiresAt?: string | null;
 }
 
 interface Store {

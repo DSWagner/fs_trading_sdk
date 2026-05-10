@@ -188,6 +188,54 @@ describe('Polaroid: deterministic rendering', () => {
   });
 });
 
+describe('Polaroid: procedural palettes (effectively infinite color spectrum)', () => {
+  /**
+   * Render N receipts with N distinct positionIds (a cheap stand-in for
+   * every other slider/text input) and collect the sky-top color from
+   * each. Procedural palettes should produce N distinct colors — not a
+   * bucket of ~16 reused samples like the old table-driven palettes.
+   */
+  function collectSkyTopColors(count: number) {
+    const colors = new Set<string>();
+    for (let i = 0; i < count; i++) {
+      const { container } = renderPolaroid({ positionId: `proc-${i}` });
+      const stops = container.querySelectorAll('linearGradient[id^="sky-"] stop');
+      const first = stops[0];
+      const c = first?.getAttribute('stop-color');
+      if (c) colors.add(c.toLowerCase());
+    }
+    return colors;
+  }
+
+  it('produces a wide spread of distinct sky-top colors across 60 receipts', () => {
+    const colors = collectSkyTopColors(60);
+    // Old table had 8 families × 2 variants = 16 hard-coded entries; if
+    // we still got banded into ~16 colors something regressed. Requiring
+    // >40 distinct values across 60 receipts proves the procedural
+    // generator is pulling fresh hues per seed.
+    expect(colors.size).toBeGreaterThan(40);
+  });
+
+  it('the sky-top stop is a valid 6-digit hex color', () => {
+    const { container } = renderPolaroid({ positionId: 'hex-check' });
+    const stops = container.querySelectorAll('linearGradient[id^="sky-"] stop');
+    const c = stops[0]?.getAttribute('stop-color') ?? '';
+    expect(/^#[0-9a-f]{6}$/i.test(c)).toBe(true);
+  });
+
+  it('shifting only the stake by $1 produces a different sky color', () => {
+    const a = renderPolaroid({ collateral: 25 })
+      .container.querySelector('linearGradient[id^="sky-"] stop')
+      ?.getAttribute('stop-color');
+    const b = renderPolaroid({ collateral: 26 })
+      .container.querySelector('linearGradient[id^="sky-"] stop')
+      ?.getAttribute('stop-color');
+    expect(a).toBeTruthy();
+    expect(b).toBeTruthy();
+    expect(a).not.toBe(b);
+  });
+});
+
 describe('Polaroid: numeric scale strip (must be readable without chart literacy)', () => {
   it('shows the lower and upper bounds of the market', () => {
     const { container } = renderPolaroid({

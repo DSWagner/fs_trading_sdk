@@ -16,6 +16,7 @@ export interface SharedPayload {
   collateral?: number;
   createdAt?: string;
   marketTitle?: string;
+  /** Legacy preset; ignored by current renderer but kept for old links. */
   preset?: 'auto' | 'sunset' | 'twilight' | 'aurora' | 'botanical' | 'rosegold' | 'noir';
   /**
    * Consensus mean at the moment the bet was placed. Pinned so rarity is
@@ -23,6 +24,12 @@ export interface SharedPayload {
    * not the live consensus when the receipt is viewed.
    */
   consensusAtBet?: number | null;
+  /**
+   * ISO timestamp of when the market resolves. Pinned so the polaroid's
+   * time-based develop progression has a stable endpoint that travels
+   * with the share link.
+   */
+  expiresAt?: string | null;
 }
 
 const PARAM_KEY = 'r';

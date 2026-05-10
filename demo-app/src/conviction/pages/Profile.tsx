@@ -426,10 +426,10 @@ function BetTile({ bet }: { bet: EnrichedBet }) {
         shape={r.shape}
         lowerBound={r.lowerBound ?? 0}
         upperBound={r.upperBound ?? 1}
-        preset={r.preset}
         resolutionState={bet.resolutionState ?? 'open'}
         resolvedOutcome={bet.resolvedOutcome}
         consensusAtBet={r.consensusAtBet ?? null}
+        expiresAt={r.expiresAt ?? null}
         width={260}
         interactive
       />

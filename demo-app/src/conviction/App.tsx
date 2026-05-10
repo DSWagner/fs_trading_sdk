@@ -11,6 +11,7 @@ import { ReceiptPage } from './pages/Receipt';
 import { ProfilePage } from './pages/Profile';
 import { EmbedPage } from './pages/Embed';
 import { AboutPage } from './pages/About';
+import { ExplorePage } from './pages/Explore';
 
 const FS_BASE_URL =
   import.meta.env.VITE_FS_BASE_URL || 'https://fs-engine-api-dev.onrender.com';
@@ -51,6 +52,7 @@ function ConvictionShell() {
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/discover" element={<DiscoverPage />} />
+        <Route path="/explore" element={<ExplorePage />} />
         <Route path="/m/:marketId" element={<BetFlowPage />} />
         <Route path="/r/:marketId/:positionId" element={<ReceiptPage />} />
         <Route path="/u/:username" element={<ProfilePage />} />
@@ -85,7 +87,7 @@ function Footer() {
     >
       <div
         style={{
-          maxWidth: 1120,
+          maxWidth: 1320,
           margin: '0 auto',
           display: 'flex',
           justifyContent: 'space-between',

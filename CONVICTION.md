@@ -16,7 +16,7 @@ If you want to *understand* Conviction, read top to bottom.
 3. [The product in 30 seconds](#the-product-in-30-seconds)
 4. [The user journey](#the-user-journey)
 5. [The Polaroid: anatomy of a receipt](#the-polaroid-anatomy-of-a-receipt)
-6. [Polaroid art presets (customization)](#polaroid-art-presets-customization)
+6. [Polaroid art presets (procedural palette spectrum)](#polaroid-art-presets-procedural-palette-spectrum)
 7. [Architecture](#architecture)
 8. [Where data lives](#where-data-lives)
 9. [The two killer mechanics](#the-two-killer-mechanics)
@@ -174,7 +174,7 @@ Here is what every Polaroid encodes:
 
 | Visual element | What it encodes | Where it comes from |
 | --- | --- | --- |
-| Sky color palette | Mood. Warm if your prediction is in the upper half of the range, cool if lower half, aurora if your shape is bimodal. | `pickPalette()` in `Polaroid.tsx` |
+| Sky color palette | Rarity + identity. The rarity tier picks a color region (sunset, twilight, aurora, goldleaf, oracle, …), and the per-receipt seed picks the exact hue / saturation / lightness inside that region. Rarer tiers get more saturated palettes; every receipt is one-of-one. | `paletteFor()` + `FAMILY_REGIONS` in `Polaroid.tsx`, family chosen by `pickPaletteFamily()` |
 | Sun horizontal position | Your point prediction, mapped onto the range. | `prediction` prop |
 | Sun size | Conviction. Higher conviction equals bigger sun. | `conviction` prop |
 | Second smaller sun | Only appears for bimodal beliefs (you think there are two distinct possible outcomes). | `shape === 'bimodal'` |
@@ -188,7 +188,7 @@ Here is what every Polaroid encodes:
 | **Sentence-style footer** | `@handle · X → Y · off by Z%` once developed, `@handle · predicted X · $stake` when open. No more bare numbers without context. | `buildFooterSentence()` |
 | Accuracy badge in footer | Computed from how close your prediction was to the outcome, given your spread. Returns `+X% CALLED IT`, `+X% CLOSE`, or `MISSED`. | `estimateAccuracy()` |
 
-The whole thing is one big `<svg>` element, deterministic from inputs, with `<foreignObject>` for the caption text so we get full CSS typography on the bottom half. The scale strip uses pure SVG primitives (`<line>`, `<text>`, `<circle>`) so it survives PNG export.
+The whole thing is one big `<svg>` element, deterministic from inputs, rendered entirely with native SVG primitives (`<rect>`, `<circle>`, `<text>`, `<tspan>`, `<filter>`, gradients). The caption used to live inside a `<foreignObject>` for easy HTML/CSS layout, but Chrome taints any canvas that rasterizes an SVG containing a `<foreignObject>` (a longstanding security restriction), which silently broke the PNG export. The caption is now native SVG `<text>` with a small manual line-wrap helper, and a `<clipPath>` keeps anything that overflows hidden. Net result: identical visuals on screen, reliable PNG export in every browser.
 
 The card aspect ratio is **3:2 (height = 1.5 × width)**. The photo is square; the scale strip is ~10% of the width tall (28-32 px); the caption area takes the rest. The reasoning is line-clamped to two lines and the title to one, so a long quote can never burst the bottom of the card. The reasoning is also character-capped relative to width (smaller cards truncate sooner) before line clamping kicks in, as a belt-and-suspenders against weird font fallbacks.
 
@@ -205,35 +205,38 @@ Previous versions of the Polaroid built a develop filter conditionally — when 
 
 ---
 
-## Polaroid art presets (customization)
+## Polaroid art presets (procedural palette spectrum)
 
-Every Polaroid can be rendered in one of seven preset palettes. The user picks during the bet flow ("Step 3 · Style the receipt") and the choice rides along with the bet record and share-link payload. Default is `auto`, which picks a palette from the prediction position and shape.
+Every Polaroid is rendered with a procedurally-generated palette pulled from the full HSL color spectrum. There is no preset picker: the rarity tier mapped to the bet picks a **color region** (warm sunset, cool twilight, vivid aurora, gold-leaf jewel tone, deep oracle violet, etc.), and the per-receipt seed (which incorporates every input: market id, position id, username, reasoning, prediction, spread, conviction, stake, shape, timestamp) drives the exact hue / saturation / lightness inside that region. The result is *effectively infinite* unique palettes — no two receipts can ever be visually identical, even on the same market with the same prediction.
 
-| Preset | When auto picks it | Mood |
+| Color region | When the family pool picks it | Mood |
 | --- | --- | --- |
-| `auto` | (default) | Cool if prediction is in lower half of range, warm if upper, aurora if bimodal |
-| `sunset` | upper half of range | Warm dusk, ember sun, gold core |
-| `twilight` | lower half of range | Cool pre-dawn, ice-blue sun |
-| `aurora` | bimodal beliefs | Northern lights, mint and orchid |
-| `botanical` | (manual only) | Verdant green, field at dawn |
-| `rosegold` | (manual only) | Petal sky, copper sun |
-| `noir` | (manual only) | High-contrast monochrome |
+| `sunset` | uncommon / rare tiers | Warm dusk, magenta-into-ember-into-gold gradient |
+| `twilight` | common / uncommon tiers | Cool pre-dawn, ice-blue sky and sun |
+| `aurora` | rare / epic / legendary tiers | Northern-lights blue → magenta → mint sun |
+| `botanical` | common / uncommon tiers | Verdant green field at dawn |
+| `rosegold` | rare / epic tiers | Petal sky, peach copper sun |
+| `noir` | preview / fallback | Pure greyscale (saturation 0) |
+| `goldleaf` | legendary / mythic tiers | Deep indigo sky with a hot gold sun |
+| `oracle` | epic / legendary / mythic tiers | Deep violet sky, iridescent rose sun, mint secondary |
+
+Each region defines an HSL hue range. The receipt seed drives the exact hue / saturation / lightness inside that range, so two receipts that both land in `aurora` still produce different aurora colors. Combined with the rarity-driven saturation scale (Common × 0.72 → Mythic × 1.45) and conviction-driven contrast scale, every receipt gets a one-of-one palette.
 
 Where it is exposed in the UI:
 
-- `BetFlow` page: a 7-tile grid of swatches, each showing a tiny live preview of its sky / sun / ground colors. Click to apply, the full Polaroid preview on the right (or above on mobile) updates instantly.
-- Landing page: the "Seven palettes. One belief." gallery shows the same Polaroid rendered in all seven presets, so visitors see the variety without having to open the bet flow.
-- Receipt and Embed pages: render whichever preset the bet was signed in.
+- `BetFlow` page: no picker. The preview Polaroid updates live as the user drags any slider, with the procedural palette re-rolling on every meaningful input change (every $1 of stake, every prediction tick, every reasoning keystroke).
+- Landing page: the rarity gallery shows the same bet rendered at all six tiers so visitors can feel the rarity → palette intensity scale at a glance.
+- Receipt, Embed, and Profile pages: render whatever palette the seed produces for that exact bet — deterministic from the inputs, so the same share link always paints the same colors.
 
 Where it lives in code:
 
-- Type and labels: `components/Polaroid.tsx` (`PolaroidPreset`, `POLAROID_PRESETS`)
-- Visual palette table: `pickPalette()` in `components/Polaroid.tsx`
-- Persistence: `BetRecord.preset` in `storage.ts`, `SharedPayload.preset` in `hash.ts`
-- Picker UI: `PresetSwatch` in `pages/BetFlow.tsx`
-- Showcase UI: `components/StyleGallery.tsx`
+- Procedural palette generator: `paletteFor()` and `FAMILY_REGIONS` in `components/Polaroid.tsx`. Each region defines hue ranges and a base saturation; the seed picks concrete HSL values inside the ranges and `hsl()` converts to a `#rrggbb` string.
+- Family pick (rarity → region): `pickPaletteFamily()` in `polaroidSeed.ts`, with `TIER_PALETTE_POOL` mapping each rarity to its allowed regions.
+- Rarity → saturation / contrast scaling: `rarityToSaturationScale()` and `rarityToContrastScale()` in `components/Polaroid.tsx`.
+- The seed itself: `seedFromInputs()` in `polaroidSeed.ts`, fed by `BetRecord` (`storage.ts`) and `SharedPayload` (`hash.ts`).
+- Tier showcase UI: `components/StyleGallery.tsx`.
 
-This is the customization layer the user explicitly asked for. It is *value-additive* customization, not a color reskin: each preset changes both the palette and the mood encoding (warm = upbeat call, cool = cautious call, noir = high-stakes). The competition rules disqualify "color palette reskins only" submissions, but adding personalization to a novel UX is fine and is encouraged.
+This is *value-additive* visual generation, not a color reskin: the palette is one of several visual signals that encode information about the bet (rarity tier, conviction, stake, time-to-resolution). The competition rules disqualify "color palette reskins only" submissions; what we have is a procedural visual system where the colors are an emergent property of the seed.
 
 ---
 
@@ -276,7 +279,7 @@ flowchart TB
 
     Landing --> Polaroid[components/Polaroid.tsx]
     Landing --> DevelopDemo[components/DevelopDemo.tsx<br/>auto-cycle developing/developed]
-    Landing --> StyleGallery[components/StyleGallery.tsx<br/>preset showcase]
+    Landing --> StyleGallery[components/StyleGallery.tsx<br/>rarity-tier showcase]
     BetFlow --> Polaroid
     BetFlow --> AuthGate[components/AuthGate.tsx]
     Receipt --> Polaroid
@@ -358,7 +361,7 @@ flowchart LR
 | The list of markets | FunctionSpace backend | Same. |
 | Market resolution state and outcome | FunctionSpace backend | Comes from oracles. |
 | The reasoning text | localStorage **and** URL hash | This is our novel layer. It has to survive the user closing the tab (localStorage), and it has to travel to other people's devices (URL hash). |
-| Conviction level, shape, prediction, spread, art preset | Same as reasoning | These are visual parameters used by the Polaroid renderer. They are not strictly necessary to reconstruct the bet (the SDK has the belief vector) but storing them ourselves means we do not have to round-trip the SDK to render the receipt. The art preset persists with the bet so a shared link always renders in the palette the author chose. |
+| Conviction level, shape, prediction, spread | Same as reasoning | These are visual parameters used by the Polaroid renderer. They are not strictly necessary to reconstruct the bet (the SDK has the belief vector) but storing them ourselves means we do not have to round-trip the SDK to render the receipt. The procedural palette derives from these values together with the rest of the seed inputs, so storing them locally guarantees the same share link always paints the same colors. |
 | Username preference | localStorage only | So returning visitors do not have to re-type. |
 
 **Critical insight:** the FunctionSpace backend never sees a user's reasoning. That data is entirely client-side. If the user clears their browser and never shared the link, the reasoning is gone. This is a feature: it makes the product trivially compliant with privacy expectations and removes any need for our own backend.
@@ -468,10 +471,10 @@ The receipt renderer. Pure SVG, deterministic from inputs. Takes a `PolaroidProp
 
 Three procedural sub-functions to know:
 - `densityAt(x, opts)`: returns a non-negative number that is the height of the belief at position `x`. Branches on `shape` (gaussian, range, or bimodal). This is what makes the silhouette a function of the bet shape.
-- `pickPalette()`: chooses between seven preset palettes (warm, cool, aurora, botanical, rosegold, noir, plus auto) based on the `preset` prop, prediction position, and shape, then slightly desaturates pre-resolution.
+- `paletteFor()`: builds a unique palette from `(family, seed, rarity, conviction)`. The family chooses a hue region (e.g. sunset, twilight, aurora, goldleaf, oracle); the seed picks the exact hue/sat/lightness inside that region. Rarer tiers get more saturated palettes and steeper sky-top-to-bottom contrast.
 - `mulberry32(seed)`: deterministic pseudo-random number generator. Seeded from `marketId:positionId` so the same receipt always gets the same stars.
 
-Also exports `PolaroidPreset` (the union type) and `POLAROID_PRESETS` (the labeled list used by pickers).
+Also exports `PolaroidPreset` (legacy union type kept for binary compatibility with shared links written before the procedural palette landed; the renderer ignores it).
 
 ### `components/DevelopDemo.tsx` (about 200 lines)
 
@@ -479,7 +482,7 @@ The marketing widget on the Landing page that auto-cycles a single Polaroid betw
 
 ### `components/StyleGallery.tsx` (about 110 lines)
 
-Horizontal scroll gallery on the Landing page showing the same Polaroid rendered in all seven preset palettes side by side. Hover or tap to feature one. Sells the customization story without pushing visitors into the bet flow.
+Horizontal scroll gallery on the Landing page showing the same bet rendered at all six rarity tiers. Each tier's palette region is visually distinct, so the gallery lets visitors feel the rarity → palette intensity scale at a glance without needing to open the bet flow.
 
 ### `components/NavBar.tsx` (about 150 lines)
 
@@ -606,7 +609,7 @@ Conviction has zero backend code. Everything that is not in the FunctionSpace SD
 
 ### 2. SVG, not canvas, for the Polaroid
 
-The whole receipt is one `<svg>` element with `<foreignObject>` for the caption.
+The whole receipt is one `<svg>` element rendered with native SVG primitives only (no `<foreignObject>`) so the same SVG that renders on screen also rasterizes cleanly to a PNG without tainting the canvas.
 
 **Tradeoff:** SVG is verbose. The Polaroid component is around 620 lines, most of which is markup.
 
@@ -718,7 +721,7 @@ These shipped in the previous session, prioritized by the "least effort, highest
 - **Consensus chart legend cleaned up.** The `ConsensusChart` from `@functionspace/ui` rendered its Recharts legend on top of the X-axis label whenever both items wrapped to the same row. Fixed by giving the chart container an extra 8 px bottom padding, increasing the chart height from 260 to 320, and applying a scoped CSS override that pushes the legend wrapper down by 10 px and lets the items wrap with `flex-wrap: wrap`. The legend now lives below the axis label on every viewport.
 - **OG / Twitter meta tags + favicon + share card.** `demo-app/index.html` now ships full `og:*` and `twitter:*` tags pointing at `/og-card.svg` and a brand favicon at `/favicon.svg`. Both static files live in `demo-app/public/`. The card is a 1200x630 SVG editorial layout (cover headline, three sample Polaroids, dateline) so a pasted share URL renders as a real preview on X, LinkedIn, Slack, and Discord. *Caveat:* a few platforms still require raster images, so a follow-up move is to pre-render the SVG to PNG once a deploy URL exists.
 - **Live disagreement indicator on BetFlow.** Below the shape chips, a small badge updates in real time as the user moves the prediction slider: "In line with consensus", "Modest lean above consensus", "Contrarian call below consensus", "Way off the crowd above consensus", "Lone voice below consensus." It quantifies the offset (in market units and as a percentage of the bet's range) and shows the consensus mean for reference. Implemented in `BetFlow.tsx` as a pure component; uses only `market.consensusMean` and the live prediction state, no extra fetches.
-- **Download as PNG on the receipt page.** A "Download as PNG" button next to the Polaroid renders the live SVG into a 2x DPR canvas and triggers a browser download named `conviction-<marketId>-<positionId>.png`. Pure client side, no extra dependencies, one file (`components/downloadPolaroid.ts`). Fonts are inlined via a Google Fonts `@import` so the PNG matches what the user sees on screen.
+- **Download as PNG on the receipt page.** A "Download as PNG" button next to the Polaroid renders the live SVG into a 2x DPR canvas and triggers a browser download named `conviction-<marketId>-<positionId>.png`. Pure client side, no extra dependencies, one file (`components/downloadPolaroid.ts`). Implementation notes worth remembering: (1) the cloned SVG must have every `var(--c-*)` reference resolved to a concrete color before serialization because Canvas2D cannot substitute CSS variables when drawing an SVG-as-Image; (2) the SVG MUST NOT contain a `<foreignObject>` or any cross-origin `@import` (e.g. Google Fonts) — both cause Chrome to taint the canvas and block `toDataURL`. The Polaroid is therefore rendered with native SVG `<text>` primitives only. Verified end-to-end by `scripts/verify-conviction/verify-download.mjs`, which clicks the button in both light and dark themes via Playwright and checks the resulting PNG is a valid, non-empty file.
 - **Test suite that runs without spending a cent.** See **[End-to-end testing](#end-to-end-testing-without-spending-a-cent)** for the full breakdown.
 
 ### How Conviction stacks up against the rubric
@@ -770,7 +773,7 @@ Honest backlog. Everything from the previous version, with status flags.
 
 - ✅ Mobile responsiveness on every page (nav, landing, discover, betflow, receipt, profile, about).
 - ✅ A public settled-receipt example (the `DevelopDemo` on Landing auto-cycles between developing and developed).
-- ✅ Polaroid customization (seven art presets with picker on BetFlow and gallery on Landing).
+- ✅ Polaroid procedural palettes (infinite color spectrum, seed-driven, with a rarity-tier gallery on Landing).
 - ✅ Polaroid caption overflow fixed (aspect 3:2 plus line clamping).
 - ✅ Site-wide CONVICTION.md documentation kept in sync.
 - ✅ Consensus chart legend no longer overlaps the X-axis label.
@@ -816,7 +819,7 @@ The suite is split into four files, each with a clear responsibility:
 | --- | --- | --- |
 | `tests/conviction/hash.test.ts` | URL-hash codec round-trip, unicode, emoji, CJK, control characters, URL-safe alphabet, graceful failure on garbage input, `readShareFromHash` with a populated `window.location.hash`. | 19 |
 | `tests/conviction/storage.test.ts` | localStorage ledger: record, read, replace, ordering (newest first), filter by username, corrupt-store tolerance, username remember/recall/forget. | 21 |
-| `tests/conviction/polaroid-render.test.tsx` | Polaroid SVG render under extreme inputs: empty reasoning, 1 KB reasoning, 200-char title, prediction at and outside the bounds, every preset, every shape, every resolution state, six widths from 200 to 480, deterministic rendering, **scale strip showing bounds + prediction value + outcome value, sentence-style footer with `→` and `off by Z%`, regression test that the developed-state Polaroid does not blank out**. | 52 |
+| `tests/conviction/polaroid-render.test.tsx` | Polaroid SVG render under extreme inputs: empty reasoning, 1 KB reasoning, 200-char title, prediction at and outside the bounds, every shape, every resolution state, six widths from 200 to 480, deterministic rendering, scale strip showing bounds + prediction value + outcome value, sentence-style footer with `→` and `off by Z%`, regression test that the developed-state Polaroid does not blank out, **and procedural palette spread: 60 distinct positionIds yield >40 distinct sky-top hex colors plus a $1-stake delta produces a different palette.** | 68 |
 | `tests/conviction/live-engine.test.ts` | Real network calls to `https://fs-engine-api-dev.onrender.com`: market list, single-market query parity, passwordless signup with a fresh random handle, empty-username rejection. Skips gracefully if the endpoint is unreachable. | 5 |
 
 **Total: 97 Conviction-specific tests, plus 787 existing SDK tests, all green.**
@@ -841,7 +844,7 @@ The test suite covers the math and the I/O. The browser-only behaviors below nee
 | --- | --- |
 | Landing | Hero spacing on 1440 / 1024 / 390 px. `DevelopDemo` cycles. `StyleGallery` scrolls horizontally on mobile. |
 | Discover | Filter chips toggle. Search narrows results. Featured market renders. Empty result state. |
-| BetFlow | All three shapes render different curves. Disagreement badge updates with the slider. Preset picker applies live to the preview Polaroid. Submit disabled with empty reasoning. Place a bet, land on Receipt. |
+| BetFlow | All three shapes render different curves. Disagreement badge updates with the slider. Every slider re-rolls the preview Polaroid's procedural palette live. Submit disabled with empty reasoning. Place a bet, land on Receipt. |
 | Receipt | Polaroid renders. "Copy share link" puts a `#r=` URL in the clipboard. Embed link works. Download as PNG saves a 2x DPR file with the right filename. |
 | Profile | Bets show up newest-first. Stats add up. Empty state when no bets. |
 | Share link | Open the receipt URL in an incognito window. Polaroid hydrates from the hash, no localStorage required. |

@@ -1,14 +1,67 @@
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;0,9..144,800;1,9..144,400;1,9..144,500;1,9..144,600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
+/*
+ * Semantic theme variables. Light mode is the default; setting
+ * `data-theme="dark"` on the root flips every value. The JS `palette`
+ * object in `theme.ts` references these variables, so every component
+ * follows the active theme without any prop drilling.
+ *
+ * Why CSS vars over a React context:
+ *   - Zero-cost: no re-renders on theme toggle
+ *   - Works for SVG fills and stroke attrs in modern browsers
+ *   - Works for foreignObject children (the polaroid caption)
+ *   - The whole UI swaps in a single style recalc, ~1 paint
+ */
+:root {
+  --c-paper: #FBF6EE;
+  --c-paper-deep: #F3EADA;
+  --c-card: #FFFCF6;
+  --c-ink: #1A1814;
+  --c-ink-soft: #3F3A33;
+  --c-ink-mute: #6B5E50;
+  --c-ink-fade: #9C8E7E;
+  --c-rule: #E5DCCB;
+  --c-rule-soft: #EFE6D6;
+  --c-ember: #C2410C;
+  --c-ember-deep: #7C2D12;
+  --c-teal: #0E7490;
+  --c-jade: #15803D;
+  --c-rose: #9F1239;
+  --c-shadow: rgba(60, 40, 20, 0.12);
+  --c-shadow-deep: rgba(60, 40, 20, 0.22);
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --c-paper: #13110E;
+  --c-paper-deep: #0B0A08;
+  --c-card: #1B1814;
+  --c-ink: #F5EFE3;
+  --c-ink-soft: #D0C8B8;
+  --c-ink-mute: #9A917F;
+  --c-ink-fade: #5F584C;
+  --c-rule: #2A2520;
+  --c-rule-soft: #231F1B;
+  --c-ember: #F26B1F;
+  --c-ember-deep: #C2410C;
+  --c-teal: #2DA8B8;
+  --c-jade: #5DC18A;
+  --c-rose: #E04668;
+  --c-shadow: rgba(0, 0, 0, 0.50);
+  --c-shadow-deep: rgba(0, 0, 0, 0.70);
+  color-scheme: dark;
+}
+
 html, body, #root {
   margin: 0;
   padding: 0;
-  background: #FBF6EE;
-  color: #1A1814;
+  background: var(--c-paper);
+  color: var(--c-ink);
   font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  transition: background-color 220ms ease, color 220ms ease;
 }
 
 /* Defensive overflow clip on the html element.

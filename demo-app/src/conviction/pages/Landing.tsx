@@ -34,7 +34,6 @@ const SAMPLE_RECEIPTS: PolaroidProps[] = [
     resolutionState: 'resolved',
     resolvedOutcome: 78,
     consensusAtBet: 28,
-    preset: 'sunset',
   },
   {
     marketId: 'demo-2',
@@ -55,7 +54,6 @@ const SAMPLE_RECEIPTS: PolaroidProps[] = [
     resolutionState: 'resolved',
     resolvedOutcome: 180,
     consensusAtBet: 70,
-    preset: 'aurora',
   },
   {
     marketId: 'demo-3',
@@ -75,7 +73,6 @@ const SAMPLE_RECEIPTS: PolaroidProps[] = [
     resolutionState: 'resolved',
     resolvedOutcome: 8,
     consensusAtBet: 5,
-    preset: 'rosegold',
   },
 ];
 

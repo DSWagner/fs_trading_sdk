@@ -16,7 +16,7 @@ import type { BeliefVector, PayoutCurve } from '@functionspace/core';
 import { palette, fonts } from '../theme';
 import { recordBet } from '../storage';
 import { AuthGate } from '../components/AuthGate';
-import { Polaroid, POLAROID_PRESETS, type PolaroidPreset } from '../components/Polaroid';
+import { Polaroid } from '../components/Polaroid';
 import { useIsMobile } from '../useMediaQuery';
 import { EditorialError, EditorialLoading } from '../components/EditorialState';
 import { potentialRarity, TIER_META, type Rarity } from '../rarity';
@@ -49,18 +49,12 @@ export function BetFlowPage() {
   const [collateral, setCollateral] = useState<number>(10);
   const [conviction, setConviction] = useState<number>(0.7);
   const [reasoning, setReasoning] = useState<string>('');
-  const [preset, setPreset] = useState<PolaroidPreset>('auto');
   const [payout, setPayout] = useState<PayoutCurve | null>(null);
   const [previewMode, setPreviewMode] = useState<'before' | 'after'>('before');
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initialisedRef = useRef(false);
-  // Keep refs to the live context and preview-payout executor so the preview
-  // effect below can call them without listing them as dependencies. Listing
-  // them in deps causes an infinite render loop, because the effect updates
-  // context state on every run, which produces a new ctx object on the next
-  // render, which retriggers the effect.
   const ctxRef = useRef(ctx);
   const previewPayoutRef = useRef(previewPayout);
   useEffect(() => {
@@ -107,7 +101,6 @@ export function BetFlowPage() {
   );
 
   // Phase 1 + 2: preview belief (instant) + payout (debounced).
-  // Deps intentionally exclude ctx and previewPayout: see ctxRef comment above.
   useEffect(() => {
     const liveCtx = ctxRef.current;
     if (!market || !liveCtx) return;
@@ -140,7 +133,7 @@ export function BetFlowPage() {
     };
   }, [market, buildBelief, collateral]);
 
-  // Clear preview state on unmount only (no ctx dep: see ctxRef comment).
+  // Clear preview state on unmount only.
   useEffect(() => {
     return () => {
       ctxRef.current?.setPreviewBelief(null);
@@ -175,8 +168,8 @@ export function BetFlowPage() {
         marketUnits: market.xAxisUnits,
         lowerBound: market.config.lowerBound,
         upperBound: market.config.upperBound,
-        preset,
         consensusAtBet: market.consensusMean ?? null,
+        expiresAt: (market as any).expiresAt ?? null,
       });
       if (ctx) {
         ctx.setPreviewBelief(null);
@@ -190,11 +183,11 @@ export function BetFlowPage() {
     } finally {
       setSubmitting(false);
     }
-  }, [market, user, buildBelief, executeBuy, collateral, reasoning, conviction, prediction, spread, shape, preset, navigate, ctx]);
+  }, [market, user, buildBelief, executeBuy, collateral, reasoning, conviction, prediction, spread, shape, navigate, ctx]);
 
   if (loading || !market) {
     return (
-      <div style={{ maxWidth: 1120, margin: '0 auto', padding: '40px 24px' }}>
+      <div style={{ maxWidth: 1320, margin: '0 auto', padding: '40px 24px' }}>
         <EditorialLoading
           eyebrow="Tuning the question"
           lines={[
@@ -208,7 +201,7 @@ export function BetFlowPage() {
   }
   if (error) {
     return (
-      <div style={{ maxWidth: 1120, margin: '0 auto', padding: '40px 24px' }}>
+      <div style={{ maxWidth: 1320, margin: '0 auto', padding: '40px 24px' }}>
         <EditorialError
           message={`Could not load this market: ${error.message}`}
           hint="Either the market id is wrong or the engine is briefly unreachable. Hit the back button and try Discover."
@@ -224,9 +217,8 @@ export function BetFlowPage() {
   const charsRemaining = Math.max(0, 400 - reasoning.length);
 
   // Outcome used for the "After" preview: 80% of the way from the user's
-  // prediction toward the consensus mean. Falls back to a near-prediction
-  // value if no consensus is available yet. Gives the user a believable
-  // "called it / close" sample of how the developed receipt will look.
+  // prediction toward the consensus mean. Gives a believable preview of
+  // what the developed receipt will look like.
   const previewOutcome = (() => {
     const mean = market.consensusMean;
     if (typeof mean === 'number' && Number.isFinite(mean)) {
@@ -235,14 +227,23 @@ export function BetFlowPage() {
     return prediction;
   })();
 
-  // Factory so the same live preview can render at multiple sizes: the
-  // big sticky right-aside on desktop, the standard top-of-form version
-  // on mobile, and a compact thumbnail co-located with the Step 4 chart
-  // so the polaroid + chart fit in the mobile viewport at the same time.
+  const expiresAt = (market as any).expiresAt ?? null;
+
+  // Factory so the same live preview can render at multiple sizes:
+  // big sticky right-aside on desktop, regular top-of-form on mobile.
+  // Pulls EVERY slider input into the polaroid so every change re-renders
+  // the visual — the stake slider now perturbs the seed and shifts the
+  // ornament density, conviction shifts the sun radius and star count,
+  // etc. Without these inputs feeding the seed the polaroid would only
+  // react to prediction/spread/shape.
   const renderPreviewPolaroid = (overrideWidth?: number) => (
     <Polaroid
       marketId={market.marketId}
-      positionId="preview"
+      // The position id changes per "preview snapshot" so the seed reacts
+      // to slider drags. We use a deterministic suffix from the slider
+      // tuple so identical slider configs always look identical, but any
+      // drag re-seeds.
+      positionId={`preview-${prediction.toFixed(3)}-${spread.toFixed(3)}-${conviction.toFixed(3)}-${collateral.toFixed(0)}-${shape}`}
       marketTitle={market.title}
       marketUnits={market.xAxisUnits}
       username={user?.username ?? 'you'}
@@ -256,9 +257,10 @@ export function BetFlowPage() {
       lowerBound={lowerBound}
       upperBound={upperBound}
       width={overrideWidth ?? (isMobile ? 280 : 320)}
-      preset={preset}
+      expiresAt={expiresAt}
       resolutionState={previewMode === 'after' ? 'resolved' : 'open'}
       resolvedOutcome={previewMode === 'after' ? previewOutcome : null}
+      consensusAtBet={market.consensusMean ?? null}
       animateDevelop={previewMode === 'after'}
     />
   );
@@ -301,18 +303,73 @@ export function BetFlowPage() {
     </div>
   );
 
+  // Chart card. On desktop this becomes part of the sticky right column
+  // alongside the polaroid; on mobile it lives inline in the form.
+  const chartCard = (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 6,
+        padding: '14px 12px 12px',
+        background: palette.card,
+        border: `1px solid ${palette.rule}`,
+        borderRadius: 10,
+        minWidth: 0,
+      }}
+      className="conviction-chart-shell"
+    >
+      <div
+        style={{
+          fontFamily: fonts.mono,
+          fontSize: 10,
+          letterSpacing: 1.4,
+          color: palette.inkMute,
+        }}
+      >
+        CROWD vs. YOU
+      </div>
+      <div
+        style={{
+          fontFamily: fonts.body,
+          fontSize: 12,
+          color: palette.inkMute,
+          lineHeight: 1.4,
+          marginBottom: 4,
+        }}
+      >
+        Your trade preview (dashed) over the crowd's consensus (solid). The gap is your contrarian edge.
+      </div>
+      <ConsensusChart marketId={marketId} height={isMobile ? 260 : 300} />
+      {payout && (
+        <div
+          style={{
+            display: 'flex',
+            gap: 16,
+            marginTop: 4,
+            fontFamily: fonts.mono,
+            fontSize: 11,
+            color: palette.inkSoft,
+            letterSpacing: 0.3,
+            flexWrap: 'wrap',
+          }}
+        >
+          <span>MAX PAYOUT ${payout.maxPayout.toFixed(2)}</span>
+          <span>AT {payout.maxPayoutOutcome.toFixed(2)} {market.xAxisUnits ?? ''}</span>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div
       style={{
-        maxWidth: 1120,
+        // Wider canvas — was 1120, now 1320 — so the consensus chart can
+        // breathe alongside the polaroid in the sticky right column
+        // without crowding the form on the left.
+        maxWidth: 1320,
         margin: '0 auto',
         padding: isMobile ? '20px 16px 56px' : '32px 24px 80px',
-        // Belt-and-braces: even with minmax(0, ...) on the grid tracks and
-        // max-width: 100% on the polaroid SVGs, third-party chart libs
-        // (Recharts in this case) occasionally render absolutely-positioned
-        // sub-elements that overshoot the parent by a few pixels. Clip at
-        // the BetFlow outer wrapper so those never reach the document
-        // edge and trigger a horizontal scrollbar.
         overflowX: 'clip',
       }}
     >
@@ -326,16 +383,7 @@ export function BetFlowPage() {
       <div
         style={{
           display: 'grid',
-          // CRITICAL: every grid track uses minmax(0, ...) instead of bare
-          // 1fr. Bare `1fr` resolves to `minmax(min-content, 1fr)`, which
-          // lets the column expand past the viewport when any descendant
-          // exposes a large intrinsic min-content (Recharts' Responsive-
-          // Container, polaroid SVGs with explicit width attrs, etc.).
-          // With minmax(0, 1fr) the column is allowed to be as small as
-          // 0 and content must shrink to fit. Without this, on narrow
-          // viewports the document widens to ~1500px and the horizontal
-          // scrollbar appears to grow infinitely on zoom.
-          gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : 'minmax(0, 1.4fr) minmax(0, 1fr)',
+          gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : 'minmax(0, 1.25fr) minmax(0, 1fr)',
           gap: isMobile ? 24 : 40,
           marginTop: 16,
         }}
@@ -376,10 +424,11 @@ export function BetFlowPage() {
               </div>
               {previewToggle}
               {previewPolaroid}
+              <div style={{ marginTop: 20, width: '100%' }}>{chartCard}</div>
             </div>
           )}
 
-          <Section title="Step 1 · Write the why.">
+          <Section title="Write the why.">
             <p style={{ fontFamily: fonts.body, fontSize: 14, color: palette.inkMute, marginTop: 0, marginBottom: 12, lineHeight: 1.5 }}>
               {PROMPTS[promptIdx]}
             </p>
@@ -387,7 +436,7 @@ export function BetFlowPage() {
               value={reasoning}
               onChange={(e) => setReasoning(e.target.value.slice(0, 400))}
               rows={4}
-              placeholder="Your reasoning becomes the caption on the receipt. One paragraph is enough."
+              placeholder="If you turn out to be right, this becomes a meme. One paragraph is enough."
               style={{
                 width: '100%',
                 padding: '14px 16px',
@@ -415,9 +464,21 @@ export function BetFlowPage() {
               {reasoningLen >= 30 ? '✓ ENOUGH SAID' : `${30 - reasoningLen} chars to a real conviction`} ·{' '}
               {charsRemaining} remaining
             </div>
+            <div
+              style={{
+                fontFamily: fonts.body,
+                fontSize: 12,
+                color: palette.inkFade,
+                marginTop: 8,
+                fontStyle: 'italic',
+                lineHeight: 1.5,
+              }}
+            >
+              Reasoning is hidden on the polaroid until the market resolves. If you're right, it blooms into the photo as a quote.
+            </div>
           </Section>
 
-          <Section title="Step 2 · Shape the belief.">
+          <Section title="Shape the belief.">
             <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
               <ShapeChip active={shape === 'gaussian'} onClick={() => setShape('gaussian')} label="Single peak" sub="A point estimate with confidence." />
               <ShapeChip active={shape === 'range'} onClick={() => setShape('range')} label="Range" sub="Somewhere in this band." />
@@ -431,7 +492,6 @@ export function BetFlowPage() {
               upperBound={upperBound}
               units={market.xAxisUnits ?? ''}
             />
-
 
             <Slider
               label={shape === 'range' ? 'Center of range' : shape === 'bimodal' ? 'First peak' : 'Prediction'}
@@ -473,7 +533,7 @@ export function BetFlowPage() {
               format={(v) => `${Math.round(v * 10)} / 10`}
             />
             <Slider
-              label="Stake"
+              label="Stake (drives ornaments + sun size)"
               units="$"
               min={1}
               max={Math.min(500, (user?.walletValue ?? 500))}
@@ -490,106 +550,6 @@ export function BetFlowPage() {
               upperBound={upperBound}
               units={market.xAxisUnits ?? ''}
             />
-          </Section>
-
-          <Section title="Step 3 · Style the receipt.">
-            <p style={{ fontFamily: fonts.body, fontSize: 14, color: palette.inkMute, marginTop: 0, marginBottom: 14, lineHeight: 1.5 }}>
-              Pick a palette for the photo. Auto reads your prediction and chooses for you.
-            </p>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
-                gap: 8,
-              }}
-            >
-              {POLAROID_PRESETS.map((p) => (
-                <PresetSwatch
-                  key={p.id}
-                  active={preset === p.id}
-                  presetId={p.id}
-                  label={p.label}
-                  sub={p.sub}
-                  onClick={() => setPreset(p.id)}
-                />
-              ))}
-            </div>
-          </Section>
-
-          <Section title="Step 4 · See the consensus you're betting against.">
-            <p
-              style={{
-                fontFamily: fonts.body,
-                fontSize: 14,
-                color: palette.inkMute,
-                marginTop: 0,
-                marginBottom: isMobile ? 14 : 18,
-                lineHeight: 1.5,
-              }}
-            >
-              Your trade preview (dashed) sits on top of the crowd's consensus (solid). The gap
-              between them is your contrarian edge — the rarity ledger keys off it.
-            </p>
-
-            {/* Mobile-only inline preview: a compact-width thumbnail of the
-                live receipt co-located with the consensus chart, sized so
-                both fit in the mobile viewport at the same time. The full-
-                size preview still lives at the top of the form for Steps
-                1-3, but at Step 4 the user needs to see receipt + chart
-                together to understand the trade vs. the crowd. */}
-            {isMobile && (
-              <div
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  marginBottom: 20,
-                  padding: '14px 12px',
-                  background: palette.card,
-                  border: `1px solid ${palette.rule}`,
-                  borderRadius: 8,
-                }}
-              >
-                <div
-                  style={{
-                    fontFamily: fonts.mono,
-                    fontSize: 11,
-                    color: palette.inkMute,
-                    letterSpacing: 1.4,
-                    marginBottom: 10,
-                    alignSelf: 'flex-start',
-                  }}
-                >
-                  YOUR RECEIPT (LIVE)
-                </div>
-                {previewToggle}
-                {renderPreviewPolaroid(200)}
-              </div>
-            )}
-
-            <div
-              className="conviction-chart-shell"
-              style={{
-                background: palette.card,
-                border: `1px solid ${palette.rule}`,
-                borderRadius: 8,
-                // Bottom padding hosts the Recharts legend natively now
-                // that we no longer offset it past the card.
-                padding: '12px 12px 16px',
-                // Prevents the chart from forcing its grid track wider on
-                // narrow zoom levels. Recharts tooltips render via a fixed-
-                // position layer that escapes this constraint.
-                minWidth: 0,
-              }}
-            >
-              <ConsensusChart marketId={marketId} height={320} />
-            </div>
-            {payout && (
-              <div style={{ display: 'flex', gap: 24, marginTop: 12, fontFamily: fonts.mono, fontSize: 12, color: palette.inkSoft, letterSpacing: 0.3 }}>
-                <span>MAX PAYOUT ${payout.maxPayout.toFixed(2)}</span>
-                <span>AT {payout.maxPayoutOutcome.toFixed(2)} {market.xAxisUnits ?? ''}</span>
-              </div>
-            )}
           </Section>
 
           {!isAuthenticated && (
@@ -632,24 +592,37 @@ export function BetFlowPage() {
           <aside
             style={{
               position: 'sticky',
+              // The whole right column locks together at top: 88 so both
+              // polaroid AND chart stay visible while the user scrolls
+              // through the form on the left. The internal flex column
+              // stacks them.
               top: 88,
               alignSelf: 'flex-start',
-              // If the polaroid + toggle is taller than the viewport, allow
-              // the aside itself to scroll internally so nothing gets clipped.
-              // This guarantees that on short laptop screens the consensus
-              // chart and the live polaroid preview are visible together no
-              // matter how the user scrolls.
               maxHeight: 'calc(100vh - 104px)',
               overflowY: 'auto',
               paddingRight: 4,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 16,
             }}
-            aria-label="Live preview of your receipt"
+            aria-label="Live preview of your receipt and the crowd consensus chart"
           >
-            <div style={{ fontFamily: fonts.mono, fontSize: 11, color: palette.inkMute, letterSpacing: 1.4, marginBottom: 12 }}>
-              LIVE PREVIEW · YOUR RECEIPT
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+              <div
+                style={{
+                  fontFamily: fonts.mono,
+                  fontSize: 11,
+                  color: palette.inkMute,
+                  letterSpacing: 1.4,
+                  alignSelf: 'flex-start',
+                }}
+              >
+                LIVE PREVIEW · YOUR RECEIPT
+              </div>
+              {previewToggle}
+              {previewPolaroid}
             </div>
-            {previewToggle}
-            {previewPolaroid}
+            {chartCard}
           </aside>
         )}
       </div>
@@ -713,15 +686,15 @@ function DisagreementBadge({
   } else if (offsetPct < 14) {
     label = `Contrarian call · ${direction} consensus`;
     color = palette.ember;
-    bg = '#FFF4EC';
+    bg = 'rgba(194, 65, 12, 0.10)';
   } else if (offsetPct < 28) {
     label = `Way off the crowd · ${direction} consensus`;
     color = palette.ember;
-    bg = '#FFE9D9';
+    bg = 'rgba(194, 65, 12, 0.16)';
   } else {
     label = `Lone voice · ${direction} consensus`;
     color = palette.emberDeep;
-    bg = '#FFDFCB';
+    bg = 'rgba(194, 65, 12, 0.22)';
   }
 
   const offsetFormatted = offsetAbs >= 100
@@ -770,22 +743,6 @@ function DisagreementBadge({
   );
 }
 
-const PRESET_SWATCH_COLORS: Record<PolaroidPreset, { sky: string; sun: string; ground: string }> = {
-  auto: { sky: 'linear-gradient(180deg, #1F1234 0%, #5A2A3F 50%, #79A4C8 100%)', sun: '#FFD494', ground: '#1A1F2A' },
-  sunset: { sky: 'linear-gradient(180deg, #1F1234 0%, #5A2A3F 55%, #E2865A 100%)', sun: '#FFD494', ground: '#2C1517' },
-  twilight: { sky: 'linear-gradient(180deg, #0C1530 0%, #1F3A5F 55%, #79A4C8 100%)', sun: '#E0F0FF', ground: '#101F30' },
-  aurora: { sky: 'linear-gradient(180deg, #0B1830 0%, #2D1F58 55%, #5C2860 100%)', sun: '#A8F0D8', ground: '#150A28' },
-  botanical: { sky: 'linear-gradient(180deg, #0F2418 0%, #2C5240 55%, #A8C896 100%)', sun: '#FFF6CE', ground: '#1A2C1F' },
-  rosegold: { sky: 'linear-gradient(180deg, #2B1424 0%, #7A3450 55%, #F2B8C0 100%)', sun: '#FFE0B8', ground: '#321820' },
-  noir: { sky: 'linear-gradient(180deg, #0A0A0A 0%, #252525 55%, #888888 100%)', sun: '#FFFFFF', ground: '#101010' },
-};
-
-/**
- * Live readout of the rarity tier the user *would* earn if they end up
- * right. Updates as they drag the prediction slider. Designed so the
- * gamification mechanic is obvious without a tutorial: the further you
- * stray from consensus, the rarer the receipt — but you have to be right.
- */
 function RarityHint({
   prediction,
   consensusMean,
@@ -902,82 +859,6 @@ function RarityHint({
   );
 }
 
-function PresetSwatch({
-  active,
-  presetId,
-  label,
-  sub,
-  onClick,
-}: {
-  active: boolean;
-  presetId: PolaroidPreset;
-  label: string;
-  sub: string;
-  onClick: () => void;
-}) {
-  const c = PRESET_SWATCH_COLORS[presetId];
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{
-        textAlign: 'left',
-        padding: 10,
-        border: `1px solid ${active ? palette.ember : palette.rule}`,
-        borderRadius: 8,
-        background: palette.card,
-        color: palette.ink,
-        cursor: 'pointer',
-        fontFamily: fonts.body,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 8,
-      }}
-      aria-pressed={active}
-    >
-      <div
-        style={{
-          position: 'relative',
-          height: 38,
-          borderRadius: 4,
-          background: c.sky,
-          overflow: 'hidden',
-          border: `1px solid ${palette.rule}`,
-        }}
-      >
-        <div
-          style={{
-            position: 'absolute',
-            left: '50%',
-            top: '38%',
-            width: 14,
-            height: 14,
-            marginLeft: -7,
-            marginTop: -7,
-            borderRadius: '50%',
-            background: c.sun,
-            boxShadow: `0 0 10px ${c.sun}`,
-          }}
-        />
-        <div
-          style={{
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            bottom: 0,
-            height: 12,
-            background: c.ground,
-          }}
-        />
-      </div>
-      <div>
-        <div style={{ fontWeight: 600, fontSize: 13 }}>{label}</div>
-        <div style={{ fontSize: 11, color: palette.inkMute, marginTop: 2, lineHeight: 1.3 }}>{sub}</div>
-      </div>
-    </button>
-  );
-}
-
 function ShapeChip({ active, onClick, label, sub }: { active: boolean; onClick: () => void; label: string; sub: string }) {
   return (
     <button
@@ -988,7 +869,7 @@ function ShapeChip({ active, onClick, label, sub }: { active: boolean; onClick: 
         padding: '12px 14px',
         border: `1px solid ${active ? palette.ember : palette.rule}`,
         borderRadius: 8,
-        background: active ? '#FFF4EC' : palette.card,
+        background: active ? 'rgba(194, 65, 12, 0.10)' : palette.card,
         color: palette.ink,
         cursor: 'pointer',
         fontFamily: fonts.body,

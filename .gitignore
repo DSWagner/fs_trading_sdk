@@ -13,3 +13,8 @@ internal_sdk_docs/ui_images/
 # Docusaurus
 packages/docs/build/
 packages/docs/.docusaurus/
+
+# Local Playwright diagnostic snapshots — these are large binary
+# artifacts the verifier scripts write while debugging and we don't
+# want them in the repo. The scripts themselves stay tracked.
+scripts/verify-conviction/snapshots/

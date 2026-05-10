@@ -39,7 +39,7 @@ export function DevelopDemo() {
     shape: 'gaussian' as const,
     lowerBound: 2.5,
     upperBound: 5.5,
-    preset: 'sunset' as const,
+    consensusAtBet: 4.7,
   };
 
   const handleClick = () => {

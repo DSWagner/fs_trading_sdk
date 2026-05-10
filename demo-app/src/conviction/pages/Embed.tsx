@@ -23,7 +23,12 @@ export function EmbedPage() {
   const { market } = useMarket(marketId);
 
   const merged = useMemo(() => {
-    if (local) return local;
+    if (local) {
+      if ((local as any).expiresAt == null && market && (market as any).expiresAt) {
+        return { ...local, expiresAt: (market as any).expiresAt };
+      }
+      return local;
+    }
     if (fromHash && market) {
       return {
         marketId,
@@ -40,8 +45,8 @@ export function EmbedPage() {
         marketUnits: market.xAxisUnits,
         lowerBound: market.config.lowerBound,
         upperBound: market.config.upperBound,
-        preset: fromHash.preset,
         consensusAtBet: fromHash.consensusAtBet ?? null,
+        expiresAt: fromHash.expiresAt ?? (market as any).expiresAt ?? null,
       };
     }
     return null;
@@ -112,8 +117,8 @@ export function EmbedPage() {
           resolutionState={market?.resolutionState}
           resolvedOutcome={(market as any)?.resolvedOutcome ?? null}
           width={300}
-          preset={merged.preset}
           consensusAtBet={(merged as any).consensusAtBet ?? null}
+          expiresAt={(merged as any).expiresAt ?? null}
           interactive
         />
       </a>
