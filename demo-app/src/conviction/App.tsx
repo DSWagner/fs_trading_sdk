@@ -12,8 +12,11 @@ import { ProfilePage } from './pages/Profile';
 import { EmbedPage } from './pages/Embed';
 import { AboutPage } from './pages/About';
 
+const FS_BASE_URL =
+  import.meta.env.VITE_FS_BASE_URL || 'https://fs-engine-api-dev.onrender.com';
+
 const fsConfig = {
-  baseUrl: import.meta.env.VITE_FS_BASE_URL,
+  baseUrl: FS_BASE_URL,
   autoAuthenticate: false,
 };
 
