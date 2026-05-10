@@ -145,11 +145,24 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 
 /* The chart-shell's inner SDK container has `width: 100%`. We further
  * constrain min-width to 0 so its content's intrinsic width cannot
- * push the column past the viewport on narrow zooms. */
+ * push the column past the viewport on narrow zooms.
+ *
+ * The SDK's `.fs-chart-container` paints its own border, background,
+ * 1.5rem padding, and rounded corners. Inside the BetFlow sticky right
+ * column we already wrap the chart in our own conviction-themed card
+ * with matching styling, so the SDK's chrome creates a visible
+ * "double frame" and eats ~48px of horizontal width that we'd rather
+ * give to the chart curves. Strip the SDK chrome inside the shell. */
 .conviction-chart-shell .fs-chart-container,
 .conviction-chart-shell .fs-chart-body {
   min-width: 0;
   width: 100%;
+}
+.conviction-chart-shell .fs-chart-container {
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
 }
 
 /* Hide the SDK's chart title + subtitle inside the BetFlow sticky right
@@ -189,27 +202,30 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 /* Conviction: professional range slider. Native accent-color renders the
    filled portion in ember without a visible thumb on Chrome/Edge, which
    reads as a solid red bar. We override with a thin track and a clearly
-   visible circular thumb. */
+   visible circular thumb.
+   Sizes compressed from track 4px / thumb 18px down to track 3px /
+   thumb 14px so the form chrome reads as small alongside the much
+   larger polaroid + chart on the right of the bet flow page. */
 .conviction-slider {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
-  height: 4px;
+  height: 3px;
   background: #E8DFD3;
   border-radius: 3px;
   outline: none;
   cursor: pointer;
   padding: 0;
-  margin: 6px 0;
+  margin: 4px 0;
 }
 
 .conviction-slider::-webkit-slider-runnable-track {
-  height: 4px;
+  height: 3px;
   background: transparent;
   border-radius: 3px;
 }
 .conviction-slider::-moz-range-track {
-  height: 4px;
+  height: 3px;
   background: #E8DFD3;
   border-radius: 3px;
   border: none;
@@ -218,19 +234,19 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 .conviction-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 18px;
-  height: 18px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   background: #FBF6EE;
   border: 2px solid #C2410C;
   box-shadow: 0 1px 3px rgba(26, 24, 20, 0.18);
   cursor: grab;
-  margin-top: -7px;
+  margin-top: -5.5px;
   transition: transform 120ms ease, box-shadow 120ms ease;
 }
 .conviction-slider::-moz-range-thumb {
-  width: 18px;
-  height: 18px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   background: #FBF6EE;
   border: 2px solid #C2410C;

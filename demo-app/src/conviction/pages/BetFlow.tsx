@@ -233,6 +233,10 @@ export function BetFlowPage() {
   // ornament density, conviction shifts the sun radius and star count,
   // etc. Without these inputs feeding the seed the polaroid would only
   // react to prediction/spread/shape.
+  //
+  // Desktop width was 320; bumped to 380 so the live preview reads as
+  // the primary visual on the page instead of a thumbnail next to a
+  // chunky form. The right column sticky-wrapper is sized to match.
   const renderPreviewPolaroid = (overrideWidth?: number) => (
     <Polaroid
       marketId={market.marketId}
@@ -253,7 +257,7 @@ export function BetFlowPage() {
       shape={shape}
       lowerBound={lowerBound}
       upperBound={upperBound}
-      width={overrideWidth ?? (isMobile ? 280 : 320)}
+      width={overrideWidth ?? (isMobile ? 280 : 380)}
       expiresAt={expiresAt}
       resolutionState={previewMode === 'after' ? 'resolved' : 'open'}
       resolvedOutcome={previewMode === 'after' ? previewOutcome : null}
@@ -306,13 +310,18 @@ export function BetFlowPage() {
   // the form. The SDK's ConsensusChart renders its own title and
   // subtitle, so the card itself stays metadata-light to avoid a wall of
   // duplicated text above the curve.
+  //
+  // Chart height bumped from 240 -> 300 (desktop) so the consensus
+  // curve reads as a major visual instead of a sliver. The right
+  // column is now 400px wide which gives Recharts more room to render
+  // axes and legends without clipping.
   const chartCard = (
     <div
       style={{
         display: 'flex',
         flexDirection: 'column',
         gap: 6,
-        padding: '10px 10px 10px',
+        padding: '10px 12px 12px',
         background: palette.card,
         border: `1px solid ${palette.rule}`,
         borderRadius: 10,
@@ -322,7 +331,7 @@ export function BetFlowPage() {
       }}
       className="conviction-chart-shell"
     >
-      <ConsensusChart marketId={marketId} height={isMobile ? 220 : 240} />
+      <ConsensusChart marketId={marketId} height={isMobile ? 220 : 300} />
       {payout && (
         <div
           style={{
@@ -365,34 +374,40 @@ export function BetFlowPage() {
       <div
         style={{
           display: 'grid',
-          // Right column is locked to the polaroid's width (320px) so the
-          // polaroid and the consensus chart line up edge-to-edge instead
-          // of the chart spilling past the polaroid frame as it did when
-          // the column was a flex fraction (~560px wide). The left column
-          // takes everything else (~960px at the 1320px max-width).
-          gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) 320px',
-          gap: isMobile ? 24 : 40,
+          // The user explicitly asked for the visualizations to dominate
+          // the page and the form chrome to recede. So the right column
+          // (polaroid + chart) is now 400px wide instead of 320px — that
+          // hosts a 380px polaroid with breathing room on either side.
+          // The left column still gets the larger ~880px slice but the
+          // form inside has been compressed (smaller H1, tighter
+          // sliders, denser typography) so the visualizations read as
+          // the headline element on the page.
+          gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) 400px',
+          gap: isMobile ? 24 : 36,
           marginTop: 16,
         }}
       >
         <div>
-          <span style={{ fontFamily: fonts.mono, fontSize: 11, color: palette.ember, letterSpacing: 1.6 }}>
+          <span style={{ fontFamily: fonts.mono, fontSize: 10.5, color: palette.ember, letterSpacing: 1.6 }}>
             STAKE A CONVICTION
           </span>
           <h1
             style={{
               fontFamily: fonts.display,
-              fontSize: isMobile ? 30 : 42,
+              // Shrunk from 42 → 32 desktop so the chunky display H1 no
+              // longer competes with the polaroid for "biggest thing on
+              // the page" attention.
+              fontSize: isMobile ? 26 : 32,
               fontWeight: 700,
               color: palette.ink,
-              margin: '8px 0 12px',
-              letterSpacing: -0.7,
-              lineHeight: 1.1,
+              margin: '6px 0 8px',
+              letterSpacing: -0.5,
+              lineHeight: 1.12,
             }}
           >
             {market.title}
           </h1>
-          <div style={{ fontFamily: fonts.body, color: palette.inkMute, fontSize: isMobile ? 13 : 14, marginBottom: 20 }}>
+          <div style={{ fontFamily: fonts.body, color: palette.inkMute, fontSize: isMobile ? 12 : 13, marginBottom: 16 }}>
             Range {lowerBound}–{upperBound} {market.xAxisUnits ?? ''} · Pool ${(market.totalVolume ?? 0).toFixed(0)} ·
             Consensus µ {(market.consensusMean ?? 0).toFixed(1)} {market.xAxisUnits ?? ''}
           </div>
@@ -416,24 +431,24 @@ export function BetFlowPage() {
           )}
 
           <Section title="Write the why.">
-            <p style={{ fontFamily: fonts.body, fontSize: 14, color: palette.inkMute, marginTop: 0, marginBottom: 12, lineHeight: 1.5 }}>
+            <p style={{ fontFamily: fonts.body, fontSize: 12.5, color: palette.inkMute, marginTop: 0, marginBottom: 8, lineHeight: 1.4 }}>
               {PROMPTS[promptIdx]}
             </p>
             <textarea
               value={reasoning}
               onChange={(e) => setReasoning(e.target.value.slice(0, 400))}
-              rows={4}
+              rows={3}
               placeholder="If you turn out to be right, this becomes a meme. One paragraph is enough."
               style={{
                 width: '100%',
-                padding: '14px 16px',
+                padding: '10px 12px',
                 border: `1px solid ${reasoningLen ? palette.ember : palette.rule}`,
                 borderRadius: 6,
                 background: palette.card,
                 fontFamily: fonts.body,
-                fontSize: 16,
+                fontSize: 13.5,
                 color: palette.ink,
-                lineHeight: 1.5,
+                lineHeight: 1.45,
                 resize: 'vertical',
                 outline: 'none',
                 boxSizing: 'border-box',
@@ -442,9 +457,9 @@ export function BetFlowPage() {
             <div
               style={{
                 fontFamily: fonts.mono,
-                fontSize: 11,
+                fontSize: 10.5,
                 color: reasoningLen >= 30 ? palette.jade : palette.inkFade,
-                marginTop: 6,
+                marginTop: 4,
                 letterSpacing: 0.4,
               }}
             >
@@ -454,11 +469,11 @@ export function BetFlowPage() {
             <div
               style={{
                 fontFamily: fonts.body,
-                fontSize: 12,
+                fontSize: 11.5,
                 color: palette.inkFade,
-                marginTop: 8,
+                marginTop: 6,
                 fontStyle: 'italic',
-                lineHeight: 1.5,
+                lineHeight: 1.4,
               }}
             >
               Reasoning is hidden on the polaroid until the market resolves. If you're right, it blooms into the photo as a quote.
@@ -466,7 +481,7 @@ export function BetFlowPage() {
           </Section>
 
           <Section title="Shape the belief.">
-            <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
               <ShapeChip active={shape === 'gaussian'} onClick={() => setShape('gaussian')} label="Single peak" sub="A point estimate with confidence." />
               <ShapeChip active={shape === 'range'} onClick={() => setShape('range')} label="Range" sub="Somewhere in this band." />
               <ShapeChip active={shape === 'bimodal'} onClick={() => setShape('bimodal')} label="Bimodal" sub="Two distinct outcomes." />
@@ -550,18 +565,18 @@ export function BetFlowPage() {
             disabled={!isAuthenticated || submitting || buyLoading || !reasoning.trim()}
             style={{
               width: '100%',
-              marginTop: 32,
-              padding: '18px 24px',
+              marginTop: 22,
+              padding: '13px 20px',
               background: isAuthenticated && reasoning.trim() ? palette.ember : palette.rule,
               color: palette.card,
               border: 'none',
-              borderRadius: 8,
+              borderRadius: 7,
               fontFamily: fonts.display,
-              fontSize: 20,
+              fontSize: 16,
               fontWeight: 700,
-              letterSpacing: -0.2,
+              letterSpacing: -0.1,
               cursor: isAuthenticated && reasoning.trim() && !submitting ? 'pointer' : 'not-allowed',
-              boxShadow: `0 4px 14px ${palette.shadow}`,
+              boxShadow: `0 3px 10px ${palette.shadow}`,
             }}
           >
             {submitting || buyLoading
@@ -619,16 +634,19 @@ export function BetFlowPage() {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div style={{ marginTop: 32 }}>
+    // Tightened section spacing (was marginTop 32, h2 22px, marginBottom 14)
+    // so the form chrome takes up less vertical real estate and the eye
+    // is drawn to the polaroid + chart in the sticky right column.
+    <div style={{ marginTop: 22 }}>
       <h2
         style={{
           fontFamily: fonts.display,
-          fontSize: 22,
+          fontSize: 17,
           fontWeight: 700,
           color: palette.ink,
           margin: 0,
-          marginBottom: 14,
-          letterSpacing: -0.3,
+          marginBottom: 10,
+          letterSpacing: -0.2,
         }}
       >
         {title}
@@ -696,21 +714,21 @@ function DisagreementBadge({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        gap: 12,
+        gap: 10,
         background: bg,
         border: `1px solid ${palette.rule}`,
-        borderRadius: 8,
-        padding: '10px 14px',
-        marginBottom: 18,
+        borderRadius: 7,
+        padding: '8px 11px',
+        marginBottom: 12,
         fontFamily: fonts.body,
         flexWrap: 'wrap',
       }}
     >
       <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        <span style={{ fontSize: 13, fontWeight: 600, color, letterSpacing: 0.2 }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color, letterSpacing: 0.2 }}>
           {label}
         </span>
-        <span style={{ fontSize: 12, color: palette.inkMute, marginTop: 2 }}>
+        <span style={{ fontSize: 11, color: palette.inkMute, marginTop: 1 }}>
           You are {offsetFormatted} {units} {direction} the crowd's average
           ({offsetPct.toFixed(1)}% of the range).
         </span>
@@ -718,7 +736,7 @@ function DisagreementBadge({
       <span
         style={{
           fontFamily: fonts.mono,
-          fontSize: 11,
+          fontSize: 10.5,
           color: palette.inkMute,
           letterSpacing: 1.2,
           whiteSpace: 'nowrap',
@@ -760,13 +778,13 @@ function RarityHint({
     return (
       <div
         style={{
-          marginTop: 12,
-          padding: '12px 14px',
+          marginTop: 10,
+          padding: '9px 12px',
           background: palette.card,
           border: `1px dashed ${palette.rule}`,
-          borderRadius: 8,
+          borderRadius: 7,
           fontFamily: fonts.body,
-          fontSize: 13,
+          fontSize: 12,
           color: palette.inkMute,
         }}
       >
@@ -790,14 +808,14 @@ function RarityHint({
   return (
     <div
       style={{
-        marginTop: 14,
-        padding: '14px 16px',
+        marginTop: 10,
+        padding: '10px 12px',
         background: meta.badgeFill,
         border: `1.5px solid ${meta.badgeStroke}`,
-        borderRadius: 10,
+        borderRadius: 8,
         display: 'flex',
         alignItems: 'center',
-        gap: 14,
+        gap: 11,
       }}
       data-testid="rarity-hint"
       data-tier={tier}
@@ -805,11 +823,11 @@ function RarityHint({
       <div
         style={{
           flexShrink: 0,
-          padding: '6px 12px',
+          padding: '4px 10px',
           background: meta.color,
           color: '#fff',
           fontFamily: fonts.mono,
-          fontSize: 11,
+          fontSize: 10,
           fontWeight: 700,
           letterSpacing: 1.4,
           borderRadius: 999,
@@ -821,7 +839,7 @@ function RarityHint({
         <div
           style={{
             fontFamily: fonts.display,
-            fontSize: 14,
+            fontSize: 12.5,
             fontWeight: 600,
             color: meta.badgeText,
             lineHeight: 1.25,
@@ -832,7 +850,7 @@ function RarityHint({
         <div
           style={{
             fontFamily: fonts.body,
-            fontSize: 12,
+            fontSize: 11,
             color: meta.badgeText,
             opacity: 0.75,
             marginTop: 2,
@@ -853,17 +871,18 @@ function ShapeChip({ active, onClick, label, sub }: { active: boolean; onClick: 
       style={{
         flex: 1,
         textAlign: 'left',
-        padding: '12px 14px',
+        padding: '9px 11px',
         border: `1px solid ${active ? palette.ember : palette.rule}`,
-        borderRadius: 8,
+        borderRadius: 7,
         background: active ? 'rgba(194, 65, 12, 0.10)' : palette.card,
         color: palette.ink,
         cursor: 'pointer',
         fontFamily: fonts.body,
+        minWidth: 0,
       }}
     >
-      <div style={{ fontWeight: 600, fontSize: 14 }}>{label}</div>
-      <div style={{ fontSize: 12, color: palette.inkMute, marginTop: 3 }}>{sub}</div>
+      <div style={{ fontWeight: 600, fontSize: 12.5 }}>{label}</div>
+      <div style={{ fontSize: 11, color: palette.inkMute, marginTop: 2 }}>{sub}</div>
     </button>
   );
 }
@@ -888,10 +907,15 @@ function Slider({
   format?: (v: number) => string;
 }) {
   return (
-    <div style={{ marginBottom: 16 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4, fontFamily: fonts.body }}>
-        <span style={{ fontSize: 13, color: palette.inkSoft, fontWeight: 500 }}>{label}</span>
-        <span style={{ fontSize: 13, color: palette.ink, fontFamily: fonts.mono, letterSpacing: 0.4 }}>
+    // Compact slider: ~30% less vertical space than before. Per user
+    // request the form chrome should recede in favour of the polaroid
+    // and the chart in the sticky preview column. The slider input
+    // itself is styled in index.css; smaller margins here drive the
+    // visible density change.
+    <div style={{ marginBottom: 11 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 2, fontFamily: fonts.body }}>
+        <span style={{ fontSize: 12, color: palette.inkSoft, fontWeight: 500 }}>{label}</span>
+        <span style={{ fontSize: 12, color: palette.ink, fontFamily: fonts.mono, letterSpacing: 0.3 }}>
           {format ? format(value) : `${value.toFixed(2)} ${units ?? ''}`}
         </span>
       </div>
