@@ -50,6 +50,7 @@ export function BetFlowPage() {
   const [reasoning, setReasoning] = useState<string>('');
   const [preset, setPreset] = useState<PolaroidPreset>('auto');
   const [payout, setPayout] = useState<PayoutCurve | null>(null);
+  const [previewMode, setPreviewMode] = useState<'before' | 'after'>('before');
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -220,6 +221,18 @@ export function BetFlowPage() {
 
   const charsRemaining = Math.max(0, 400 - reasoning.length);
 
+  // Outcome used for the "After" preview: 80% of the way from the user's
+  // prediction toward the consensus mean. Falls back to a near-prediction
+  // value if no consensus is available yet. Gives the user a believable
+  // "called it / close" sample of how the developed receipt will look.
+  const previewOutcome = (() => {
+    const mean = market.consensusMean;
+    if (typeof mean === 'number' && Number.isFinite(mean)) {
+      return prediction + (mean - prediction) * 0.8;
+    }
+    return prediction;
+  })();
+
   const previewPolaroid = (
     <Polaroid
       marketId={market.marketId}
@@ -238,7 +251,46 @@ export function BetFlowPage() {
       upperBound={upperBound}
       width={isMobile ? 280 : 320}
       preset={preset}
+      resolutionState={previewMode === 'after' ? 'resolved' : 'open'}
+      resolvedOutcome={previewMode === 'after' ? previewOutcome : null}
+      animateDevelop={previewMode === 'after'}
     />
+  );
+
+  const previewToggle = (
+    <div
+      style={{
+        display: 'inline-flex',
+        padding: 2,
+        background: palette.card,
+        border: `1px solid ${palette.rule}`,
+        borderRadius: 999,
+        marginBottom: 10,
+      }}
+    >
+      {(['before', 'after'] as const).map((mode) => (
+        <button
+          key={mode}
+          type="button"
+          onClick={() => setPreviewMode(mode)}
+          style={{
+            border: 'none',
+            background: previewMode === mode ? palette.ember : 'transparent',
+            color: previewMode === mode ? palette.card : palette.inkMute,
+            padding: '6px 14px',
+            fontFamily: fonts.mono,
+            fontSize: 11,
+            letterSpacing: 1,
+            textTransform: 'uppercase',
+            borderRadius: 999,
+            cursor: 'pointer',
+            transition: 'background 160ms, color 160ms',
+          }}
+        >
+          {mode === 'before' ? 'Before resolution' : 'After resolution'}
+        </button>
+      ))}
+    </div>
   );
 
   return (
@@ -292,6 +344,7 @@ export function BetFlowPage() {
               <div style={{ fontFamily: fonts.mono, fontSize: 11, color: palette.inkMute, letterSpacing: 1.4, marginBottom: 12, alignSelf: 'flex-start' }}>
                 LIVE PREVIEW · YOUR RECEIPT
               </div>
+              {previewToggle}
               {previewPolaroid}
             </div>
           )}
@@ -486,6 +539,7 @@ export function BetFlowPage() {
             <div style={{ fontFamily: fonts.mono, fontSize: 11, color: palette.inkMute, letterSpacing: 1.4, marginBottom: 12 }}>
               LIVE PREVIEW · YOUR RECEIPT
             </div>
+            {previewToggle}
             {previewPolaroid}
           </aside>
         )}

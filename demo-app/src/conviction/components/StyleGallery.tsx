@@ -27,7 +27,7 @@ export function StyleGallery() {
     shape: 'gaussian' as const,
     lowerBound: 80,
     upperBound: 180,
-    developed: true,
+    resolutionState: 'resolved' as const,
     resolvedOutcome: 128,
   };
 
