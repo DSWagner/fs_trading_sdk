@@ -27,6 +27,8 @@ export function StyleGallery() {
     shape: 'gaussian' as const,
     lowerBound: 80,
     upperBound: 180,
+    developed: true,
+    resolvedOutcome: 128,
   };
 
   return (
@@ -69,7 +71,7 @@ export function StyleGallery() {
             lineHeight: 1.5,
           }}
         >
-          Pick the mood that fits your call. Default lets your prediction decide. Hover or tap.
+          Shown after development, so the color shows. Pre-resolution receipts are deliberately monochrome. Auto picks for you from the prediction; the rest let you set the mood.
         </p>
       </div>
 
