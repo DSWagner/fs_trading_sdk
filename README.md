@@ -1,3 +1,41 @@
+# Conviction · receipts for beliefs
+
+> **A receipts-first prediction publication, built on the FunctionSpace Trading SDK.**
+> **Submission to the FunctionSpace Vibecoding Competition (4–18 May 2026).**
+
+Every prediction is signed, dated, and turned into a Polaroid receipt the user can share. Before the market resolves the photo is faint and "developing." When reality catches up, the photo sharpens, color blooms in, and a thin thread shows where truth landed compared to the call. The reasoning the user wrote at signing time is preserved permanently and rides along in every share link and embed.
+
+| Surface | Purpose |
+| --- | --- |
+| `/` (Landing) | Publication front page with three sample receipts and a develop demo. |
+| `/discover` | Browse the 239 live markets the engine exposes, filter by category, search by keyword. |
+| `/m/:marketId` (BetFlow) | Place a bet using the SDK's `useBuy` + shape generators; live consensus chart + disagreement badge + 7 art presets. |
+| `/r/:marketId/:positionId` (Receipt) | Polaroid receipt with numeric scale, share, embed, and PNG download. |
+| `/u/:username` (Profile) | A user's signed conviction record. |
+| `/embed/r/...` | Bare iframe-friendly receipt for blog and Substack embeds. |
+| `/about` | Editorial framing of the project. |
+
+**Submission package:** see [`SUBMISSION.md`](./SUBMISSION.md) for the form text, market list, demo video script, and judging argument. **Project documentation:** see [`CONVICTION.md`](./CONVICTION.md) for the full architecture and design walkthrough.
+
+**Run locally:**
+
+```bash
+npm install
+echo "VITE_FS_BASE_URL=https://fs-engine-api-dev.onrender.com" > demo-app/.env
+cd demo-app && npm run dev
+# open http://localhost:3000
+```
+
+**Deploy:** push the fork to Vercel or Netlify. Both are pre-configured at the repo root (`vercel.json`, `netlify.toml`). The competition dev engine has open CORS, so no backend is needed.
+
+---
+
+## The SDK that powers Conviction
+
+The rest of this README documents the upstream FunctionSpace Trading SDK that this fork is built on. Conviction lives under `demo-app/src/conviction/` and consumes the SDK's hooks (`useMarket`, `useMarkets`, `useBuy`, `usePreviewPayout`, `useAuth`), widgets (`ConsensusChart`, `PasswordlessAuthWidget`), and core math (`generateGaussian`, `generateRange`, `generateBelief`) without modification.
+
+---
+
 # FunctionSpace Trading SDK
 
 A TypeScript SDK for embedding prediction market trading widgets into web applications. Developers install the packages via npm and drop in themed, interactive components that handle market visualization, trade input, and position management.

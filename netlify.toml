@@ -1,0 +1,44 @@
+# Netlify deployment for the Conviction demo app.
+# Drop this repo into Netlify and the site will build from demo-app/dist.
+# Free tier is sufficient — no server-side rendering, no functions.
+
+[build]
+  base = "."
+  command = "npm install && cd demo-app && npm run build"
+  publish = "demo-app/dist"
+
+[build.environment]
+  # Competition dev engine. CORS is open to all origins (per setup guide).
+  VITE_FS_BASE_URL = "https://fs-engine-api-dev.onrender.com"
+  NODE_VERSION = "20"
+
+# Single-page app: every route returns index.html so React Router can resolve it.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Long cache on hashed bundle assets (Vite ships them with content hashes).
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# Short cache on the OG card and favicon since they may evolve.
+[[headers]]
+  for = "/og-card.svg"
+  [headers.values]
+    Cache-Control = "public, max-age=86400"
+
+[[headers]]
+  for = "/favicon.svg"
+  [headers.values]
+    Cache-Control = "public, max-age=86400"
+
+# Sensible default security headers for a public preview deployment.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "interest-cohort=()"

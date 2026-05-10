@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FBF6EE" />
+      <stop offset="100%" stop-color="#F3EADA" />
+    </linearGradient>
+    <linearGradient id="sky1" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1F1234" />
+      <stop offset="55%" stop-color="#5A2A3F" />
+      <stop offset="100%" stop-color="#E2865A" />
+    </linearGradient>
+    <linearGradient id="sky2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0B1830" />
+      <stop offset="55%" stop-color="#2D1F58" />
+      <stop offset="100%" stop-color="#5C2860" />
+    </linearGradient>
+    <linearGradient id="sky3" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2B1424" />
+      <stop offset="55%" stop-color="#7A3450" />
+      <stop offset="100%" stop-color="#F2B8C0" />
+    </linearGradient>
+    <radialGradient id="sun1" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#FFD494" />
+      <stop offset="60%" stop-color="#FF8A3D" stop-opacity="0.55" />
+      <stop offset="100%" stop-color="#FF8A3D" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="sun2" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#A8F0D8" />
+      <stop offset="60%" stop-color="#5DD3B5" stop-opacity="0.55" />
+      <stop offset="100%" stop-color="#5DD3B5" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="sun3" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#FFE0B8" />
+      <stop offset="60%" stop-color="#E08A6A" stop-opacity="0.55" />
+      <stop offset="100%" stop-color="#E08A6A" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#bg)" />
+
+  <!-- Tiny issue tag -->
+  <text x="80" y="110" font-family="Courier, monospace" font-size="18" font-weight="500" letter-spacing="3" fill="#C2410C">VOL. I  ·  RECEIPTS FOR BELIEFS</text>
+
+  <!-- Big serif headline -->
+  <text x="80" y="220" font-family="Georgia, 'Times New Roman', serif" font-size="92" font-weight="700" fill="#1A1814" letter-spacing="-2">Stop betting</text>
+  <text x="80" y="320" font-family="Georgia, 'Times New Roman', serif" font-size="92" font-weight="700" font-style="italic" fill="#C2410C" letter-spacing="-2">in private.</text>
+
+  <!-- Subline -->
+  <text x="80" y="400" font-family="Helvetica, Arial, sans-serif" font-size="28" fill="#3F3A33">Sign your call. Attach your reasoning.</text>
+  <text x="80" y="438" font-family="Helvetica, Arial, sans-serif" font-size="28" fill="#3F3A33">Share a Polaroid that develops when reality catches up.</text>
+
+  <!-- Bottom row -->
+  <line x1="80" y1="510" x2="640" y2="510" stroke="#E5DCCB" stroke-width="1" />
+  <text x="80" y="555" font-family="Georgia, serif" font-size="22" font-weight="700" fill="#1A1814">Conviction</text>
+  <text x="200" y="555" font-family="Courier, monospace" font-size="14" letter-spacing="2" fill="#6B5E50">A PUBLICATION ON THE BELIEF MARKET PRIMITIVE</text>
+
+  <text x="80" y="585" font-family="Courier, monospace" font-size="14" letter-spacing="1.5" fill="#9C8E7E">BUILT ON THE FUNCTIONSPACE SDK</text>
+
+  <!-- Three Polaroids on the right -->
+  <g transform="translate(800 90) rotate(-6)">
+    <rect x="0" y="0" width="240" height="320" rx="6" fill="#FFFCF6" stroke="#E5DCCB" stroke-width="1" />
+    <rect x="16" y="16" width="208" height="208" rx="2" fill="url(#sky1)" />
+    <circle cx="166" cy="120" r="46" fill="url(#sun1)" />
+    <circle cx="166" cy="120" r="20" fill="#FFD494" />
+    <path d="M 16 192 L 36 178 L 60 188 L 88 170 L 116 184 L 148 168 L 184 178 L 224 174 L 224 224 L 16 224 Z" fill="#2C1517" />
+    <text x="120" y="252" text-anchor="middle" font-family="Georgia, serif" font-size="13" font-weight="600" font-style="italic" fill="#1A1814">"Best Picture · Anora"</text>
+    <text x="120" y="276" text-anchor="middle" font-family="Helvetica, sans-serif" font-size="10" font-style="italic" fill="#3F3A33">Indie distributor energy nobody saw coming.</text>
+    <text x="120" y="304" text-anchor="middle" font-family="Courier, monospace" font-size="9" fill="#6B5E50" letter-spacing="0.5">@critic_at_large · DEVELOPING</text>
+  </g>
+
+  <g transform="translate(910 175) rotate(4)">
+    <rect x="0" y="0" width="220" height="295" rx="6" fill="#FFFCF6" stroke="#E5DCCB" stroke-width="1" />
+    <rect x="14" y="14" width="192" height="192" rx="2" fill="url(#sky2)" />
+    <circle cx="80" cy="105" r="42" fill="url(#sun2)" />
+    <circle cx="80" cy="105" r="18" fill="#A8F0D8" />
+    <circle cx="170" cy="125" r="32" fill="url(#sun2)" opacity="0.7" />
+    <circle cx="170" cy="125" r="13" fill="#F0A8D8" />
+    <path d="M 14 180 L 30 168 L 56 178 L 84 162 L 116 174 L 152 158 L 184 168 L 206 162 L 206 206 L 14 206 Z" fill="#150A28" />
+    <text x="110" y="232" text-anchor="middle" font-family="Georgia, serif" font-size="12" font-weight="600" font-style="italic" fill="#1A1814">"GPT-5 release"</text>
+    <text x="110" y="254" text-anchor="middle" font-family="Helvetica, sans-serif" font-size="9" font-style="italic" fill="#3F3A33">Two distinct windows.</text>
+    <text x="110" y="280" text-anchor="middle" font-family="Courier, monospace" font-size="8" fill="#6B5E50" letter-spacing="0.5">@lab_lurker · DEVELOPING</text>
+  </g>
+
+  <g transform="translate(1010 270) rotate(-3)">
+    <rect x="0" y="0" width="200" height="270" rx="6" fill="#FFFCF6" stroke="#E5DCCB" stroke-width="1" />
+    <rect x="12" y="12" width="176" height="176" rx="2" fill="url(#sky3)" />
+    <circle cx="100" cy="100" r="40" fill="url(#sun3)" />
+    <circle cx="100" cy="100" r="17" fill="#FFE0B8" />
+    <path d="M 12 162 L 30 148 L 54 156 L 80 142 L 110 152 L 142 138 L 168 148 L 188 144 L 188 188 L 12 188 Z" fill="#321820" />
+    <text x="100" y="216" text-anchor="middle" font-family="Georgia, serif" font-size="12" font-weight="600" font-style="italic" fill="#1A1814">"Taylor leg 4"</text>
+    <text x="100" y="238" text-anchor="middle" font-family="Helvetica, sans-serif" font-size="9" font-style="italic" fill="#3F3A33">Late spring announcement.</text>
+    <text x="100" y="258" text-anchor="middle" font-family="Courier, monospace" font-size="8" fill="#6B5E50" letter-spacing="0.5">@swiftie_prime · DEVELOPING</text>
+  </g>
+</svg>

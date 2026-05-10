@@ -1,9 +1,66 @@
-/* Demo app page background -- not part of the SDK theme system */
-/* Switch to match your active theme preset in App.tsx */
-body {
-  /* background: #0a0a0f; fs-dark / fs-midnight */
-  /* background: #f8fafc; */ /* fs-light */
-  /* background: #ffffff; native-light */
-  background: #111111; /* native-dark */
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;0,9..144,800;1,9..144,400;1,9..144,500;1,9..144,600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+html, body, #root {
   margin: 0;
+  padding: 0;
+  background: #FBF6EE;
+  color: #1A1814;
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible {
+  outline: 2px solid #C2410C;
+  outline-offset: 2px;
+}
+
+@media (max-width: 900px) {
+  /* Stack two-column layouts on mobile by overriding inline grids */
+  body { font-size: 15px; }
+}
+
+/* Conviction: keep the consensus chart's legend from colliding with the X-axis label */
+.conviction-chart-shell .recharts-legend-wrapper {
+  padding-top: 14px !important;
+  position: relative !important;
+  bottom: -10px !important;
+}
+.conviction-chart-shell .recharts-default-legend {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  justify-content: center !important;
+  gap: 6px 18px !important;
+  margin: 0 !important;
+}
+.conviction-chart-shell .recharts-legend-item {
+  margin-right: 0 !important;
+}
+
+/* Conviction: editorial loading / empty state animations. */
+@keyframes conviction-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes conviction-pulse {
+  0%, 100% { opacity: 0.55; transform: scale(0.85); }
+  50%      { opacity: 1; transform: scale(1.1); }
+}
+@keyframes conviction-rule-slide {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(260%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Respect motion preferences: hold animations at their final frame. */
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
 }

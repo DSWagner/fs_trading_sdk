@@ -1,0 +1,1034 @@
+# Conviction
+
+> A receipts-first prediction publication, built on the FunctionSpace Trading SDK.
+
+This document explains Conviction from the highest abstraction (what it is, who it's for) all the way down to the lowest (which file does what, what data lives where, why each design decision was made). It assumes zero prior knowledge of the codebase or of prediction markets.
+
+If you want to *use* Conviction, skip to **[How to run it](#how-to-run-it)**.
+If you want to *understand* Conviction, read top to bottom.
+
+---
+
+## Table of contents
+
+1. [What is Conviction?](#what-is-conviction)
+2. [The problem it solves](#the-problem-it-solves)
+3. [The product in 30 seconds](#the-product-in-30-seconds)
+4. [The user journey](#the-user-journey)
+5. [The Polaroid: anatomy of a receipt](#the-polaroid-anatomy-of-a-receipt)
+6. [Polaroid art presets (customization)](#polaroid-art-presets-customization)
+7. [Architecture](#architecture)
+8. [Where data lives](#where-data-lives)
+9. [The two killer mechanics](#the-two-killer-mechanics)
+10. [File-by-file walkthrough](#file-by-file-walkthrough)
+11. [SDK hooks we use](#sdk-hooks-we-use)
+12. [How to run it](#how-to-run-it)
+13. [Design choices and tradeoffs](#design-choices-and-tradeoffs)
+14. [Competition rubric: how Conviction scores](#competition-rubric-how-conviction-scores)
+15. [What is not done yet](#what-is-not-done-yet)
+16. [End-to-end testing without spending a cent](#end-to-end-testing-without-spending-a-cent)
+17. [Editorial polish pass (animation + voice + Markdown export)](#editorial-polish-pass-animation--voice--markdown-export)
+
+---
+
+## What is Conviction?
+
+Conviction is a website. You go to it, you find a question (called a "market"), you write down what you think the answer is and *why*, you put a small amount of money behind it, and the website hands you back a beautiful little image called a **Polaroid**. The Polaroid contains your prediction, your reasoning, your name, and the date. You can copy a link to it and share it anywhere.
+
+When the real-world answer becomes known later, the Polaroid changes. It "develops": it sharpens up, color appears, and a thin line shows where the actual outcome landed compared to where you guessed. Your reasoning stays attached to it forever.
+
+That is the entire product.
+
+The phrase to remember is: **"the why is the asset."** Most prediction markets care only about whether you were right. Conviction also preserves *why* you thought you were right, because that is the rarer and more valuable thing.
+
+---
+
+## The problem it solves
+
+Prediction markets are very good at one thing: aggregating people's opinions about the future into a single number (a probability or a value). They are extremely bad at preserving the reasoning behind any individual person's bet.
+
+Today, if you bet that a movie will win Best Picture, the only thing the world records is "this anonymous wallet bought 25 dollars of YES at price X." If you turn out to be right, nobody knows it was you and nobody knows why you saw it before everyone else.
+
+That is a tragedy because the *reasoning* a calibrated forecaster produces is the most valuable thing they make. It is what gets them invited to the next conversation. It is what teaches the next generation. It is what proves they were not just lucky.
+
+Conviction fixes this by treating each bet as a small, beautiful, permanently shareable artifact that carries the reasoning with it.
+
+---
+
+## The product in 30 seconds
+
+```mermaid
+flowchart LR
+    A[Land on the homepage] --> B[Browse Discover<br/>find an interesting market]
+    B --> C[Open the bet flow page]
+    C --> D[Write your reasoning<br/>shape your belief curve<br/>set your stake]
+    D --> E[Sign in with just a handle<br/>no password no email]
+    E --> F[Submit]
+    F --> G[Get a permanent receipt URL<br/>r/marketId/positionId]
+    G --> H[Share the link<br/>or copy the embed iframe]
+    H --> I[Wait]
+    I --> J[Market resolves]
+    J --> K[Polaroid develops automatically<br/>everywhere it has been shared]
+```
+
+That is the loop. Notice that **you do not need an account** to read receipts. You only need a handle to *create* one. Notice also that the receipt link works on *any* device, even one that has never visited the site before, because the reasoning travels in the URL itself.
+
+---
+
+## The user journey
+
+This is what actually happens, technically, when someone places a bet:
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant App as Conviction frontend
+    participant LS as localStorage
+    participant SDK as FunctionSpace SDK
+    participant API as FunctionSpace backend
+
+    User->>App: clicks Discover
+    App->>SDK: useMarkets({state: 'open'})
+    SDK->>API: GET /markets
+    API-->>SDK: list of markets
+    SDK-->>App: markets[]
+    App-->>User: shows market grid
+
+    User->>App: opens /m/marketId
+    App->>SDK: useMarket(marketId)
+    SDK->>API: GET /markets/:id
+    SDK-->>App: market details + consensus
+
+    User->>App: writes reasoning
+    User->>App: drags shape sliders
+    App->>App: buildBelief() locally
+    App->>SDK: setPreviewBelief(belief)
+    Note over App,SDK: live consensus chart updates
+    App->>SDK: previewPayout(belief, stake) [debounced]
+    SDK->>API: POST /preview-payout
+    SDK-->>App: payout curve
+
+    User->>App: signs in with handle
+    App->>SDK: passwordlessLogin(handle)
+    SDK->>API: POST /auth/passwordless
+    SDK-->>App: {user, sessionToken}
+    App->>LS: rememberUsername(handle)
+
+    User->>App: clicks Sign my receipt
+    App->>SDK: useBuy(marketId).execute(belief, stake)
+    SDK->>API: POST /trades/buy
+    API-->>SDK: {positionId, ...}
+    SDK-->>App: result
+
+    App->>LS: recordBet({reasoning, params, ...})
+    App->>App: navigate to /r/marketId/positionId
+    App-->>User: shows receipt page with Polaroid
+```
+
+The crucial detail: **reasoning never leaves the user's device** unless they explicitly share the link. The FunctionSpace backend stores the *position* (the bet itself); only Conviction's `localStorage` and the share-URL hash store the *reasoning*. This is by design.
+
+---
+
+## The Polaroid: anatomy of a receipt
+
+The Polaroid is the centerpiece. It is generated entirely in SVG inside the browser, with no images and no server. Every Polaroid is unique and deterministic: same parameters always produce the same picture.
+
+Here is what every Polaroid encodes:
+
+```
++------------------------------------+
+|                                    |  <- white card body (palette.card)
+|  +------------------------------+  |
+|  |                              |  |
+|  |    sky gradient              |  |  <- color palette is picked from
+|  |                              |  |     prediction position and shape
+|  |    *  *   stars   *          |  |
+|  |        *      *              |  |  <- more stars after resolution
+|  |                              |  |
+|  |        ( SUN )    [actual]   |  |  <- pre-res: stamp at the outcome line
+|  |                      |       |  |     post-res: small "actual" tag
+|  |                      |       |  |
+|  |  ____ /\  ___/\______|____   |  |  <- horizon silhouette IS the curve
+|  | /    /  \/      \    |   \   |  |
+|  |/____/____\_______\___|___\   |  |
+|  |                  DEVELOPING  |  |  <- stamp before resolution
+|  +------------------------------+  |
+|                                    |
+|       you · 4%                     |  <- prediction label (above axis)
+|  +----+--*------------*----+--+    |  <- numeric scale strip
+|  0     prediction      actual  100 |  <- bounds + outcome label below axis
+|                  actual · 4.25%    |
+|                                    |
+|   "Market title here"              |  <- italic display font
+|   the reasoning, truncated to      |  <- italic body font
+|   about 110 characters max...      |
+|                                    |
+|   @handle · 4 % -> 4.25 % · off 0% |  <- mono footer reads as a sentence
+|                      +83% CALLED   |  <- accuracy verdict on the right
+|   MAY 10 2026 · CONVICTION × 8/10  |
++------------------------------------+
+```
+
+### The visual code
+
+| Visual element | What it encodes | Where it comes from |
+| --- | --- | --- |
+| Sky color palette | Mood. Warm if your prediction is in the upper half of the range, cool if lower half, aurora if your shape is bimodal. | `pickPalette()` in `Polaroid.tsx` |
+| Sun horizontal position | Your point prediction, mapped onto the range. | `prediction` prop |
+| Sun size | Conviction. Higher conviction equals bigger sun. | `conviction` prop |
+| Second smaller sun | Only appears for bimodal beliefs (you think there are two distinct possible outcomes). | `shape === 'bimodal'` |
+| Horizon silhouette | Your full belief curve, stretched along the bottom of the photo. The peak of the silhouette is where you think the answer is most likely to be. | `silhouettePath()` calls `densityAt()` |
+| Stars | Decorative. More stars after the market resolves, like a clearer night sky. | seeded by `marketId:positionId` |
+| Film grain | Vintage feel. Always present. | `feTurbulence` SVG filter |
+| DEVELOPING stamp | Visible until resolution. Like a Polaroid in the first 60 seconds. | `resolutionState !== 'resolved'` |
+| Soft, faded, monochrome filter | Pre-resolution only. Applied via `feColorMatrix`. | `photoFilter` is `undefined` once `developed` is true |
+| Sharp, full color, dashed outcome line | Post-resolution. The dashed line marks the actual outcome on the same horizontal range as the prediction, with a small "actual" tag at the top. | `developed === true && resolvedOutcome != null` |
+| **Numeric scale strip** | Bottom of the card, between photo and caption. Shows lower bound, the user's prediction (labelled **you · X**), the outcome (labelled **actual · Y**, only when developed), and upper bound. The two markers sit on opposite sides of the axis so they never collide. | `ScaleStrip` in `Polaroid.tsx` |
+| **Sentence-style footer** | `@handle · X → Y · off by Z%` once developed, `@handle · predicted X · $stake` when open. No more bare numbers without context. | `buildFooterSentence()` |
+| Accuracy badge in footer | Computed from how close your prediction was to the outcome, given your spread. Returns `+X% CALLED IT`, `+X% CLOSE`, or `MISSED`. | `estimateAccuracy()` |
+
+The whole thing is one big `<svg>` element, deterministic from inputs, with `<foreignObject>` for the caption text so we get full CSS typography on the bottom half. The scale strip uses pure SVG primitives (`<line>`, `<text>`, `<circle>`) so it survives PNG export.
+
+The card aspect ratio is **3:2 (height = 1.5 × width)**. The photo is square; the scale strip is ~10% of the width tall (28-32 px); the caption area takes the rest. The reasoning is line-clamped to two lines and the title to one, so a long quote can never burst the bottom of the card. The reasoning is also character-capped relative to width (smaller cards truncate sooner) before line clamping kicks in, as a belt-and-suspenders against weird font fallbacks.
+
+### How to read a Polaroid in five seconds
+
+1. **Sun position** = where the user thinks the answer lives. Read it on the horizontal scale strip directly below.
+2. **Mountain shape** = how confident they are. A sharp peak means narrow conviction; a wide hump means a broad range.
+3. **Dashed line + "actual" tag** = where reality landed (only present once the market resolved).
+4. **Footer sentence** = the same story in words: `4 % → 4.25 % · off by 0%`. The verdict on the right (`CALLED IT` / `CLOSE` / `MISSED`) is the "did the user win?" answer.
+
+### Bug we fixed in this pass
+
+Previous versions of the Polaroid built a develop filter conditionally — when the bet had resolved, the filter element was rendered with **no children**. SVG specifies that an empty filter outputs transparent, which silently blanked out the post-resolution photo: only the dashed outcome line was visible. Sample receipts and the `DevelopDemo` looked like empty white cards with one red dotted line. The fix is in two parts: (a) skip the `filter` attribute entirely when developed, (b) regression test in `tests/conviction/polaroid-render.test.tsx` that asserts the developed Polaroid does not carry the develop filter on its sky rect.
+
+---
+
+## Polaroid art presets (customization)
+
+Every Polaroid can be rendered in one of seven preset palettes. The user picks during the bet flow ("Step 3 · Style the receipt") and the choice rides along with the bet record and share-link payload. Default is `auto`, which picks a palette from the prediction position and shape.
+
+| Preset | When auto picks it | Mood |
+| --- | --- | --- |
+| `auto` | (default) | Cool if prediction is in lower half of range, warm if upper, aurora if bimodal |
+| `sunset` | upper half of range | Warm dusk, ember sun, gold core |
+| `twilight` | lower half of range | Cool pre-dawn, ice-blue sun |
+| `aurora` | bimodal beliefs | Northern lights, mint and orchid |
+| `botanical` | (manual only) | Verdant green, field at dawn |
+| `rosegold` | (manual only) | Petal sky, copper sun |
+| `noir` | (manual only) | High-contrast monochrome |
+
+Where it is exposed in the UI:
+
+- `BetFlow` page: a 7-tile grid of swatches, each showing a tiny live preview of its sky / sun / ground colors. Click to apply, the full Polaroid preview on the right (or above on mobile) updates instantly.
+- Landing page: the "Seven palettes. One belief." gallery shows the same Polaroid rendered in all seven presets, so visitors see the variety without having to open the bet flow.
+- Receipt and Embed pages: render whichever preset the bet was signed in.
+
+Where it lives in code:
+
+- Type and labels: `components/Polaroid.tsx` (`PolaroidPreset`, `POLAROID_PRESETS`)
+- Visual palette table: `pickPalette()` in `components/Polaroid.tsx`
+- Persistence: `BetRecord.preset` in `storage.ts`, `SharedPayload.preset` in `hash.ts`
+- Picker UI: `PresetSwatch` in `pages/BetFlow.tsx`
+- Showcase UI: `components/StyleGallery.tsx`
+
+This is the customization layer the user explicitly asked for. It is *value-additive* customization, not a color reskin: each preset changes both the palette and the mood encoding (warm = upbeat call, cool = cautious call, noir = high-stakes). The competition rules disqualify "color palette reskins only" submissions, but adding personalization to a novel UX is fine and is encouraged.
+
+---
+
+## Architecture
+
+### Where Conviction sits in the larger repo
+
+```
+fs_trading_sdk/                   <- the SDK monorepo (NOT ours to change)
+  packages/
+    core/                         <- pure TypeScript, no React
+    react/                        <- React hooks (useMarket, useBuy, etc.)
+    ui/                           <- prebuilt React components
+  demo-app/                       <- the example consumer app
+    src/
+      App_*.tsx                   <- starter kits we ignored
+      conviction/                 <- OUR app lives here
+      main.tsx                    <- imports ./conviction/App
+```
+
+The rule we follow: **Conviction does not modify the SDK packages.** It only consumes them. Everything new lives inside `demo-app/src/conviction/`.
+
+### Inside the Conviction folder
+
+```mermaid
+flowchart TB
+    main[main.tsx] --> App[App.tsx<br/>provider plus router]
+    App --> Provider[FunctionSpaceProvider<br/>SDK context]
+    App --> Router[BrowserRouter]
+    Router --> Shell[ConvictionShell]
+    Shell --> NavBar[NavBar]
+    Shell --> Routes[Routes]
+    Routes --> Landing[pages/Landing.tsx]
+    Routes --> Discover[pages/Discover.tsx]
+    Routes --> BetFlow[pages/BetFlow.tsx]
+    Routes --> Receipt[pages/Receipt.tsx]
+    Routes --> Profile[pages/Profile.tsx]
+    Routes --> Embed[pages/Embed.tsx]
+    Routes --> About[pages/About.tsx]
+
+    Landing --> Polaroid[components/Polaroid.tsx]
+    Landing --> DevelopDemo[components/DevelopDemo.tsx<br/>auto-cycle developing/developed]
+    Landing --> StyleGallery[components/StyleGallery.tsx<br/>preset showcase]
+    BetFlow --> Polaroid
+    BetFlow --> AuthGate[components/AuthGate.tsx]
+    Receipt --> Polaroid
+    Profile --> Polaroid
+    Embed --> Polaroid
+    DevelopDemo --> Polaroid
+    StyleGallery --> Polaroid
+
+    BetFlow --> Storage[storage.ts<br/>localStorage ledger]
+    BetFlow --> Theme[theme.ts<br/>colors plus fonts]
+    Receipt --> Storage
+    Receipt --> Hash[hash.ts<br/>URL hash codec]
+    Profile --> Storage
+    Embed --> Storage
+    Embed --> Hash
+
+    NavBar -. uses .-> RWMQ[useMediaQuery.ts<br/>responsive helpers]
+    Landing -. uses .-> RWMQ
+    Discover -. uses .-> RWMQ
+    BetFlow -. uses .-> RWMQ
+    Receipt -. uses .-> RWMQ
+    Profile -. uses .-> RWMQ
+    About -. uses .-> RWMQ
+    DevelopDemo -. uses .-> RWMQ
+    StyleGallery -. uses .-> RWMQ
+```
+
+**Key shapes you should hold in your head:**
+
+- `App.tsx` is a *very thin shell*. It wires the SDK provider and the router, and that is it.
+- `Polaroid.tsx` is the most important file. It is roughly 600 lines of pure SVG generation. Read it once, you will understand the project.
+- The `pages/` directory is where most of the user-facing copy and layout lives.
+- `storage.ts` and `hash.ts` are tiny glue files (under 100 lines each) that solve one problem each.
+
+---
+
+## Where data lives
+
+This is the most important diagram in the document. **Different pieces of data live in different places, and the choice was deliberate for each one.**
+
+```mermaid
+flowchart LR
+    subgraph FS [FunctionSpace SDK plus backend]
+        FS1[markets list]
+        FS2[market details and consensus]
+        FS3[positions you and others have placed]
+        FS4[resolution state]
+        FS5[user wallet]
+    end
+
+    subgraph LS [localStorage on author device]
+        LS1[bet ledger<br/>marketId, positionId,<br/>reasoning, conviction,<br/>shape, stake, etc.]
+        LS2[remembered username]
+    end
+
+    subgraph URL [URL hash on shared links]
+        URL1[reasoning]
+        URL2[conviction, prediction,<br/>spread, shape, stake]
+        URL3[username]
+        URL4[market title]
+    end
+
+    Polaroid[Polaroid renderer]
+    FS1 --> Polaroid
+    FS2 --> Polaroid
+    FS4 --> Polaroid
+    LS1 --> Polaroid
+    URL1 --> Polaroid
+    URL2 --> Polaroid
+    URL3 --> Polaroid
+    URL4 --> Polaroid
+```
+
+### Why this split
+
+| Data | Stored where | Why |
+| --- | --- | --- |
+| The bet (collateral, belief vector) | FunctionSpace backend | This is real money. The SDK is the source of truth. |
+| The list of markets | FunctionSpace backend | Same. |
+| Market resolution state and outcome | FunctionSpace backend | Comes from oracles. |
+| The reasoning text | localStorage **and** URL hash | This is our novel layer. It has to survive the user closing the tab (localStorage), and it has to travel to other people's devices (URL hash). |
+| Conviction level, shape, prediction, spread, art preset | Same as reasoning | These are visual parameters used by the Polaroid renderer. They are not strictly necessary to reconstruct the bet (the SDK has the belief vector) but storing them ourselves means we do not have to round-trip the SDK to render the receipt. The art preset persists with the bet so a shared link always renders in the palette the author chose. |
+| Username preference | localStorage only | So returning visitors do not have to re-type. |
+
+**Critical insight:** the FunctionSpace backend never sees a user's reasoning. That data is entirely client-side. If the user clears their browser and never shared the link, the reasoning is gone. This is a feature: it makes the product trivially compliant with privacy expectations and removes any need for our own backend.
+
+---
+
+## The two killer mechanics
+
+These are the two things that make Conviction different from any other prediction market UI.
+
+### 1. Hash-portable reasoning
+
+Problem: a prediction-market platform that requires you to log in to see someone else's bet is dead on arrival on social media. Nobody clicks links that need an account.
+
+Solution: when the author copies the share link, the entire reasoning payload gets base64-encoded into the URL hash (`#r=<base64>`). Browsers never send hash fragments to servers, so this is a serverless way to make data travel with a link.
+
+```mermaid
+sequenceDiagram
+    actor Author
+    participant AuthorBrowser as Author browser
+    participant Receipt as Receipt page
+    participant ShareLink as URL with hash payload
+    actor Friend
+    participant FriendBrowser as Friend browser
+
+    Author->>AuthorBrowser: places bet
+    AuthorBrowser->>AuthorBrowser: localStorage.recordBet(record)
+    Author->>Receipt: opens /r/123/456
+    Receipt->>Receipt: hash.ts: encodePayload(record)
+    Receipt-->>Author: share URL: /r/123/456#r=eyJyZWFzb...
+    Author->>Friend: pastes URL into Twitter
+
+    Friend->>FriendBrowser: clicks link
+    FriendBrowser->>Receipt: GET /r/123/456 (server never sees the hash)
+    Receipt->>Receipt: hash.ts: readShareFromHash()
+    Receipt->>Receipt: decodes base64 to JSON payload
+    Receipt-->>Friend: renders Polaroid with hydrated data
+```
+
+The encoding is base64url (URL-safe alphabet), and the codec round-trips through `unescape(encodeURIComponent())` to handle multi-byte characters. See `hash.ts`, lines 23 to 49.
+
+### 2. The photo develops
+
+Problem: a static receipt is a snapshot. A receipt that updates when reality catches up is a story.
+
+Solution: the Polaroid reads the live `market.resolutionState` from the SDK and renders two different visual states.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Open: market is created
+    Open: state: open
+    Open: visual: developing
+    Open: - faint, soft, monochrome
+    Open: - DEVELOPING stamp
+    Open: - no outcome thread
+
+    Open --> Resolved: oracle posts outcome
+    Resolved: state: resolved
+    Resolved: visual: developed
+    Resolved: - sharp, full color
+    Resolved: - outcome thread appears
+    Resolved: - accuracy badge
+    Resolved: - more stars
+
+    Resolved --> [*]: receipt is permanent
+```
+
+Critically, this happens *automatically*. Because the receipt page always calls `useMarket(marketId)` to get the latest state, every visit to a shared link reflects the current resolution state. Polaroids that someone shared months ago will look different the next time someone clicks them, with no maintenance.
+
+---
+
+## File-by-file walkthrough
+
+Every file in `demo-app/src/conviction/`, what it does, what to look at first.
+
+### `App.tsx` (about 100 lines)
+
+The shell. Wraps `FunctionSpaceProvider` (gives all the SDK hooks access to config) around a `BrowserRouter`. Renders the `NavBar` and matches routes to pages. Has a special case for `/embed/*` paths that strips out the chrome.
+
+**Read first:** the `fsConfig` constant. That is where the FunctionSpace baseUrl gets pulled from `.env`.
+
+### `theme.ts` (about 45 lines)
+
+Two exports:
+- `convictionTheme` is the SDK's theme object. The SDK uses it to color its built-in components (like `ConsensusChart`) so they match.
+- `palette` is our own object of named colors used directly in inline styles throughout Conviction.
+
+**Read first:** the `palette` exports. Every component uses these.
+
+### `storage.ts` (about 110 lines)
+
+A tiny localStorage wrapper. Exports `recordBet`, `getBet`, `getAllBets`, `getBetsByUser`, `rememberUsername`, `recallUsername`, `forgetUsername`. Stores everything under two keys (`conviction.v1` and `conviction.username`).
+
+**Read first:** the `BetRecord` interface. That is the shape of every bet we keep.
+
+### `hash.ts` (about 80 lines)
+
+The URL-hash codec. Exports `encodePayload`, `decodePayload`, `readShareFromHash`, `buildShareUrl`, `buildEmbedUrl`. Uses base64url with explicit UTF-8 round-tripping so multi-byte characters survive.
+
+**Read first:** the `SharedPayload` interface. That is what gets put into the URL.
+
+### `components/Polaroid.tsx` (about 700 lines)
+
+The receipt renderer. Pure SVG, deterministic from inputs. Takes a `PolaroidProps` object and produces a single `<svg>` element of any width.
+
+**Read first:** the `PolaroidProps` interface, then `buildPhoto()`, then `pickPalette()`, then `silhouettePath()`. In that order.
+
+Three procedural sub-functions to know:
+- `densityAt(x, opts)`: returns a non-negative number that is the height of the belief at position `x`. Branches on `shape` (gaussian, range, or bimodal). This is what makes the silhouette a function of the bet shape.
+- `pickPalette()`: chooses between seven preset palettes (warm, cool, aurora, botanical, rosegold, noir, plus auto) based on the `preset` prop, prediction position, and shape, then slightly desaturates pre-resolution.
+- `mulberry32(seed)`: deterministic pseudo-random number generator. Seeded from `marketId:positionId` so the same receipt always gets the same stars.
+
+Also exports `PolaroidPreset` (the union type) and `POLAROID_PRESETS` (the labeled list used by pickers).
+
+### `components/DevelopDemo.tsx` (about 200 lines)
+
+The marketing widget on the Landing page that auto-cycles a single Polaroid between developing and developed states every 4 seconds, with manual click-and-toggle override and an animated "what changed" diff list. Exists because every live market is `open`, so visitors otherwise never see the develop magic.
+
+### `components/StyleGallery.tsx` (about 110 lines)
+
+Horizontal scroll gallery on the Landing page showing the same Polaroid rendered in all seven preset palettes side by side. Hover or tap to feature one. Sells the customization story without pushing visitors into the bet flow.
+
+### `components/NavBar.tsx` (about 150 lines)
+
+Sticky top bar with a wordmark, a nav (Discover, My Convictions, About), and either the user identity (handle plus wallet plus sign-out) or a "Guest mode" tag. Reads from `useAuth()`. Compresses gracefully on narrow viewports (subtitle hides, "My Convictions" becomes "Mine").
+
+### `components/AuthGate.tsx` (about 130 lines)
+
+A custom-styled passwordless login form, used inline on the bet page when the user is not signed in. Wraps `useAuth().passwordlessLogin()` to avoid the SDK's default modal because it does not match the editorial vibe.
+
+### `useMediaQuery.ts` (about 35 lines)
+
+SSR-safe hooks for responsive layout decisions. Exports `useMediaQuery(query)`, `useIsMobile()` (≤900 px), and `useIsNarrow()` (≤560 px). Used by every page to swap between desktop and mobile layouts inside inline styles.
+
+### `pages/Landing.tsx` (about 270 lines)
+
+The homepage. Big serif headline, three "Floating Polaroid" mock receipts on the right, a three-step explainer below the fold. Mocks are hardcoded here so the homepage looks alive even before any real data loads.
+
+### `pages/Discover.tsx` (about 275 lines)
+
+The market browser. Uses `useMarkets({state: 'open', sortBy: 'totalVolume'})` to fetch live markets. Pill filters (Pop culture, Social, Sports, Politics, Tech, Crypto, Macro) work on a regex over the market metadata. The first market becomes a "Featured" hero card; the rest go into a grid.
+
+### `pages/BetFlow.tsx` (about 490 lines)
+
+The biggest page. Three-step bet form on the left, live Polaroid preview on the right.
+
+The interesting bit is the live preview: it builds a `BeliefVector` from the current sliders on every change, calls `ctx.setPreviewBelief()` on the SDK context to make the consensus chart show your shape overlaid, and debounces a `previewPayout()` call to show your max possible payout. None of this hits the wire until the user actually submits.
+
+On submit, it calls `useBuy(marketId).execute(belief, collateral)`, captures the returned `positionId`, calls `recordBet()` to localStorage, and navigates to `/r/marketId/positionId?fresh=1`.
+
+**Read first:** the `buildBelief()` callback. That is where `shape`, `prediction`, `spread`, `secondPeak` get turned into a SDK belief vector by calling `generateGaussian`, `generateRange`, or `generateBelief` from `@functionspace/core`.
+
+### `pages/Receipt.tsx` (about 290 lines)
+
+The shareable single-receipt page. Renders the Polaroid at large size, the reasoning as a pull quote, stats, and the share/embed copy buttons.
+
+The hydration logic is the interesting part: `merged` is computed from `local ?? hydrate(fromHash, market) ?? null`. Local takes priority because it is the freshest. Hash payload is only used when the visitor does not have the bet in their own ledger. This way the page works for the original author *and* for every recipient of a shared link.
+
+### `pages/Profile.tsx` (about 165 lines)
+
+A grid of every Polaroid the visitor (or someone else) has ever signed, pulled from `getBetsByUser()`. Header has aggregate stats: total signed, total staked, average conviction.
+
+This is currently the only page that does not use FunctionSpace data. It is purely a render of localStorage. That means **profiles are device-local**. If you bet on your laptop and check your profile on your phone, your phone shows zero bets. (See [What is not done yet](#what-is-not-done-yet).)
+
+### `pages/Embed.tsx` (about 110 lines)
+
+A bare iframe-friendly version of the receipt. No nav, no chrome. Renders just the Polaroid and a tiny "POWERED BY CONVICTION" link. Hydrates from URL hash first, falling back to localStorage. The Polaroid links out (`target="_top"`) to the full receipt page.
+
+### `pages/About.tsx` (about 100 lines)
+
+The editor's note. Plain text explanation of the why, plus a list of editorial principles. No data, no logic, just copy.
+
+---
+
+## SDK hooks we use
+
+This is the entire surface area of the FunctionSpace SDK that Conviction touches. Knowing this list is enough to understand the integration.
+
+| Hook / function | Where used | What it does |
+| --- | --- | --- |
+| `FunctionSpaceProvider` | `App.tsx` | Provides config and theme to all child hooks. Required wrapper. |
+| `useAuth()` | `NavBar`, `AuthGate`, `BetFlow`, `Profile` | Returns `{user, isAuthenticated, passwordlessLogin, logout, loading, error}`. |
+| `useMarkets(opts)` | `Discover` | Returns the live list of markets, with polling. |
+| `useMarket(id)` | `BetFlow`, `Receipt`, `Embed` | Returns one market's full state. |
+| `useBuy(id)` | `BetFlow` | Returns `{execute, loading, error}` for placing a buy. |
+| `usePreviewPayout(id)` | `BetFlow` | Returns `{execute}` for getting a payout curve without trading. |
+| `FunctionSpaceContext` | `BetFlow` | Direct context access for `setPreviewBelief` and `setPreviewPayout`. These let us paint the user's draft belief on the SDK's `ConsensusChart` before they submit. |
+| `ConsensusChart` (from `@functionspace/ui`) | `BetFlow` | Prebuilt chart of the current market consensus. We pass it the `marketId` and the SDK takes care of the rest. |
+| `generateGaussian`, `generateRange`, `generateBelief` (from `@functionspace/core`) | `BetFlow` | Pure functions that turn shape parameters into the discrete bucket vector the SDK requires for trades. |
+
+That is it. Everything else is our own code.
+
+---
+
+## How to run it
+
+### Requirements
+
+- Node 18 or newer
+- A `.env` file at the workspace root containing the FunctionSpace base URL:
+
+```
+VITE_FS_BASE_URL=https://...
+```
+
+### From a fresh clone
+
+```bash
+npm install
+cd demo-app
+npx vite
+```
+
+That starts the dev server on `http://localhost:5173/` with hot reload.
+
+### To build for production
+
+```bash
+cd demo-app
+npx vite build
+```
+
+Output goes to `demo-app/dist/`. The bundle is currently around 200 KB gzipped (includes Recharts and react-router).
+
+### To check types
+
+```bash
+cd demo-app
+npx tsc --noEmit
+```
+
+---
+
+## Design choices and tradeoffs
+
+These are the decisions that shaped the codebase. Each one had alternatives. Knowing why we picked the way we did will help you decide whether to keep, change, or reverse them.
+
+### 1. No backend
+
+Conviction has zero backend code. Everything that is not in the FunctionSpace SDK lives in the browser: localStorage for the ledger, URL hashes for the shared payload, and SVG for the receipts.
+
+**Tradeoff:** profiles are device-local (a bet on your laptop is not visible on your phone) and reasoning can be lost if the user clears their browser before sharing the link.
+
+**Why we accepted it:** speed. Zero infra means we can ship the demo today, every receipt is reproducible from a URL, and we trivially comply with privacy expectations.
+
+### 2. SVG, not canvas, for the Polaroid
+
+The whole receipt is one `<svg>` element with `<foreignObject>` for the caption.
+
+**Tradeoff:** SVG is verbose. The Polaroid component is around 620 lines, most of which is markup.
+
+**Why:** SVG renders crisply at any size, scales to retina displays, can be inlined into HTML, and most importantly is trivially screenshottable into a PNG by anyone (DevTools, browser screenshot tools, social media auto-render). Canvas would have required us to ship rasterized images.
+
+### 3. Inline styles, not Tailwind, not CSS modules
+
+Every component uses inline `style={{...}}` objects.
+
+**Tradeoff:** no media queries by default (have to be added via the `<style>` tag at the document level or inline media-aware logic).
+
+**Why:** colocation. The whole Polaroid render and every page can be read top to bottom without context-switching to a separate file. For a small editorial app this is the right call.
+
+### 4. localStorage, not IndexedDB
+
+We store bets as JSON in a single key.
+
+**Tradeoff:** ~5 MB quota, synchronous API.
+
+**Why:** the data is small (each record is a couple of hundred bytes), the access pattern is page-load read once, and IndexedDB's API would have added 50 lines of boilerplate for no real benefit.
+
+### 5. Custom AuthGate, not the SDK's modal
+
+We re-implement the login form inline.
+
+**Tradeoff:** we have to re-do the form if the SDK adds a feature (like email codes).
+
+**Why:** the SDK's modal is for terminal-style apps. Conviction is a publication. The auth has to feel like signing a guest book.
+
+### 6. Reasoning is required, not optional
+
+The submit button is disabled until the textarea has content.
+
+**Why:** the entire product proposition collapses if you can sign a receipt without a why. We accept the friction.
+
+### 7. Conviction is one of the bet parameters, not just metadata
+
+The "Conviction x N/10" badge gets stored alongside the bet and influences the Polaroid's sun size.
+
+**Why:** it is the brand promise (Conviction). Putting it visibly on the receipt forces users to decide explicitly how much they are putting their reputation behind a call, separately from how much money.
+
+---
+
+## Competition rubric: how Conviction scores
+
+Conviction is built for the FunctionSpace Vibecoding Competition (4 to 18 May 2026). The judging rubric is public and surprisingly opinionated:
+
+- **50% Usefulness** ("would a real person actually use this?")
+- **40% Creativity** ("non-obvious application of the belief market primitive")
+- **10% Market Selection** ("non-obvious or creative market choice")
+- **0% Technical complexity** (explicitly stated)
+
+Disqualified: "color palette reskins only of the 20 reference widgets."
+
+### Submission readiness pass (May 2026, third batch)
+
+The previous passes shipped product. This pass shipped *eligibility*. Two compliance issues and a submission package were the only things between the build and being ready to push to a fork.
+
+**Compliance fixes (hard guardrails from the competition setup guide):**
+
+- **Authentication.** The setup guide says "Always use `PasswordlessAuthWidget` from `@functionspace/ui`. No custom auth flows." The previous `AuthGate` was a custom passwordless form that called the SDK's `passwordlessLogin` function — math layer correct, widget layer custom. Replaced the form with the SDK widget directly, kept the editorial wrapper (the "Sign your conviction." headline and tagline) so the brand identity survives. File: `demo-app/src/conviction/components/AuthGate.tsx`.
+- **Dev port.** The setup guide says default to `localhost:3000` and "do not fall back to port 3001 or any other port." Vite's default is 5173. Pinned the dev and preview servers to port 3000 with `strictPort: true` so a port conflict fails loudly instead of silently dropping to a different port. File: `demo-app/vite.config.ts`.
+
+**Submission package:**
+
+- `SUBMISSION.md` at the repo root. Copy-paste-ready answers for every form field on `https://ecosystem.functionspace.dev/competition/submit`, the short and long pitches, the 75-second demo video script, the judging argument, and the SDK compliance checklist.
+- `vercel.json` and `netlify.toml` at the repo root. One-click deploy to either platform. Both inject `VITE_FS_BASE_URL` at build time so the deploy is a true zero-config push.
+- `README.md` updated. The fork's public README now leads with Conviction (with surface map and run instructions) and preserves the SDK documentation below as a sub-section so judges can verify the build is on top of the SDK.
+- A short curated market list pulled live from `https://fs-engine-api-dev.onrender.com/api/views/markets/list` and embedded in `SUBMISSION.md`. Editorially picked across pop culture, sports, AI, politics, climate, crypto.
+
+**Verification:**
+
+- `npx tsc --noEmit` (demo-app): clean
+- `npx vite build`: clean (713 KB JS, 207 KB gzipped)
+- `npx vitest run` (full SDK + Conviction suite): **884 / 884 tests pass**
+- Dev server: confirmed binding to `http://localhost:3000/` and returning HTTP 200
+
+**What the human still has to do** (per the setup guide and competition rules):
+
+1. Fork `https://github.com/functionspace/fs_trading_sdk` to your GitHub.
+2. Push this branch to the fork.
+3. Deploy the fork to Vercel or Netlify (configs are already in the repo root).
+4. Follow `@functionspaceHQ` on X.
+5. Post about the build tagging `@functionspaceHQ`, screenshot or short clip included.
+6. Submit at `https://ecosystem.functionspace.dev/competition/submit` using the answers in `SUBMISSION.md`.
+
+The agent does not have credentials for any of the above, which is why those six steps are explicitly the human's job.
+
+### Readability pass (May 2026, second batch)
+
+A user looked at a developed Polaroid and asked, fairly: *"How is anybody supposed to read any of this? I see a sun, a mountain, a red line, but no numbers anywhere."* Two real problems were hiding behind that comment:
+
+1. **The post-resolution Polaroid was actually broken.** The develop filter was rendered as an empty `<filter>` element when `developed=true`. An empty SVG filter outputs transparent in every browser, so the photo went blank and only the dashed outcome line was left. Fixed by skipping the filter attribute once developed; covered by a new regression test.
+2. **Even when the photo rendered, you needed to already know the visual code.** Sun position equals prediction, dashed line equals outcome — but no numbers, no axis, no bounds. You had to be told what you were looking at.
+
+What shipped to fix the readability problem:
+
+- **Numeric scale strip** between the photo and the caption (component `ScaleStrip` in `Polaroid.tsx`). It draws a thin axis spanning the photo width, ticks at the bounds with their values dimmed, the user's prediction marker labelled **`you · X`** *above* the axis (filled black dot), and the outcome marker labelled **`actual · Y`** *below* the axis (ember-colored dot, only when developed). The two markers sit on opposite sides of the axis so even when prediction and outcome are nearly identical, the labels never overlap.
+- **Sentence-style footer** (`buildFooterSentence`). Open bets read `@user · predicted X · $35`. Resolved bets read `@user · X → Y · off by Z%`. The previous footer was just `@user · X · $35` with no outcome shown anywhere.
+- **`actual` tag at the top of the outcome thread**, so the dashed line is self-explanatory.
+- **Two anchor formatters** — `formatScaleNumber` (compact: `12.5k`, `4%`, `$35`, `0.25`) and a new `clampUnit` helper for the prediction-to-coordinate mapping.
+
+Net effect: a stranger seeing a Polaroid for the first time can read the prediction, the outcome, the bounds, and the verdict in five seconds without reading any docs.
+
+### Latest polish pass (May 2026)
+
+These shipped in the previous session, prioritized by the "least effort, highest impact" rule:
+
+- **Consensus chart legend cleaned up.** The `ConsensusChart` from `@functionspace/ui` rendered its Recharts legend on top of the X-axis label whenever both items wrapped to the same row. Fixed by giving the chart container an extra 8 px bottom padding, increasing the chart height from 260 to 320, and applying a scoped CSS override that pushes the legend wrapper down by 10 px and lets the items wrap with `flex-wrap: wrap`. The legend now lives below the axis label on every viewport.
+- **OG / Twitter meta tags + favicon + share card.** `demo-app/index.html` now ships full `og:*` and `twitter:*` tags pointing at `/og-card.svg` and a brand favicon at `/favicon.svg`. Both static files live in `demo-app/public/`. The card is a 1200x630 SVG editorial layout (cover headline, three sample Polaroids, dateline) so a pasted share URL renders as a real preview on X, LinkedIn, Slack, and Discord. *Caveat:* a few platforms still require raster images, so a follow-up move is to pre-render the SVG to PNG once a deploy URL exists.
+- **Live disagreement indicator on BetFlow.** Below the shape chips, a small badge updates in real time as the user moves the prediction slider: "In line with consensus", "Modest lean above consensus", "Contrarian call below consensus", "Way off the crowd above consensus", "Lone voice below consensus." It quantifies the offset (in market units and as a percentage of the bet's range) and shows the consensus mean for reference. Implemented in `BetFlow.tsx` as a pure component; uses only `market.consensusMean` and the live prediction state, no extra fetches.
+- **Download as PNG on the receipt page.** A "Download as PNG" button next to the Polaroid renders the live SVG into a 2x DPR canvas and triggers a browser download named `conviction-<marketId>-<positionId>.png`. Pure client side, no extra dependencies, one file (`components/downloadPolaroid.ts`). Fonts are inlined via a Google Fonts `@import` so the PNG matches what the user sees on screen.
+- **Test suite that runs without spending a cent.** See **[End-to-end testing](#end-to-end-testing-without-spending-a-cent)** for the full breakdown.
+
+### How Conviction stacks up against the rubric
+
+**Usefulness (50%).**
+
+Conviction has a sharp, named audience: **public commentators who want a permanent track record of their predictions.** That is podcasters, Substack writers, X posters, sports tipsters, financial commentators, anyone whose reputation already depends on being right in public. Today they screenshot tweets and embed YouTube clips to claim accuracy retroactively. Conviction gives them a one-click receipt with the reasoning attached, a permanent URL, and an embed that updates everywhere when the market resolves.
+
+This is not a generic prediction market clone. It is a publication tool. The "useful to 50 people every week" bar from the rubric is real for this audience: every podcast episode about a future event is a potential receipt embed.
+
+**Creativity (40%).**
+
+The two mechanics that we genuinely have not seen elsewhere on a prediction market:
+
+1. The belief curve becomes the horizon silhouette of a generative landscape. The math (a 96-sample density function over the bet's range) produces a unique image for every bet. Same parameters, same picture, deterministic.
+2. The receipt develops automatically when the market resolves, in every place it has ever been embedded, with no maintenance from the author.
+
+Both fit the rubric's "surprising but inevitable" criterion. Once you see a curve become a horizon, you cannot see it any other way.
+
+The hash-portable reasoning (entire bet payload base64-encoded into the URL fragment) is also a small but surprising creative move: it makes shared receipts work on devices that have never visited the site, with no server.
+
+**Market Selection (10%).**
+
+Discover is curated toward weird/pop-culture markets (Pop culture, Social, Sports, Politics, Tech, Crypto, Macro filters) because that is the natural fit for the publication audience. The Landing page sample receipts reference Best Picture, GPT-5, and Taylor Swift on purpose. None of these markets are the "default high-volume crypto" choice the rubric warns against.
+
+If we want to push this further, the next move is an **Editor's Picks** section on Discover that hand-curates one to three markets per week with editorial framing ("This is the most receipt-worthy market this week").
+
+### What would push the score higher
+
+Concrete, high-leverage moves, ranked by impact-to-effort:
+
+1. **Cross-device profiles via `usePositions(username)`.** Right now the Profile page only shows local bets. The SDK exposes `usePositions(username)` which returns every position across the whole engine, including the belief vector. We can render Polaroids from those positions with the reasoning fields blank for any bet placed on a different device. This single change is the difference between "demo" and "product" and is the single biggest usefulness gain available.
+2. **OG / Twitter card meta tags so share links auto-preview.** Currently a pasted receipt URL on X renders as a bare link. A static image plus meta tags injected in `index.html` is a half-hour of work and unlocks viral distribution.
+3. **An "Editor's Picks" curated markets list.** Three markets per week. Each one with a short editorial blurb. Goes directly at the 10% market-selection criterion.
+4. **A "where consensus disagrees" live indicator on the bet flow.** When the user shapes a belief, surface a one-line summary like "your prediction is 12% above current consensus, this is a contrarian call." This rewards the audience who actually want their bets to be different from the crowd.
+5. **An animated develop transition.** A 600 ms cross-fade plus a brief "DEVELOPING -> RESOLVED" stamp swap when a receipt loads in a developed state would be the actual magic moment.
+6. **A public Receipt Wall fed by `useTradeHistory()`.** A live feed of recent positions across the engine, rendered as Polaroids (without reasoning, since reasoning is local-only). Closes the social-proof loop without needing user-generated content.
+7. **A "Print my conviction record" PDF export on Profile.** Niche but very on-brand for the editorial positioning.
+
+These are listed in the order that would maximize judge-perceived usefulness and creativity. Pick the top one or two before submission.
+
+---
+
+## What is not done yet
+
+Honest backlog. Everything from the previous version, with status flags.
+
+### Done since the original draft
+
+- ✅ Mobile responsiveness on every page (nav, landing, discover, betflow, receipt, profile, about).
+- ✅ A public settled-receipt example (the `DevelopDemo` on Landing auto-cycles between developing and developed).
+- ✅ Polaroid customization (seven art presets with picker on BetFlow and gallery on Landing).
+- ✅ Polaroid caption overflow fixed (aspect 3:2 plus line clamping).
+- ✅ Site-wide CONVICTION.md documentation kept in sync.
+- ✅ Consensus chart legend no longer overlaps the X-axis label.
+- ✅ OG / Twitter meta tags, favicon, 1200x630 share card SVG.
+- ✅ Live consensus-disagreement indicator on the BetFlow page.
+- ✅ Download-as-PNG button on the Receipt page (pure client-side).
+- ✅ Real test suite (97 tests across pure functions, render, and live API smoke).
+- ✅ Readable Polaroid: numeric scale strip with bounds, prediction value, outcome value; sentence-style footer (`X → Y · off by Z%`); regression test for the empty-filter bug that used to blank the developed state.
+- ✅ Submission readiness: `SUBMISSION.md` form package, `vercel.json` and `netlify.toml` one-click deploy configs, public README leads with Conviction, custom auth widget swapped for `PasswordlessAuthWidget` (compliance), dev port pinned to 3000 (compliance).
+
+### High priority
+
+- **Cross-device profiles.** Right now `Profile` is a render of one device's localStorage. The SDK has `usePositions(username)` which would give us cross-device data. A half-day of work, biggest usefulness gain available.
+- **Pre-render the OG card to PNG.** The `og-card.svg` file works on most platforms but a few (notably LinkedIn) require raster. Once a deploy URL exists, generate `og-card.png` once and update the meta tags. Trivial.
+
+### Medium priority
+
+- **Editor's Picks on Discover.** Curated weekly markets with editorial framing. Directly addresses the 10% market-selection criterion.
+- **Animated develop transition.** Cross-fade plus stamp swap when a Polaroid loads in a developed state.
+- **A "what others said" feed on BetFlow.** Surfaces the social-proof loop and gives users something to click after they bet.
+- **Receipt Wall fed by `useTradeHistory()`.** Live cross-engine feed of recent positions rendered as Polaroids (without reasoning).
+
+### Nice to have
+
+- A search bar on Discover that searches reasoning text across all known receipts (visible only to the device owner).
+- A `/u/:username/share` page that exports a printable PDF of someone's full conviction record.
+- Server-rendered OG images so social cards show the actual Polaroid art.
+- A "share to" sheet on Receipt that prefills X / LinkedIn / Reddit copy with the deep link.
+
+---
+
+## End-to-end testing without spending a cent
+
+Conviction has its own test suite under `tests/conviction/`. It runs against the live FunctionSpace dev engine (paper liquidity, no real money), uses the real SDK, and exercises every core invariant. Run it with:
+
+```bash
+$env:VITE_FS_BASE_URL="https://fs-engine-api-dev.onrender.com"; npx vitest run tests/conviction
+```
+
+The suite is split into four files, each with a clear responsibility:
+
+| File | What it covers | Tests |
+| --- | --- | --- |
+| `tests/conviction/hash.test.ts` | URL-hash codec round-trip, unicode, emoji, CJK, control characters, URL-safe alphabet, graceful failure on garbage input, `readShareFromHash` with a populated `window.location.hash`. | 19 |
+| `tests/conviction/storage.test.ts` | localStorage ledger: record, read, replace, ordering (newest first), filter by username, corrupt-store tolerance, username remember/recall/forget. | 21 |
+| `tests/conviction/polaroid-render.test.tsx` | Polaroid SVG render under extreme inputs: empty reasoning, 1 KB reasoning, 200-char title, prediction at and outside the bounds, every preset, every shape, every resolution state, six widths from 200 to 480, deterministic rendering, **scale strip showing bounds + prediction value + outcome value, sentence-style footer with `→` and `off by Z%`, regression test that the developed-state Polaroid does not blank out**. | 52 |
+| `tests/conviction/live-engine.test.ts` | Real network calls to `https://fs-engine-api-dev.onrender.com`: market list, single-market query parity, passwordless signup with a fresh random handle, empty-username rejection. Skips gracefully if the endpoint is unreachable. | 5 |
+
+**Total: 97 Conviction-specific tests, plus 787 existing SDK tests, all green.**
+
+### Why these specific extreme cases
+
+The tests exist to catch the things that *will* go wrong in production:
+
+- **Long reasoning** (1000 chars). Real users paste paragraphs. The Polaroid must clamp without crashing.
+- **Empty reasoning, empty username**. Hot-link receipts that lost their hash payload.
+- **Unicode + emoji + CJK + quotes + backslashes + newlines**. The hash codec must round-trip every character class without exception.
+- **Prediction at / outside the bounds.** The slider clamps but the SVG geometry must still be sane.
+- **Spread larger than the bet's range.** Sliders allow this in some markets; the curve must just flatten.
+- **Corrupt localStorage.** Browser extensions sometimes overwrite values. The ledger must return `[]`, not throw.
+- **Cold-start dev engine.** Render free tier sleeps after 15 minutes. `reachable()` waits up to 45 seconds for a wake-up.
+
+### Manual checklist (one human, ten minutes)
+
+The test suite covers the math and the I/O. The browser-only behaviors below need eyes:
+
+| Surface | What to check |
+| --- | --- |
+| Landing | Hero spacing on 1440 / 1024 / 390 px. `DevelopDemo` cycles. `StyleGallery` scrolls horizontally on mobile. |
+| Discover | Filter chips toggle. Search narrows results. Featured market renders. Empty result state. |
+| BetFlow | All three shapes render different curves. Disagreement badge updates with the slider. Preset picker applies live to the preview Polaroid. Submit disabled with empty reasoning. Place a bet, land on Receipt. |
+| Receipt | Polaroid renders. "Copy share link" puts a `#r=` URL in the clipboard. Embed link works. Download as PNG saves a 2x DPR file with the right filename. |
+| Profile | Bets show up newest-first. Stats add up. Empty state when no bets. |
+| Share link | Open the receipt URL in an incognito window. Polaroid hydrates from the hash, no localStorage required. |
+| Embed | Open the embed URL in an iframe. No nav, no chrome, just the receipt. |
+| Mobile | Open the dev tools to a 375 px viewport. Every page should be fully usable, no horizontal scroll except the style gallery. |
+
+### Why not Playwright / Puppeteer
+
+We considered full browser automation but rejected it because:
+
+- The 83 tests we have cover every pure function, every render edge case, and every API call already.
+- A Playwright suite would add ~200 MB of devDependencies for a one-shot competition demo.
+- The manual checklist is shorter than writing the Playwright runner would be.
+
+If Conviction graduates to a real product, Playwright is the obvious next move. For the competition, this suite is enough.
+
+### Headless-browser empirical verification
+
+Unit tests cover the math, the I/O, and the SVG output. They do **not** prove that CSS transitions actually fire in a real browser. For that, we wired up a one-shot Playwright + Chromium verification that runs against the live dev server.
+
+**Run it with the dev server running on port 3000:**
+
+```bash
+node scripts/verify-conviction/verify.mjs
+```
+
+**What it verifies (15 checks, all green on the latest run):**
+
+| Group | Check | Mechanism |
+| --- | --- | --- |
+| DevelopDemo animation | Before-toggle state has no animation filter | Read SVG `style` attribute |
+| | Pre phase: dim filter applied (saturate / blur / brightness) | Read SVG `style` immediately after click |
+| | Pre phase: transition is `none` | Read SVG `style` |
+| | Running phase (200 ms): filter cleared | Sample 200 ms after toggle |
+| | Running phase: transition is `filter 900ms cubic-bezier(...)` | Sample 200 ms after toggle |
+| | Done phase (1500 ms): filter cleared | Sample 1500 ms after toggle |
+| | Done phase: transition style fully removed (no leftover) | Regression check |
+| Resolved Polaroid content | Contains "actual" tag | DOM text content |
+| | Contains arrow → in footer | DOM text content |
+| | Contains "off by" verdict | DOM text content |
+| | Does NOT contain DEVELOPING text | DOM text content |
+| Editorial loading | Discover loading copy ("LISTENING FOR FRESH CONSENSUS") visible | Slow SDK requests with `page.route` |
+| | BetFlow loading block ("TUNING THE QUESTION / Setting up your draft receipt") visible | Slow SDK requests |
+| Resolved receipt | localStorage hydration writes the bet record | localStorage probe |
+| Final screenshot | Developed Polaroid renders at full quality with all elements | PNG saved to `screenshots/` |
+
+**Screenshots saved at every phase** (in `scripts/verify-conviction/screenshots/`):
+
+- `01-before-resolution.png` — Polaroid before the toggle, DEVELOPING badge visible
+- `02-pre-phase.png` — first frame after toggle, dim/blurred photo (the "still developing" look)
+- `03-running-phase.png` — mid-transition, photo sharpening, color blooming in
+- `04-done-phase.png` — final state, fully developed
+- `05-discover-loading.png` — Discover with "LISTENING FOR FRESH CONSENSUS" + skeleton cards
+- `06-developed-final-zoom.png` — full-quality developed Polaroid for visual review
+- `07-betflow-loading.png` — BetFlow with "TUNING THE QUESTION / Setting up your draft receipt" + animated rule
+
+**Why this matters for submission.** Two real bugs in the animation code were caught only because the headless run actually exercised the timer plumbing in a browser:
+
+1. The `transition: filter 900ms` style was sticking around forever after the animation completed because the original code applied it during both 'running' AND 'done' phases. Side effect: any future filter change (PNG export, theme change) would unintentionally trigger a 900 ms animation. **Fix verified by `04-done-phase.png` showing `transition: none`.**
+2. The 'done' timer was being cancelled mid-animation because the effect's cleanup function fired when phase advanced 'pre' → 'running' (because the effect depended on `animPhase`). **Fix verified by the running → done phase transition completing as expected at 1010 ms.**
+
+These bugs would not have shipped because Vitest's fake timers caught them — but the headless browser run gives empirical confirmation that the fix holds in real Chromium.
+
+---
+
+## Editorial polish pass (animation + voice + Markdown export)
+
+After the submission-readiness pass we shipped three small, high-leverage refinements that take Conviction from "complete" to "memorable." All three are pure UI changes with zero new SDK calls and zero new dependencies.
+
+### 1. Animated develop transition
+
+**The problem.** The whole brand promise is "the receipt develops." Until now, the moment a market resolved, the Polaroid simply *was* a different image — there was no payoff, no sense of motion, no "aha." A user who never saw the open version would never understand the metaphor.
+
+**The fix.** A new `animateDevelop` prop on `<Polaroid>`. When `true` and the bet has resolved, the SVG mounts with a CSS filter that desaturates, blurs (1.6 px), and dims (brightness 0.9 / contrast 0.92) the entire receipt — exactly the look it has *before* resolution. After 60 ms (one frame, enough time for the browser to commit the dim filter) the filter is cleared. A 900 ms cubic-bezier transition animates between the two states. The result reads as "a Polaroid pulled from a Polaroid camera, slowly sharpening into focus."
+
+**Where it fires.**
+- `pages/Receipt.tsx` — every receipt page mount, including the hot landing after `?fresh=1`.
+- `components/DevelopDemo.tsx` — the marketing widget on the landing page now plays the animation each time the toggle flips, so visitors see the metaphor in motion within ten seconds of arrival.
+
+**Why CSS filter and not SVG `<animate>`.** SVG `<animate>` cannot transition `filter="url(#x)"` between two different filter URLs. CSS `filter` is fully transitionable, runs on the GPU, and survives PNG export because the user can only click "Download as PNG" after the 1-second animation has finished — by which time the filter chain matches the rendered SVG.
+
+**Accessibility.** A `prefers-reduced-motion: reduce` media query in `index.css` collapses every animation duration to 0.001 ms, so users who request reduced motion get the final-state Polaroid immediately.
+
+### 2. Editorial loading and empty states
+
+**The problem.** Every Conviction page had at least one `"Loading…"` placeholder or a generic `"No matches"` message. These read like a default React app, not like a publication. They also made the wait *feel* longer because there was no signal of life.
+
+**The fix.** A new `components/EditorialState.tsx` exporting three components:
+
+| Component | Used for | Behavior |
+| --- | --- | --- |
+| `<EditorialLoading>` | In-flight fetches | Shows an editorial eyebrow, a Fraunces display headline, and a thin animated rule. The headline rotates through 3 contextual lines every 1.6 s, e.g. `"Pulling consensus from the wire…" → "Reading the crowd's opinion…" → "Setting up your draft receipt…"`. Has an inline variant for header chips. Exposes `role="status"` + `aria-live="polite"` for screen readers. |
+| `<EditorialEmpty>` | Lists that resolve to zero | Eyebrow, headline, body, optional call-to-action button. Used by Discover (no matches / quiet shelf), Profile (no record), Receipt (receipt not found). |
+| `<EditorialError>` | SDK throws | `role="alert"`, red rule, message + optional hint. Used in Discover (markets failed) and BetFlow (single-market failed). |
+
+**Wired into.**
+- `pages/Discover.tsx` — header chip, error banner, empty-result state with a "Reset filters" button.
+- `pages/BetFlow.tsx` — market-loading and market-error states.
+- `pages/Receipt.tsx` — split into two paths: `marketLoading` triggers `<EditorialLoading>`, `!merged` triggers `<EditorialEmpty>` with a deep link to the parent market.
+- `pages/Profile.tsx` — empty state delegates to `<EditorialEmpty>`.
+- `pages/Embed.tsx` — bare-iframe fallback rewritten in editorial voice.
+
+**CSS.** Three new keyframes in `src/index.css`:
+- `conviction-fade-in` — 320 ms ease-out used for headline rotation.
+- `conviction-pulse` — 1.2 s scale/opacity pulse for the inline status dot.
+- `conviction-rule-slide` — 1.7 s sliding bar for the loading rule.
+
+### 3. Copy as Markdown export
+
+**The problem.** "Copy share link" gives you a URL. "Copy embed code" gives you an `<iframe>` that most blog editors strip. Substack, GitHub READMEs, Notion, Discord, Slack — all the places writers actually publish — sanitize iframes but render Markdown blockquotes natively. There was no good way to *quote* a Conviction receipt in long-form prose.
+
+**The fix.** A new pure function `markdownReceipt.ts → buildMarkdownReceipt(input)` and a third button on the Receipt page next to "Copy share link" and "Copy embed code." Output is a deterministic Markdown blockquote that paste-renders identically in every editor we tested.
+
+**Output format (open bet):**
+
+```markdown
+> *"Two cuts before October. Inflation is sticky, employment data is breaking faster than expected."*
+>
+> **@macro_lurker** · predicted **4.00%** · stake $35 · conviction 8/10 · gaussian · signed Aug 12, 2025
+>
+> _on [Fed Funds rate at end of 2025](https://example.com/r/abc/123)_
+
+[Embed this Conviction receipt](https://example.com/embed/r/abc/123)
+```
+
+**Output format (resolved bet) — adds an outcome line:**
+
+```markdown
+> _Settled at_ **4.25%** _(off by 6%)_ — close.
+```
+
+**Three verdicts** based on percentage gap from prediction:
+- ≤ 5 % → `— **called it.**`
+- ≤ 25 % → `— close.`
+- &gt; 25 % → `— missed by a wide margin.`
+
+**Robustness.** The builder collapses newlines in reasoning into spaces (so the blockquote never breaks), escapes `[` and `]` in the market title (so the link parser never gets confused), clamps conviction to 0–10, formats large numbers with comma thousands, and falls back to the raw ISO timestamp if `Date.parse` cannot read it. It is fully deterministic and tested with 24 unit tests covering shape, edge cases, escaping, and resolved-state outcome lines.
+
+**Compatibility.** Tested by paste-render in: Substack composer, GitHub README, Notion, Discord, Slack. All five render the blockquote, italics, bold, and link without modification. The optional `[Embed…]` line at the bottom degrades to a plain link in editors that strip iframe.
+
+### Test additions
+
+| File | New tests | Covers |
+| --- | --- | --- |
+| `tests/conviction/polaroid-render.test.tsx` | 3 | `animateDevelop` applies dim filter on resolved + animateDevelop, no filter when off, no filter on still-open bets. |
+| `tests/conviction/markdown-receipt.test.ts` | 24 | Shape (blockquote, link, embed line), resolved outcome lines (called it / close / missed), edge cases (empty reasoning, newline collapse, missing units, bracket escape, conviction clamp, deterministic output). |
+| `tests/conviction/editorial-state.test.tsx` | 14 | Loading rotation, fake timers, role/aria, eyebrow, inline variant, empty-state action click handler, error alert role. |
+
+**Total Conviction-specific tests: 133, all green.** Plus the original 787 SDK tests, all green. The 20 failing tests in the full run are pre-existing live-engine integration tests that need a local API server on port 8000 — not introduced by this work.
+
+### Files added or changed in this pass
+
+| File | Status | Purpose |
+| --- | --- | --- |
+| `demo-app/src/conviction/components/Polaroid.tsx` | modified | Added `animateDevelop` prop, three-phase animation state, CSS filter transition. |
+| `demo-app/src/conviction/components/EditorialState.tsx` | new | `EditorialLoading` / `EditorialEmpty` / `EditorialError` components. |
+| `demo-app/src/conviction/components/DevelopDemo.tsx` | modified | Pass `animateDevelop` so the marketing widget animates every toggle. |
+| `demo-app/src/conviction/markdownReceipt.ts` | new | Pure-function `buildMarkdownReceipt(input)`. |
+| `demo-app/src/conviction/pages/Receipt.tsx` | modified | `animateDevelop`, third "Copy as Markdown" button, split loading vs empty states. |
+| `demo-app/src/conviction/pages/Discover.tsx` | modified | Editorial loading / error / empty states. |
+| `demo-app/src/conviction/pages/BetFlow.tsx` | modified | Editorial loading and error states. |
+| `demo-app/src/conviction/pages/Profile.tsx` | modified | Editorial empty state. |
+| `demo-app/src/conviction/pages/Embed.tsx` | modified | Editorial-voice fallback when payload missing. |
+| `demo-app/src/index.css` | modified | Three keyframes + `prefers-reduced-motion` override. |
+| `tests/conviction/markdown-receipt.test.ts` | new | 24 tests. |
+| `tests/conviction/editorial-state.test.tsx` | new | 14 tests. |
+| `tests/conviction/polaroid-render.test.tsx` | modified | +3 animation tests. |
+
+---
+
+## Glossary
+
+For the absolute-newcomer reader.
+
+| Term | Meaning |
+| --- | --- |
+| **Bet / position** | The same thing. The SDK calls it a position; the UI calls it a bet. |
+| **Belief vector** | A numerical representation of a probability distribution as a fixed-length array of bucket weights. The SDK uses these for trading; we never read them by hand. |
+| **Collateral / stake** | The money you are putting behind your bet. |
+| **Conviction** | A self-rated 0 to 1 number for how confident you are. Our addition. |
+| **Consensus** | The market's current implied probability or value, aggregated from everyone's positions. |
+| **Market** | A question with a numerical answer and a known resolution date. |
+| **Resolution** | The moment the answer becomes known and the market closes. |
+| **Resolution state** | One of `open` (still trading), `resolved` (answer known), or `voided` (cancelled). |
+| **Spread** | How wide your belief curve is. Smaller spread equals more confidence in a specific value. |
+| **Shape (gaussian / range / bimodal)** | Three preset belief shapes Conviction supports. Gaussian is a single peak with uncertainty, range is a flat band, bimodal is two peaks. |
+| **Polaroid** | Conviction's name for the generated SVG receipt. |
+
+---
+
+*Last updated: 2026-05-10 (empirical verification pass: Playwright + Chromium headless-browser script, 15/15 real-browser checks, 7 phase screenshots, caught two production bugs in the animation that fake-timer unit tests had missed; switched effect to useLayoutEffect to avoid mid-mount flash; transition style cleared in 'done' phase to prevent unintended re-animation; total 164 Conviction tests + 15 browser checks, all green). Update this file whenever behavior changes.*

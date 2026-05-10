@@ -7,7 +7,9 @@ export const config = {
   autoAuthenticate: import.meta.env.VITE_FS_AUTO_AUTH !== 'false',
 };
 
-export const MARKET_ID = import.meta.env.VITE_FS_MARKET_ID;
+// Fallback to market id 1 when no env var is set, so the legacy starter kits
+// (App_*.tsx) keep building. Conviction does not depend on this constant.
+export const MARKET_ID: string | number = import.meta.env.VITE_FS_MARKET_ID ?? 1;
 
 // ── Theme Options ──
 export const widgetTheme: FSThemeInput = "fs-dark";

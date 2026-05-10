@@ -5,5 +5,22 @@
     "rootDir": "./src",
     "noEmit": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": [
+    "src/App_AllComponents.tsx",
+    "src/App_BasicTradingLayout.tsx",
+    "src/App_BinaryPanel.tsx",
+    "src/App_CustomShapeLayout.tsx",
+    "src/App_DistRange.tsx",
+    "src/App_MarketDiscovery.tsx",
+    "src/App_MarketDiscoveryRouted.tsx",
+    "src/App_MarketOverlay.tsx",
+    "src/App_ShapeCutterTradingLayout.tsx",
+    "src/App_StarterKitCapture.tsx",
+    "src/App_TimelineBinaryTradingLayout.tsx",
+    "src/pages/ArticlePage.tsx",
+    "src/components/ArticleBody.tsx",
+    "src/components/ArticleFooter.tsx",
+    "src/components/ArticleHeader.tsx"
+  ]
 }
