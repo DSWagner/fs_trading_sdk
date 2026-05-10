@@ -115,15 +115,25 @@ export function BetFlowPage() {
   // formColumnHeight to compute the budget that the two visualisations
   // can share. Each visualisation gets exactly half.
   const RIGHT_COL_CHROME = 30 /* header */ + 16 /* header→polaroid gap */ + 16 /* polaroid→chart gap */;
-  const heightDerivedVisualHeight = Math.max(280, (formColumnHeight - RIGHT_COL_CHROME) / 2);
+  // Lowered the width floor from 280 → 220 so the visualisations can
+  // SHRINK to match the form's natural content height instead of
+  // forcing the form to grow to match an oversized polaroid. The user
+  // explicitly asked for the two halves of the page to end at the
+  // same vertical position with NO scrolling, and the previous 280
+  // floor was creating a ~240 px empty area below the form's submit
+  // button on a typical 1024 wide viewport. At 220 wide the polaroid's
+  // smallest serif glyphs (the timestamped footer) are still ~5 px tall
+  // which is the practical readability floor for editorial typography.
+  const MIN_VISUAL_WIDTH = 220;
+  const heightDerivedVisualHeight = Math.max(MIN_VISUAL_WIDTH * 1.5, (formColumnHeight - RIGHT_COL_CHROME) / 2);
   const heightDerivedVisualWidth = heightDerivedVisualHeight / 1.5;
   // The polaroid width is whichever is SMALLER: the column width (so it
   // never overflows horizontally), the height-derived width (so the
   // stacked polaroid + chart fit inside formColumnHeight), and a 600 px
   // hard cap (so the polaroid is never absurdly large on ultrawide
-  // monitors). Floor at 280 to keep text legible.
+  // monitors). Floor at MIN_VISUAL_WIDTH to keep text legible.
   const previewVisualWidth = Math.max(
-    280,
+    MIN_VISUAL_WIDTH,
     Math.min(600, previewColumnWidth, heightDerivedVisualWidth),
   );
   const previewVisualHeight = Math.round(previewVisualWidth * 1.5);
