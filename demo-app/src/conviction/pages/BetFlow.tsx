@@ -235,7 +235,11 @@ export function BetFlowPage() {
     return prediction;
   })();
 
-  const previewPolaroid = (
+  // Factory so the same live preview can render at multiple sizes: the
+  // big sticky right-aside on desktop, the standard top-of-form version
+  // on mobile, and a compact thumbnail co-located with the Step 4 chart
+  // so the polaroid + chart fit in the mobile viewport at the same time.
+  const renderPreviewPolaroid = (overrideWidth?: number) => (
     <Polaroid
       marketId={market.marketId}
       positionId="preview"
@@ -251,13 +255,15 @@ export function BetFlowPage() {
       shape={shape}
       lowerBound={lowerBound}
       upperBound={upperBound}
-      width={isMobile ? 280 : 320}
+      width={overrideWidth ?? (isMobile ? 280 : 320)}
       preset={preset}
       resolutionState={previewMode === 'after' ? 'resolved' : 'open'}
       resolvedOutcome={previewMode === 'after' ? previewOutcome : null}
       animateDevelop={previewMode === 'after'}
     />
   );
+
+  const previewPolaroid = renderPreviewPolaroid();
 
   const previewToggle = (
     <div
@@ -489,6 +495,56 @@ export function BetFlowPage() {
           </Section>
 
           <Section title="Step 4 · See the consensus you're betting against.">
+            <p
+              style={{
+                fontFamily: fonts.body,
+                fontSize: 14,
+                color: palette.inkMute,
+                marginTop: 0,
+                marginBottom: isMobile ? 14 : 18,
+                lineHeight: 1.5,
+              }}
+            >
+              Your trade preview (dashed) sits on top of the crowd's consensus (solid). The gap
+              between them is your contrarian edge — the rarity ledger keys off it.
+            </p>
+
+            {/* Mobile-only inline preview: a compact-width thumbnail of the
+                live receipt co-located with the consensus chart, sized so
+                both fit in the mobile viewport at the same time. The full-
+                size preview still lives at the top of the form for Steps
+                1-3, but at Step 4 the user needs to see receipt + chart
+                together to understand the trade vs. the crowd. */}
+            {isMobile && (
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  marginBottom: 20,
+                  padding: '14px 12px',
+                  background: palette.card,
+                  border: `1px solid ${palette.rule}`,
+                  borderRadius: 8,
+                }}
+              >
+                <div
+                  style={{
+                    fontFamily: fonts.mono,
+                    fontSize: 11,
+                    color: palette.inkMute,
+                    letterSpacing: 1.4,
+                    marginBottom: 10,
+                    alignSelf: 'flex-start',
+                  }}
+                >
+                  YOUR RECEIPT (LIVE)
+                </div>
+                {previewToggle}
+                {renderPreviewPolaroid(200)}
+              </div>
+            )}
+
             <div
               className="conviction-chart-shell"
               style={{
@@ -545,7 +601,22 @@ export function BetFlowPage() {
         </div>
 
         {!isMobile && (
-          <aside style={{ position: 'sticky', top: 96, alignSelf: 'flex-start' }}>
+          <aside
+            style={{
+              position: 'sticky',
+              top: 88,
+              alignSelf: 'flex-start',
+              // If the polaroid + toggle is taller than the viewport, allow
+              // the aside itself to scroll internally so nothing gets clipped.
+              // This guarantees that on short laptop screens the consensus
+              // chart and the live polaroid preview are visible together no
+              // matter how the user scrolls.
+              maxHeight: 'calc(100vh - 104px)',
+              overflowY: 'auto',
+              paddingRight: 4,
+            }}
+            aria-label="Live preview of your receipt"
+          >
             <div style={{ fontFamily: fonts.mono, fontSize: 11, color: palette.inkMute, letterSpacing: 1.4, marginBottom: 12 }}>
               LIVE PREVIEW · YOUR RECEIPT
             </div>
