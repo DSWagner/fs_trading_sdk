@@ -1,9 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "npm install && cd demo-app && npm run build",
+  "buildCommand": "cd demo-app && npm run build",
   "outputDirectory": "demo-app/dist",
   "framework": null,
-  "installCommand": "echo skipping root install (build script installs workspace)",
+  "installCommand": "npm install",
   "env": {
     "VITE_FS_BASE_URL": "https://fs-engine-api-dev.onrender.com"
   },
