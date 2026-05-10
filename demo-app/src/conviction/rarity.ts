@@ -144,12 +144,21 @@ interface TierMeta {
  * portion of the Polaroid SVG. Colors stay in the editorial palette family
  * to keep the rarity stamp consistent with the rest of the receipt.
  */
+/**
+ * Per-tier visual treatment. Border widths and glow intensities were
+ * bumped 2-3x from their original values because the user fed back that
+ * the rarity tinge "as a thin frame around the polaroid is very poor
+ * and almost not even visible." Now the rarer tiers wear a bold,
+ * unmistakable frame in the tier signature colour, and the rarity
+ * tinge also propagates through the polaroid's sky / sun glow /
+ * ornament strip (see Polaroid.tsx rarityPalette).
+ */
 export const TIER_META: Record<Rarity, TierMeta> = {
   common: {
     label: 'Common',
     color: '#9F8F7E',
     glowColor: 'transparent',
-    borderWidth: 0,
+    borderWidth: 1,
     badgeFill: '#E8DFD3',
     badgeStroke: '#9F8F7E',
     badgeText: '#5A4F42',
@@ -157,8 +166,8 @@ export const TIER_META: Record<Rarity, TierMeta> = {
   uncommon: {
     label: 'Uncommon',
     color: '#5DA37C',
-    glowColor: 'rgba(93,163,124,0.25)',
-    borderWidth: 1,
+    glowColor: 'rgba(93,163,124,0.35)',
+    borderWidth: 3,
     badgeFill: '#E1F0E5',
     badgeStroke: '#5DA37C',
     badgeText: '#2D5440',
@@ -166,8 +175,8 @@ export const TIER_META: Record<Rarity, TierMeta> = {
   rare: {
     label: 'Rare',
     color: '#3D80C2',
-    glowColor: 'rgba(61,128,194,0.32)',
-    borderWidth: 2,
+    glowColor: 'rgba(61,128,194,0.45)',
+    borderWidth: 4,
     badgeFill: '#DCE9F5',
     badgeStroke: '#3D80C2',
     badgeText: '#1F4972',
@@ -175,8 +184,8 @@ export const TIER_META: Record<Rarity, TierMeta> = {
   epic: {
     label: 'Epic',
     color: '#8C4FC9',
-    glowColor: 'rgba(140,79,201,0.38)',
-    borderWidth: 2,
+    glowColor: 'rgba(140,79,201,0.55)',
+    borderWidth: 5,
     badgeFill: '#EEE2F8',
     badgeStroke: '#8C4FC9',
     badgeText: '#4C2476',
@@ -184,8 +193,8 @@ export const TIER_META: Record<Rarity, TierMeta> = {
   legendary: {
     label: 'Legendary',
     color: '#D89B2C',
-    glowColor: 'rgba(216,155,44,0.45)',
-    borderWidth: 3,
+    glowColor: 'rgba(216,155,44,0.65)',
+    borderWidth: 6,
     badgeFill: '#FBEFCC',
     badgeStroke: '#D89B2C',
     badgeText: '#6E4C0F',
@@ -193,8 +202,8 @@ export const TIER_META: Record<Rarity, TierMeta> = {
   mythic: {
     label: 'Mythic',
     color: '#C2410C',
-    glowColor: 'rgba(194,65,12,0.55)',
-    borderWidth: 3,
+    glowColor: 'rgba(194,65,12,0.75)',
+    borderWidth: 7,
     badgeFill: '#FFE8D5',
     badgeStroke: '#C2410C',
     badgeText: '#5A1C04',

@@ -1,13 +1,11 @@
 import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { palette, fonts, LIGHT_RAW } from '../theme';
-import { calculateRarity, TIER_META, type Rarity } from '../rarity';
+import { calculateRarity, potentialRarity, TIER_META, type Rarity } from '../rarity';
 import {
   seedFromInputs,
   mulberry32,
   fnv1a,
-  pickPaletteFamily,
   developProgress,
-  type PaletteFamily,
 } from '../polaroidSeed';
 
 /**
@@ -128,6 +126,33 @@ export function Polaroid(props: PolaroidProps) {
     });
   }, [developed, resolvedOutcome, consensusAtBet, prediction, lowerBound, upperBound]);
   const rarity: Rarity | null = rarityCalc?.tier ?? null;
+  // Effective rarity used to drive the visual palette + sun count.
+  //
+  // For RESOLVED bets: equal to the actual rarity tier (or null if
+  // consensusAtBet is missing).
+  // For OPEN bets / previews: use the user's POTENTIAL rarity — the tier
+  // they'd land if they're right. This is what makes the live preview
+  // visibly shift colour as the user drags the prediction away from
+  // consensus: a wild contrarian call previews as ember/crimson (mythic),
+  // a consensus-hugging call previews as cream (common). Without this,
+  // open polaroids would just default to the common-tier muted palette
+  // regardless of how contrarian the call was.
+  //
+  // We deliberately do not show the rarity STAMP on open bets — only the
+  // palette hints at what they're gunning for, the stamp lands when the
+  // bet actually resolves. So `rarity` (used for stamp + reveal logic)
+  // stays narrowly defined, and `effectiveRarity` (used for palette +
+  // sun count) is the broader hint.
+  const effectiveRarity: Rarity | null = useMemo(() => {
+    if (rarity) return rarity;
+    if (consensusAtBet == null || !Number.isFinite(consensusAtBet)) return null;
+    return potentialRarity({
+      prediction,
+      consensusMean: consensusAtBet,
+      lowerBound,
+      upperBound,
+    });
+  }, [rarity, consensusAtBet, prediction, lowerBound, upperBound]);
   const rarityMeta = rarity ? TIER_META[rarity] : null;
   // Accuracy is needed for the develop-progress curve and for the label
   // shown in the caption. We prefer the rarity-derived accuracy (because
@@ -241,7 +266,11 @@ export function Polaroid(props: PolaroidProps) {
         developed,
         progress,
         resolvedOutcome,
-        rarity,
+        // Drive palette + sun count off effective rarity so OPEN bets in
+        // the live preview shift their colour as the user drags the
+        // prediction. Resolved bets still use their actual rarity (the
+        // two converge once consensusAtBet + outcome are both known).
+        rarity: effectiveRarity,
       }),
     [
       width,
@@ -256,7 +285,7 @@ export function Polaroid(props: PolaroidProps) {
       developed,
       progress,
       resolvedOutcome,
-      rarity,
+      effectiveRarity,
     ],
   );
 
@@ -388,9 +417,13 @@ export function Polaroid(props: PolaroidProps) {
           <stop offset="100%" stopColor={photo.ground.bottom} />
         </linearGradient>
         <radialGradient id={sunGradientId} cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor={photo.sun.core} />
-          <stop offset="60%" stopColor={photo.sun.glow} stopOpacity="0.6" />
-          <stop offset="100%" stopColor={photo.sun.glow} stopOpacity="0" />
+          {/* The shared glow gradient is keyed to the primary sun's core
+              and the rarity accent's glow. Companion suns reuse this
+              same gradient but draw their own bright core on top, so
+              all suns visually belong to one celestial family. */}
+          <stop offset="0%" stopColor={photo.suns[0]?.core ?? '#fff'} />
+          <stop offset="60%" stopColor={photo.suns[0]?.glow ?? '#fff'} stopOpacity="0.6" />
+          <stop offset="100%" stopColor={photo.suns[0]?.glow ?? '#fff'} stopOpacity="0" />
         </radialGradient>
         <filter id={filterId}>
           {/* Filter only carries children when developIntensity > 0; an
@@ -475,45 +508,35 @@ export function Polaroid(props: PolaroidProps) {
             cx={photoX + s.x * photoSize}
             cy={photoY + s.y * photoSize}
             r={s.r}
-            fill="rgba(255,255,250,0.85)"
+            // Accent stars carry the rarity hue; the rest stay neutral
+            // moonlight white. Tier signature reads even when the eye is
+            // in the sky.
+            fill={s.accent ? photo.accentColor : 'rgba(255,255,250,0.85)'}
             opacity={s.o * (0.5 + progress * 0.5)}
             filter={photoFilter}
           />
         ))}
-        <circle
-          cx={photoX + photo.sun.x * photoSize}
-          cy={photoY + photo.sun.y * photoSize}
-          r={photo.sun.r}
-          fill={`url(#${sunGradientId})`}
-          filter={photoFilter}
-        />
-        <circle
-          cx={photoX + photo.sun.x * photoSize}
-          cy={photoY + photo.sun.y * photoSize}
-          r={photo.sun.coreR}
-          fill={photo.sun.core}
-          opacity="0.95"
-          filter={photoFilter}
-        />
-        {photo.sun2 && (
-          <>
+        {/* Suns — 1..3 disks depending on rarity. Glow uses a shared
+            radial gradient; each sun draws its own bright core. */}
+        {photo.suns.map((s, i) => (
+          <g key={`sun-${i}`}>
             <circle
-              cx={photoX + photo.sun2.x * photoSize}
-              cy={photoY + photo.sun2.y * photoSize}
-              r={photo.sun2.r}
+              cx={photoX + s.x * photoSize}
+              cy={photoY + s.y * photoSize}
+              r={s.r}
               fill={`url(#${sunGradientId})`}
               filter={photoFilter}
             />
             <circle
-              cx={photoX + photo.sun2.x * photoSize}
-              cy={photoY + photo.sun2.y * photoSize}
-              r={photo.sun2.coreR}
-              fill={photo.sun2.core}
-              opacity="0.9"
+              cx={photoX + s.x * photoSize}
+              cy={photoY + s.y * photoSize}
+              r={s.coreR}
+              fill={s.core}
+              opacity={i === 0 ? 0.95 : 0.88}
               filter={photoFilter}
             />
-          </>
-        )}
+          </g>
+        ))}
         <path
           d={photo.silhouettePath(photoX, photoY, photoSize)}
           fill={`url(#${groundGradientId})`}
@@ -583,14 +606,22 @@ export function Polaroid(props: PolaroidProps) {
         />
 
         {/* Reasoning quote — ONLY when developed + accurate. This is the
-            payoff for being right. Centered over the bottom half of the
-            photo as a meme-able pull quote, with attribution underneath. */}
+            payoff for being right. Anchored to the GROUND area (below the
+            silhouette horizon) so it never covers the sky, suns, or hills.
+            The user explicitly asked for this: "the reasoning after
+            resolution is not covering the hills and the sky but rather
+            is always in the bottom half of the image covering only the
+            ground and not covering the beautiful sky and hills and sun
+            or moon or whatever it is." The quote anchor lives at
+            horizonY + small offset so it sits over the dark ground silhouette,
+            where its scrim integrates naturally and the text reads
+            cleanly against the muted earth tones. */}
         {reasoningRevealed && reasoning.trim().length > 0 && (
           <ReasoningQuote
-            x={photoX + 12}
-            y={photoY + Math.round(photoSize * 0.55)}
-            width={photoSize - 24}
-            maxHeight={Math.round(photoSize * 0.4)}
+            x={photoX + 10}
+            y={photoY + photo.horizonY * photoSize + Math.round(photoSize * 0.06)}
+            width={photoSize - 20}
+            maxHeight={Math.max(0, (1 - photo.horizonY) * photoSize - Math.round(photoSize * 0.10))}
             text={reasoning.trim()}
             handle={username}
             polaroidWidth={width}
@@ -654,8 +685,10 @@ export function Polaroid(props: PolaroidProps) {
             - more dollars → more ticks (3 at $1, 18 at $1000+)
             - more dollars → longer ticks (4..11 px)
             - more dollars → bolder ticks (opacity 0.55..0.95)
-          The stroke colour follows the polaroid's ink tone so it works
-          in both light and dark themes. */}
+          The stroke colour is the RARITY ACCENT (when known) so the
+          tier signature continues through the matte — a mythic receipt
+          gets ember-red ticks, a legendary one gets gold ticks, etc.
+          Common falls back to ink so the receipt stays muted. */}
       <g aria-hidden="true">
         {Array.from({ length: ornamentCount }).map((_, i) => {
           const tt = (i + 0.5) / ornamentCount;
@@ -668,7 +701,7 @@ export function Polaroid(props: PolaroidProps) {
               y1={midY - ornamentLen / 2}
               x2={tickX}
               y2={midY + ornamentLen / 2}
-              stroke={palette.inkSoft}
+              stroke={effectiveRarity && effectiveRarity !== 'common' ? photo.accentColor : palette.inkSoft}
               strokeOpacity={ornamentOpacity}
               strokeWidth={ornamentStroke}
               strokeLinecap="round"
@@ -856,13 +889,40 @@ function renderSvgCaption(args: {
 
 // ---------- procedural helpers ----------
 
+interface SunSpec {
+  x: number;
+  y: number;
+  r: number;
+  coreR: number;
+  core: string;
+  glow: string;
+  /**
+   * 0..1 — relative weight in the composition. The first sun is the
+   * "main" sun (weight 1); subsequent suns are progressively smaller so
+   * legendary/mythic layouts read as a "main + companion" group rather
+   * than three identical disks.
+   */
+  weight: number;
+}
+
 interface PhotoSpec {
   sky: { top: string; mid: string; bottom: string };
   ground: { top: string; bottom: string; line: string };
-  sun: { x: number; y: number; r: number; coreR: number; core: string; glow: string };
-  sun2: { x: number; y: number; r: number; coreR: number; core: string; glow: string } | null;
-  stars: Array<{ x: number; y: number; r: number; o: number }>;
+  /**
+   * Suns array — 1 entry for common..epic, 2 for legendary, 3 for
+   * mythic. Positions are seed-driven within the upper-half "sky" area,
+   * with collision avoidance so two suns never overlap. The position
+   * intentionally does NOT track the user's prediction or belief peaks
+   * (the silhouette/hills already show those); the sun is the receipt's
+   * decorative signature, free to land wherever the seed picks.
+   */
+  suns: SunSpec[];
+  stars: Array<{ x: number; y: number; r: number; o: number; accent: boolean }>;
   silhouettePath: (px: number, py: number, ps: number) => string;
+  /** Horizon Y in normalised photo coords [0, 1]. Used to anchor the reasoning quote. */
+  horizonY: number;
+  /** Hex for the rarity accent — used by ornament ticks and a sprinkle of accent stars. */
+  accentColor: string;
   grainFreq: number;
 }
 
@@ -884,106 +944,130 @@ function buildPhoto(opts: {
   rarity: Rarity | null;
 }): PhotoSpec {
   const range = opts.upperBound - opts.lowerBound;
-  const meanT = clamp01((opts.prediction - opts.lowerBound) / range);
   const rng = mulberry32(opts.seed);
   // Pull several uniform draws from the rng up front so visual decisions
   // are stable across renders.
   const r1 = rng(), r2 = rng(), r3 = rng(), r4 = rng();
 
-  // Palette family driven by RARITY (when known) + seed offset for variety
-  // within tier. The family determines a region of color space (warm
-  // sunset, cool twilight, gold-leaf jewel tone, etc.); the actual colors
-  // inside that region are generated procedurally from the seed so every
-  // single receipt gets a unique palette pulled from the full spectrum.
-  const family = pickPaletteFamily(opts.seed, opts.rarity);
-  const palettes = paletteFor(family, {
-    seed: opts.seed,
-    rarity: opts.rarity,
-    conviction: opts.conviction,
-    developed: opts.developed,
-    variantRoll: r1,
-  });
+  // Rarity is now the PRIMARY visual driver. The sky, sun, glow, ground,
+  // and accent colour are all anchored to the rarity tier's signature hue,
+  // and the seed only adds tier-internal variation (hue jitter, saturation,
+  // lightness, sun positions, star pattern, silhouette jitter).
+  //
+  // This is the key change the user asked for: "the sky's color is not
+  // random but corresponds to the rarity color." Two epic receipts now
+  // both read as "violet" — just with unique micro-variation between them.
+  // Common stays muted neutral, mythic stays ember/crimson, etc.
+  const palettes = rarityPalette(opts.rarity, opts.seed, opts.conviction, opts.developed);
 
   // Horizon position varies with both seed and conviction. Low conviction
   // = flat horizon (uncertainty), high conviction = lifted dramatic horizon.
-  const horizonY = 0.55 + (1 - opts.conviction) * 0.07 + (r2 - 0.5) * 0.05;
-
-  // Sun (or moon) — the principal visual readout. Its horizontal position
-  // tracks the DENSITY peak of the user's belief curve, not just the
-  // prediction value. That distinction matters for bimodal beliefs: the
-  // prediction value is the center BETWEEN the two peaks, so a sun
-  // pinned to `meanT` would float over the valley with the hills on
-  // either side. Instead we compute each peak's X-position from the
-  // same maths `densityAt` uses, so the suns sit directly above the
-  // hills they correspond to.
-  //
-  // For single-peak and range shapes the peak coincides with the
-  // prediction value, so this collapses to the previous behaviour and
-  // the single sun stays centred over the curve.
-  const toUnit = (x: number) => clamp01((x - opts.lowerBound) / range);
-  const isBimodal = opts.shape === 'bimodal';
-  // densityAt() for bimodal weights the right peak (0.7) heavier than
-  // the left peak (0.5), so we treat the right peak as the dominant
-  // sun and the left peak as the secondary moon.
-  const peakOffset = opts.spread * 1.6;
-  const primaryX = isBimodal ? toUnit(opts.prediction + peakOffset) : meanT;
-  const secondaryX = isBimodal ? toUnit(opts.prediction - peakOffset) : meanT;
+  // Capped on the upper side so the quote area below the horizon always
+  // has at least ~30% of the photo to fit a multi-line meme caption.
+  const horizonY = clamp(
+    0.50 + (1 - opts.conviction) * 0.07 + (r2 - 0.5) * 0.05,
+    0.42,
+    0.62,
+  );
 
   // Stake feeds a clamped 0..1 boost that scales the sun radius, the
   // ornament tick density, and the ornament tick length further down.
   const stakeBoost = clamp01(Math.log10(Math.max(1, opts.collateral)) / 3); // 0…1 over $1…$1000
-  const sunY = horizonY - 0.18 - opts.conviction * 0.05;
-  // Bigger stake gets a more pronounced sun (up to +8% photo width on top
-  // of the conviction-driven sizing, was +4%). This makes the stake
-  // slider produce a visible "more skin in the game" signal rather than
-  // a barely-noticeable size delta.
-  const sunR = (opts.photoWidth * (0.14 + opts.conviction * 0.08 + stakeBoost * 0.08)) | 0;
-  const sunCoreR = sunR * (0.4 + r3 * 0.1);
 
-  const sun = {
-    x: primaryX,
-    y: sunY,
-    r: sunR,
-    coreR: sunCoreR,
-    core: palettes.sunCore,
-    glow: palettes.sunGlow,
-  };
+  // SUN COUNT — driven purely by rarity. Common..epic get one sun. Legendary
+  // gets two. Mythic gets three. The bimodal-shape-specific dual-sun rule
+  // is gone; the user explicitly asked for the sun count to be a rarity
+  // signal instead. Bimodality is still visible via the silhouette's two
+  // hills, so no information is lost.
+  const count = sunCount(opts.rarity);
 
-  const sun2 = isBimodal
-    ? {
-      x: secondaryX,
-      // Secondary peak hangs a hair lower so the two suns don't read
-      // as one flat horizon of light — adds a touch of depth.
-      y: sunY + 0.03,
-      // Density weight on the secondary peak is 0.5/0.7 ≈ 0.71 of the
-      // primary's, so we scale the radius accordingly. Reads as "the
-      // less-likely peak is the smaller moon."
-      r: Math.round(sunR * 0.72),
-      coreR: sunCoreR * 0.72,
-      core: palettes.sun2Core,
-      glow: palettes.sunGlow,
+  // Sun positions: seed-driven random, no semantic tie to prediction. The
+  // user's prediction is already conveyed by the silhouette's peak and the
+  // numeric scale strip below the photo — the sun is the receipt's
+  // decorative signature. We sample positions with collision avoidance so
+  // multi-sun layouts have visible separation.
+  const sunRng = mulberry32(opts.seed ^ 0x5_7c0c0);
+  const minSep = count >= 3 ? 0.20 : 0.26; // tighter min-separation for 3-sun
+  const suns: SunSpec[] = [];
+  // Base sun radius from conviction + stake. The first sun is "full size";
+  // companion suns scale down so the composition reads as "main + smaller
+  // accents" rather than identical disks.
+  const baseSunR = opts.photoWidth * (0.13 + opts.conviction * 0.07 + stakeBoost * 0.06);
+  for (let i = 0; i < count; i++) {
+    let placed = false;
+    let x = 0.5;
+    let y = 0.3;
+    for (let attempt = 0; attempt < 24; attempt++) {
+      // Constrain to the upper portion of the photo so the sun stays
+      // unambiguously in the SKY (above the silhouette hills) and the
+      // bottom half stays clean for the reasoning quote.
+      x = 0.15 + sunRng() * 0.70;
+      y = 0.10 + sunRng() * Math.max(0.05, horizonY - 0.25);
+      let ok = true;
+      for (const prev of suns) {
+        // Treat sun positions as 2D points scaled to photo space (which is
+        // square-ish), so the separation calculation reads naturally.
+        if (Math.hypot(x - prev.x, y - prev.y) < minSep) {
+          ok = false;
+          break;
+        }
+      }
+      if (ok) {
+        placed = true;
+        break;
+      }
     }
-    : null;
+    if (!placed) {
+      // Fallback: evenly distribute along the upper third if collision-
+      // avoidance keeps failing (e.g. extreme parameters). Guarantees we
+      // always emit `count` suns even if the random walk struggled.
+      x = 0.2 + (i / Math.max(1, count - 1)) * 0.6;
+      y = 0.18 + (i % 2) * 0.08;
+    }
+    // Companion suns shrink: first = 100%, second = 78%, third = 62%.
+    const weight = i === 0 ? 1 : i === 1 ? 0.78 : 0.62;
+    const r = Math.max(8, Math.round(baseSunR * weight));
+    const coreR = r * (0.4 + r3 * 0.1);
+    // Slight hue variation between companion suns (still anchored to the
+    // tier's accent hue family) so they don't look like clones.
+    const sunCore = i === 0 ? palettes.sunCore : i === 1 ? palettes.sun2Core : palettes.sun3Core;
+    suns.push({
+      x,
+      y,
+      r,
+      coreR,
+      core: sunCore,
+      glow: palettes.sunGlow,
+      weight,
+    });
+  }
 
   // Stars — count varies with conviction, density with seed. High-conviction
-  // bets get a more starry sky, low-conviction get a sparser one. Both
-  // varieties carry a per-receipt-unique constellation thanks to the seed.
+  // bets get a more starry sky, low-conviction get a sparser one. A small
+  // fraction of stars get the rarity accent colour ("accent stars") so the
+  // tier signature reads even when the eye is in the sky.
   const starRng = mulberry32(opts.seed ^ 0xabc123);
   const numStars = Math.round(14 + opts.conviction * 22 + r4 * 4);
-  const stars: Array<{ x: number; y: number; r: number; o: number }> = [];
+  const stars: Array<{ x: number; y: number; r: number; o: number; accent: boolean }> = [];
+  // Higher tiers get more accent stars (max ~25% on mythic). Common gets
+  // none — keeps Common visually quiet vs. the showier tiers.
+  const accentFraction = accentStarFraction(opts.rarity);
   for (let i = 0; i < numStars; i++) {
     const sx = starRng();
     const sy = starRng() * horizonY * 0.85;
     const sr = 0.35 + starRng() * 1.15;
     const so = 0.3 + starRng() * 0.6;
-    // Skip stars that fall under any sun (primary or, in bimodal, the
-    // secondary). Without the second check, bimodal layouts get a
-    // distracting starfield directly under the smaller moon.
-    const distToPrimary = Math.hypot(sx - sun.x, sy - sun.y);
-    const distToSecondary = sun2 ? Math.hypot(sx - sun2.x, sy - sun2.y) : Infinity;
-    if (distToPrimary > 0.15 && distToSecondary > 0.12) {
-      stars.push({ x: sx, y: sy, r: sr, o: so });
+    // Skip stars that fall under any sun.
+    let underSun = false;
+    for (const s of suns) {
+      if (Math.hypot(sx - s.x, sy - s.y) < 0.13 * (0.5 + s.weight * 0.5)) {
+        underSun = true;
+        break;
+      }
     }
+    if (underSun) continue;
+    const accent = starRng() < accentFraction;
+    stars.push({ x: sx, y: sy, r: sr, o: so, accent });
   }
 
   // Silhouette — driven by spread AND seed. Spread controls how wide the
@@ -1025,15 +1109,49 @@ function buildPhoto(opts: {
   return {
     sky: palettes.sky,
     ground: palettes.ground,
-    sun,
-    sun2,
+    suns,
     stars,
     silhouettePath,
+    horizonY,
+    accentColor: palettes.accent,
     // Grain frequency varies subtly per-receipt so the noise pattern
     // differs receipt-to-receipt. Range chosen so the dot pattern is
     // dense enough to feel like film grain at every polaroid width.
     grainFreq: 0.7 + r1 * 0.6,
   };
+}
+
+/**
+ * Number of suns to draw, by rarity tier.
+ *   Common..Epic  → 1 sun (the receipt's signature glow).
+ *   Legendary     → 2 suns (a "main" sun plus a companion).
+ *   Mythic        → 3 suns (rare celestial event — three lights in the sky).
+ *
+ * The user explicitly asked for the sun count to scale with rarity rather
+ * than encoding semantic meaning. Bimodal-shape information is preserved
+ * by the silhouette's two-peak hill shape.
+ */
+function sunCount(rarity: Rarity | null): number {
+  if (rarity === 'mythic') return 3;
+  if (rarity === 'legendary') return 2;
+  return 1;
+}
+
+/**
+ * Fraction of stars that should be drawn in the rarity accent colour. The
+ * accent stars are a "sparkle" effect that telegraphs the tier even when
+ * the eye is locked onto the sky and not the frame border.
+ */
+function accentStarFraction(rarity: Rarity | null): number {
+  switch (rarity) {
+    case 'mythic':    return 0.25;
+    case 'legendary': return 0.20;
+    case 'epic':      return 0.14;
+    case 'rare':      return 0.10;
+    case 'uncommon':  return 0.06;
+    case 'common':    return 0;
+    default:          return 0;
+  }
 }
 
 function densityAt(
@@ -1069,201 +1187,181 @@ interface FamilyPalette {
   sunCore: string;
   sunGlow: string;
   sun2Core: string;
+  sun3Core: string;
+  /** Rarity accent colour, exposed for ornament strip + accent stars. */
+  accent: string;
 }
 
 /**
- * Color region per family. Defines the HSL hue range each palette stop
- * draws from, plus the family's "mood" (moody = dark, dramatic sky; not
- * moody = lifted, friendlier). Hue ranges may exceed 360 to express a
- * wrap (e.g. 340..380 means 340 → 360 → 20 in degrees mod 360).
+ * RARITY-ANCHORED VISUAL SIGNATURE.
  *
- * Within a region, the seed picks an exact hue + lightness + a subtle
- * saturation jitter, so the palette is effectively unique per receipt
- * yet still recognizably "twilight" or "aurora" or whatever family the
- * rarity tier mapped to.
+ * Each rarity tier owns a slice of the HSL color wheel. The sky, sun glow,
+ * ground, and accent colours all draw from that slice, with the seed
+ * supplying ±jitter within the slice so every receipt in the tier is
+ * unique but visually coherent.
+ *
+ * This replaces the old "8 palette families × random hue" system which the
+ * user (correctly) experienced as fully random. Now:
+ *   - Two epic receipts both read as "violet".
+ *   - Two mythic receipts both read as "ember/crimson".
+ *   - But no two receipts in the same tier are identical.
+ *
+ * Hue values are in degrees (0..360 wrap). Saturation in [0, 1].
+ * `accentHue` is the offset hue used for ornament ticks and a sprinkle
+ * of accent stars — picked to contrast the dominant sky.
  */
-interface FamilyRegion {
-  skyTopHue: [number, number];
-  skyMidHue: [number, number];
-  skyBottomHue: [number, number];
-  sunHue: [number, number];
-  sun2Hue: [number, number];
-  groundHue: [number, number];
-  /** Base saturation in [0, 1]. 0 = grayscale (noir). */
+interface RarityVisual {
+  baseHue: number;
+  /** Total degrees of variation across the seed range. ±half within the tier. */
+  hueSpan: number;
   baseSat: number;
-  /** True = darker, more dramatic sky stops. False = pastel-friendly. */
-  moody: boolean;
+  accentHue: number;
+  accentSat: number;
+  accentLight: number;
 }
 
-const FAMILY_REGIONS: Record<PaletteFamily, FamilyRegion> = {
-  sunset: {
-    skyTopHue: [275, 335], skyMidHue: [330, 380], skyBottomHue: [15, 50],
-    sunHue: [25, 50], sun2Hue: [40, 65], groundHue: [340, 380],
-    baseSat: 0.72, moody: true,
+/**
+ * The user explicitly asked: "the sky's color is not random but corresponds
+ * to the rarity color." This table is the source of truth for that mapping.
+ * Tweak with caution — the rarity stamp (in rarity.ts TIER_META) and the
+ * sky base hue here should always feel like the same colour family.
+ */
+const RARITY_VISUAL: Record<Rarity, RarityVisual> = {
+  common: {
+    // Warm sepia / cream — quiet, "just another receipt" tone.
+    baseHue: 36, hueSpan: 22, baseSat: 0.32,
+    accentHue: 30, accentSat: 0.40, accentLight: 0.55,
   },
-  twilight: {
-    skyTopHue: [210, 260], skyMidHue: [200, 245], skyBottomHue: [180, 235],
-    sunHue: [185, 220], sun2Hue: [195, 230], groundHue: [205, 250],
-    baseSat: 0.55, moody: true,
+  uncommon: {
+    // Jade green — matches TIER_META.uncommon.color (#5DA37C).
+    baseHue: 145, hueSpan: 26, baseSat: 0.52,
+    accentHue: 150, accentSat: 0.55, accentLight: 0.55,
   },
-  aurora: {
-    skyTopHue: [235, 285], skyMidHue: [275, 325], skyBottomHue: [195, 245],
-    sunHue: [135, 175], sun2Hue: [295, 335], groundHue: [245, 295],
-    baseSat: 0.72, moody: true,
+  rare: {
+    // Azure / cobalt — matches TIER_META.rare.color (#3D80C2).
+    baseHue: 208, hueSpan: 24, baseSat: 0.62,
+    accentHue: 205, accentSat: 0.65, accentLight: 0.56,
   },
-  botanical: {
-    skyTopHue: [95, 155], skyMidHue: [80, 145], skyBottomHue: [55, 115],
-    sunHue: [38, 72], sun2Hue: [42, 78], groundHue: [75, 135],
-    baseSat: 0.58, moody: false,
+  epic: {
+    // Violet / royal purple — matches TIER_META.epic.color (#8C4FC9).
+    baseHue: 272, hueSpan: 28, baseSat: 0.66,
+    accentHue: 285, accentSat: 0.70, accentLight: 0.62,
   },
-  rosegold: {
-    skyTopHue: [320, 360], skyMidHue: [340, 380], skyBottomHue: [5, 38],
-    sunHue: [18, 46], sun2Hue: [22, 50], groundHue: [340, 380],
-    baseSat: 0.62, moody: false,
+  legendary: {
+    // Amber / gold — matches TIER_META.legendary.color (#D89B2C). High sat
+    // so the gold reads against a moody sky.
+    baseHue: 36, hueSpan: 24, baseSat: 0.82,
+    accentHue: 42, accentSat: 0.92, accentLight: 0.60,
   },
-  noir: {
-    skyTopHue: [0, 360], skyMidHue: [0, 360], skyBottomHue: [0, 360],
-    sunHue: [0, 360], sun2Hue: [0, 360], groundHue: [0, 360],
-    baseSat: 0, moody: true,
-  },
-  goldleaf: {
-    skyTopHue: [225, 262], skyMidHue: [230, 270], skyBottomHue: [28, 58],
-    sunHue: [36, 56], sun2Hue: [42, 62], groundHue: [28, 58],
-    baseSat: 0.78, moody: true,
-  },
-  oracle: {
-    skyTopHue: [265, 305], skyMidHue: [285, 330], skyBottomHue: [305, 350],
-    sunHue: [325, 360], sun2Hue: [145, 185], groundHue: [280, 325],
-    baseSat: 0.8, moody: true,
+  mythic: {
+    // Ember / crimson — matches TIER_META.mythic.color (#C2410C). Highest
+    // saturation, narrow hue band — instantly recognisable.
+    baseHue: 16, hueSpan: 20, baseSat: 0.92,
+    accentHue: 10, accentSat: 0.95, accentLight: 0.55,
   },
 };
 
 /**
- * Procedurally generate a unique palette for a receipt.
+ * Build a unique palette anchored to the rarity tier.
  *
- * The family chooses a region of color space. The seed (xor-mixed with
- * the family name so a different family rerolls all hues) drives 16
- * uniform draws; those draws pick concrete hue / saturation / lightness
- * values within the region. Rarity and conviction modulate saturation
- * intensity and lightness contrast on top.
+ * The seed contributes:
+ *   - Hue jitter inside the tier's signature slice (±hueSpan/2).
+ *   - Saturation jitter (±0.10 absolute).
+ *   - Lightness ladder positions (top dark, mid mid, bottom bright).
+ *   - Companion sun hue rotations (so 2-sun and 3-sun layouts aren't
+ *     identical disks).
  *
- * Net effect: every receipt — at every slider position, every username,
- * every reasoning text — gets its own palette pulled from the full HSL
- * spectrum, while the family name keeps the visual identity legible
- * (twilight always reads cool, sunset always reads warm, etc.).
+ * Conviction widens the lightness contrast between sky top and bottom —
+ * high conviction = dramatic, low conviction = flatter / hazier.
+ *
+ * Null rarity (open bets without consensus) defaults to the Common visual
+ * so previews still show a coherent tinted polaroid instead of random
+ * colours.
  */
-function paletteFor(
-  family: PaletteFamily,
-  args: {
-    seed: number;
-    rarity: Rarity | null;
-    conviction: number;
-    developed: boolean;
-    variantRoll: number;
-  },
+function rarityPalette(
+  rarity: Rarity | null,
+  seed: number,
+  conviction: number,
+  developed: boolean,
 ): FamilyPalette {
-  const region = FAMILY_REGIONS[family];
-  const familyCode = fnv1a(family);
-  // Mixing variantRoll in too means any seed-driven RNG draws already
-  // taken upstream still propagate variation here, without re-deriving
-  // them from scratch.
-  const rngSeed = (args.seed ^ familyCode ^ Math.floor(args.variantRoll * 0x7fffffff)) >>> 0;
+  const tier = rarity ?? 'common';
+  const visual = RARITY_VISUAL[tier];
+
+  // Mix the rarity tier name into the seed so two adjacent tiers don't
+  // happen to land on identical hue rolls.
+  const tierCode = fnv1a(tier);
+  const rngSeed = (seed ^ tierCode) >>> 0;
   const rng = mulberry32(rngSeed);
   const r: number[] = [];
-  for (let i = 0; i < 16; i++) r.push(rng());
+  for (let i = 0; i < 18; i++) r.push(rng());
 
-  const raritySat = rarityToSaturationScale(args.rarity);
-  const rarityContrast = rarityToContrastScale(args.rarity);
-  const sat = clamp01(region.baseSat * raritySat);
+  // Hue jitter within the tier's signature band. r[0]..r[2] drive sky top
+  // / mid / bottom; r[3]..r[5] drive sun core / glow / companion suns;
+  // r[6] drives ground.
+  const jit = (t: number, scale = 1) => (t - 0.5) * visual.hueSpan * scale;
+  const skyTopHue    = visual.baseHue + jit(r[0]);
+  const skyMidHue    = visual.baseHue + jit(r[1], 0.85) + 8;
+  const skyBottomHue = visual.baseHue + jit(r[2], 0.7) + 18;
+  const sunCoreHue   = visual.accentHue + jit(r[3], 0.5);
+  const sunGlowHue   = visual.accentHue + jit(r[4], 0.6);
+  const sun2Hue      = visual.accentHue + jit(r[15], 0.8) + 18; // shifted companion
+  const sun3Hue      = visual.accentHue + jit(r[16], 0.9) - 22; // shifted second companion
+  const groundHue    = visual.baseHue + jit(r[6], 0.5) + 6;
 
-  const skyTopHue    = pickHue(r[0], region.skyTopHue);
-  const skyMidHue    = pickHue(r[1], region.skyMidHue);
-  const skyBottomHue = pickHue(r[2], region.skyBottomHue);
-  const sunHue       = pickHue(r[3], region.sunHue);
-  const sun2Hue      = pickHue(r[4], region.sun2Hue);
-  const groundHue    = pickHue(r[5], region.groundHue);
+  // Saturation: anchored to tier baseSat with small per-receipt jitter.
+  const sat = clamp01(visual.baseSat + (r[7] - 0.5) * 0.14);
 
-  // Lightness ladder for the sky. Moody families pull the top darker.
-  const topL    = region.moody ? 0.06 + r[6] * 0.07  : 0.10 + r[6] * 0.09;
-  const midL    = region.moody ? 0.18 + r[7] * 0.12  : 0.30 + r[7] * 0.12;
-  const bottomL = region.moody ? 0.55 + r[8] * 0.18  : 0.66 + r[8] * 0.12;
-  const sunCoreL   = 0.85 + r[9]  * 0.10;
-  const sunGlowL   = 0.55 + r[10] * 0.14;
-  const sun2CoreL  = 0.80 + r[14] * 0.12;
-  const groundTopL    = region.moody ? 0.07 + r[11] * 0.05 : 0.10 + r[11] * 0.05;
-  const groundBottomL = 0.018 + r[12] * 0.032;
-  const groundLineL   = groundTopL + 0.05 + r[13] * 0.04;
+  // Lightness ladder. Higher tiers get a darker, moodier sky top (the
+  // contrast between dark sky and bright accent reads as "premium").
+  // Common stays flatter so it doesn't compete visually with the rarer
+  // tiers.
+  const moody = tier !== 'common';
+  const topL    = moody ? 0.05 + r[8]  * 0.07 : 0.10 + r[8]  * 0.08;
+  const midL    = moody ? 0.18 + r[9]  * 0.10 : 0.28 + r[9]  * 0.10;
+  const bottomL = moody ? 0.50 + r[10] * 0.18 : 0.62 + r[10] * 0.12;
+  const sunCoreL  = 0.85 + r[11] * 0.10;
+  const sunGlowL  = visual.accentLight + (r[12] - 0.5) * 0.10;
+  const sun2CoreL = 0.80 + r[13] * 0.10;
+  const sun3CoreL = 0.78 + r[17] * 0.10;
+  const groundTopL    = moody ? 0.06 + r[14] * 0.05 : 0.09 + r[14] * 0.05;
+  const groundBottomL = 0.018 + (r[8] * 0.03);
+  const groundLineL   = groundTopL + 0.05 + r[9] * 0.03;
 
-  // Conviction widens the lightness gap between sky top and bottom — high
-  // conviction = dramatic, low conviction = flatter / hazier.
-  const contrast = 0.92 + args.conviction * 0.18 * rarityContrast;
+  // Conviction widens the contrast.
+  const contrast = 0.92 + conviction * 0.20;
   const stretchL = (l: number, anchor: number) => clamp01(anchor + (l - anchor) * contrast);
 
-  // Sun core and sun glow share a hue but the core is bright and pale
-  // (low saturation, high lightness) while the glow is hot (high sat).
-  const palette: FamilyPalette = {
+  const out: FamilyPalette = {
     sky: {
       top:    hsl(skyTopHue,    sat,           stretchL(topL,    0.15)),
-      mid:    hsl(skyMidHue,    sat * 0.95,    stretchL(midL,    0.35)),
+      mid:    hsl(skyMidHue,    sat * 0.94,    stretchL(midL,    0.35)),
       bottom: hsl(skyBottomHue, sat * 0.78,    stretchL(bottomL, 0.65)),
     },
-    sunCore:  hsl(sunHue,  sat * 0.35, sunCoreL),
-    sunGlow:  hsl(sunHue,  sat * 0.95, sunGlowL),
-    sun2Core: hsl(sun2Hue, sat * 0.55, sun2CoreL),
+    sunCore:  hsl(sunCoreHue, sat * 0.30, sunCoreL),
+    sunGlow:  hsl(sunGlowHue, clamp01(sat * 1.05), clamp01(sunGlowL)),
+    sun2Core: hsl(sun2Hue,    sat * 0.50, sun2CoreL),
+    sun3Core: hsl(sun3Hue,    sat * 0.55, sun3CoreL),
     ground: {
-      top:    hsl(groundHue, sat * 0.60, groundTopL),
-      bottom: hsl(groundHue, sat * 0.40, groundBottomL),
+      top:    hsl(groundHue, sat * 0.55, groundTopL),
+      bottom: hsl(groundHue, sat * 0.35, groundBottomL),
       line:   hsl(groundHue, sat * 0.70, groundLineL),
     },
+    accent: hsl(visual.accentHue + jit(r[5], 0.4), visual.accentSat, visual.accentLight),
   };
 
-  if (!args.developed) {
-    // Slight mute on the horizon line so the photo "feels" like it
-    // hasn't finished developing yet. Everything else stays vivid so
-    // the receipt is still readable.
+  if (!developed) {
     return {
-      ...palette,
-      ground: { ...palette.ground, line: mix(palette.ground.line, palette.ground.top, 0.35) },
+      ...out,
+      ground: { ...out.ground, line: mix(out.ground.line, out.ground.top, 0.35) },
     };
   }
-  return palette;
-}
-
-/**
- * Rarer receipts get more saturated palettes — the visual signal that
- * tells you "this is a hard-to-earn receipt" at a glance.
- */
-function rarityToSaturationScale(r: Rarity | null): number {
-  switch (r) {
-    case 'mythic':    return 1.45;
-    case 'legendary': return 1.28;
-    case 'epic':      return 1.14;
-    case 'rare':      return 1.0;
-    case 'uncommon':  return 0.85;
-    case 'common':    return 0.72;
-    default:          return 0.9; // unknown/preview = neutral-but-readable
-  }
-}
-
-/**
- * Rarer receipts also get a steeper lightness contrast (sky top very
- * dark, sky bottom very bright). Common receipts stay flatter.
- */
-function rarityToContrastScale(r: Rarity | null): number {
-  switch (r) {
-    case 'mythic':    return 1.16;
-    case 'legendary': return 1.10;
-    case 'epic':      return 1.05;
-    case 'rare':      return 1.00;
-    case 'uncommon':  return 0.95;
-    case 'common':    return 0.90;
-    default:          return 1.0;
-  }
+  return out;
 }
 
 /**
  * Pick a hue in degrees from a range. Ranges that exceed 360 wrap
- * naturally (e.g. [340, 380] yields 340..360..20).
+ * naturally (e.g. [340, 380] yields 340..360..20). Retained for legacy
+ * imports but no longer used inside Polaroid.
  */
 function pickHue(t: number, range: [number, number]): number {
   const [lo, hi] = range;
@@ -1315,6 +1413,11 @@ function parseHex(s: string): { r: number; g: number; b: number } | null {
 
 function clamp01(n: number): number {
   return Math.max(0, Math.min(1, n));
+}
+
+function clamp(n: number, lo: number, hi: number): number {
+  if (!Number.isFinite(n)) return (lo + hi) / 2;
+  return Math.max(lo, Math.min(hi, n));
 }
 
 function truncate(s: string, n: number): string {

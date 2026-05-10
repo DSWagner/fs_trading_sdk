@@ -206,38 +206,68 @@ Previous versions of the Polaroid built a develop filter conditionally — when 
 
 ---
 
-## Polaroid art presets (procedural palette spectrum)
+## Polaroid visual system: rarity-anchored, seed-varied
 
-Every Polaroid is rendered with a procedurally-generated palette pulled from the full HSL color spectrum. There is no preset picker: the rarity tier mapped to the bet picks a **color region** (warm sunset, cool twilight, vivid aurora, gold-leaf jewel tone, deep oracle violet, etc.), and the per-receipt seed (which incorporates every input: market id, position id, username, reasoning, prediction, spread, conviction, stake, shape, timestamp) drives the exact hue / saturation / lightness inside that region. The result is *effectively infinite* unique palettes — no two receipts can ever be visually identical, even on the same market with the same prediction.
+The Polaroid's visual is the receipt's identity. The previous iteration tried to surprise the user with eight randomly-rotated colour families — which is exactly what the user did not want: "when I literally move any of the sliders everything changes the background sky color, the sun color, the glow color every fucking thing is randomized." The current system is a complete rewrite of that: **rarity is the visual driver**, the seed only adds within-tier variation.
 
-| Color region | When the family pool picks it | Mood |
-| --- | --- | --- |
-| `sunset` | uncommon / rare tiers | Warm dusk, magenta-into-ember-into-gold gradient |
-| `twilight` | common / uncommon tiers | Cool pre-dawn, ice-blue sky and sun |
-| `aurora` | rare / epic / legendary tiers | Northern-lights blue → magenta → mint sun |
-| `botanical` | common / uncommon tiers | Verdant green field at dawn |
-| `rosegold` | rare / epic tiers | Petal sky, peach copper sun |
-| `noir` | preview / fallback | Pure greyscale (saturation 0) |
-| `goldleaf` | legendary / mythic tiers | Deep indigo sky with a hot gold sun |
-| `oracle` | epic / legendary / mythic tiers | Deep violet sky, iridescent rose sun, mint secondary |
+### The new contract
 
-Each region defines an HSL hue range. The receipt seed drives the exact hue / saturation / lightness inside that range, so two receipts that both land in `aurora` still produce different aurora colors. Combined with the rarity-driven saturation scale (Common × 0.72 → Mythic × 1.45) and conviction-driven contrast scale, every receipt gets a one-of-one palette.
+| Tier | Sky signature | Sun count | Frame | At a glance |
+| --- | --- | --- | --- | --- |
+| **Common** | Warm cream / sepia (hue ≈ 36°, low saturation 0.32) | 1 | 1px neutral | "Quiet receipt" |
+| **Uncommon** | Jade green (hue ≈ 145°, moderate sat 0.52) | 1 | 3px jade | Contrarian-and-close |
+| **Rare** | Cobalt / azure (hue ≈ 208°, sat 0.62) | 1 | 4px cobalt | Off-consensus and right |
+| **Epic** | Royal violet (hue ≈ 272°, sat 0.66) | 1 | 5px violet | Bet against the crowd |
+| **Legendary** | Amber / gold (hue ≈ 36°, sat 0.82) | **2** | 6px gold | Rare contrarian win |
+| **Mythic** | Ember / crimson (hue ≈ 16°, sat 0.92) | **3** | 7px ember | "You saw the future" |
 
-Where it is exposed in the UI:
+The rarity hue is the **anchor** for everything inside the photo: sky top, sky mid, sky bottom, sun glow, ground silhouette, ornament tick strip, even a sprinkle of "accent stars" that carry the tier colour in the constellation. The same hue ladder paints the rarity frame, the rarity stamp, the rarity hint in the bet flow, and the rarity pill in the profile gallery. Everything reads as one tier.
 
-- `BetFlow` page: no picker. The preview Polaroid updates live as the user drags any slider, with the procedural palette re-rolling on every meaningful input change (every $1 of stake, every prediction tick, every reasoning keystroke).
-- Landing page: the rarity gallery shows the same bet rendered at all six tiers so visitors can feel the rarity → palette intensity scale at a glance.
-- Receipt, Embed, and Profile pages: render whatever palette the seed produces for that exact bet — deterministic from the inputs, so the same share link always paints the same colors.
+### What the seed still does
 
-Where it lives in code:
+The seed (composed of market id, position id, username, reasoning text, prediction, spread, conviction, stake, shape, and createdAt) controls **within-tier** variation:
 
-- Procedural palette generator: `paletteFor()` and `FAMILY_REGIONS` in `components/Polaroid.tsx`. Each region defines hue ranges and a base saturation; the seed picks concrete HSL values inside the ranges and `hsl()` converts to a `#rrggbb` string.
-- Family pick (rarity → region): `pickPaletteFamily()` in `polaroidSeed.ts`, with `TIER_PALETTE_POOL` mapping each rarity to its allowed regions.
-- Rarity → saturation / contrast scaling: `rarityToSaturationScale()` and `rarityToContrastScale()` in `components/Polaroid.tsx`.
-- The seed itself: `seedFromInputs()` in `polaroidSeed.ts`, fed by `BetRecord` (`storage.ts`) and `SharedPayload` (`hash.ts`).
+- Hue jitter inside the tier's signature band (±10-15°, never enough to escape the band).
+- Saturation jitter (±0.07 absolute).
+- Lightness ladder positions (sky top, mid, bottom).
+- Sun placement: random `(x, y)` in the upper half of the photo with collision avoidance between suns. The sun does **not** track the prediction value any more — the user's prediction is already communicated by the silhouette hills and the numeric scale strip. The sun is the receipt's decorative signature, free to land wherever the seed puts it.
+- Star pattern, count, and accent-star distribution.
+- Silhouette jitter (per-receipt hills shape).
+- Ornament tick density / length / opacity (stake-driven on top of seed).
+
+The user explicitly asked for this split: "it should be either a gradient of colors corresponding to the rarity or whatever that makes sense and keeps the generated images always unique." Rarity supplies the gradient family; the seed supplies the uniqueness.
+
+### Sun count is a tier signal, not a shape signal
+
+Bimodal beliefs (two-hill silhouettes) used to draw two suns. That's gone. The user found it confusing: "the sun is always behind the center line of the curve and in bimodal the sune are not centered with the hills. Why? what does it mean?" The sun no longer encodes belief shape — the silhouette already does that. Instead:
+
+- Common / Uncommon / Rare / Epic → one sun in a seed-driven random sky position.
+- Legendary → two suns (a "main" sun plus a smaller companion, ~78% the radius).
+- Mythic → three suns (main + two companions, ~78% and ~62% the radius).
+
+Companion suns carry distinct hue rotations within the tier's accent band so the multi-sun layouts read as a celestial composition, not as cloned disks.
+
+### Reasoning quote lives over the ground, never over the sky
+
+The post-resolution reasoning quote is now anchored to `horizonY` and clipped to the ground area: `y = photoY + horizonY * photoSize + photoSize * 0.06`, `maxHeight = (1 - horizonY) * photoSize - photoSize * 0.10`. It can never spill upward over the hills, the suns, or the stars. The user fed back: "please make sure that the reasoning is always wrapped and fitted under the ground level so that the reasoning after resolution is not covering the hills and the sky but rather is always in the bottom half of the image covering only the ground and not covering the beautiful sky and hills and sun or moon or whatever it is." That is now a hard layout constraint.
+
+### Live preview also tints
+
+Open bets get a palette anchored to their **potential rarity** — the tier the user would land if they're right within ~3%. So as the user drags the prediction slider in the bet flow away from consensus, the live preview's sky shifts: from cream (common) toward jade (uncommon) toward cobalt (rare) toward violet (epic) toward gold (legendary) toward ember (mythic). The rarity stamp itself only appears on actually-resolved bets; the colour is the live preview cue.
+
+### Where it lives in code
+
+- Rarity → hue table: `RARITY_VISUAL` in `components/Polaroid.tsx`.
+- Anchored palette generator: `rarityPalette(rarity, seed, conviction, developed)` in `components/Polaroid.tsx`. Returns sky, ground, sun cores, sun glow, and accent colour as `#rrggbb` strings.
+- Sun count + placement: `sunCount()` and the seed-driven placement loop inside `buildPhoto()` in `components/Polaroid.tsx`.
+- Reasoning quote anchor: see the `ReasoningQuote` callsite that uses `photo.horizonY` for `y` and `maxHeight`.
+- Frame widths + glows per tier: `TIER_META` in `rarity.ts` (now 1 / 3 / 4 / 5 / 6 / 7 px).
+- Effective rarity for live preview: `effectiveRarity` memo in the `Polaroid` component (resolved → actual, open → `potentialRarity`).
 - Tier showcase UI: `components/StyleGallery.tsx`.
 
-This is *value-additive* visual generation, not a color reskin: the palette is one of several visual signals that encode information about the bet (rarity tier, conviction, stake, time-to-resolution). The competition rules disqualify "color palette reskins only" submissions; what we have is a procedural visual system where the colors are an emergent property of the seed.
+The legacy `pickPaletteFamily()` and `PaletteFamily` types in `polaroidSeed.ts` are kept for back-compat with stored share payloads but are no longer wired into the renderer.
+
+This is value-additive visual generation, not a colour reskin. The rarity hue carries semantic meaning (how contrarian-and-correct the user was), and the seed varies the rendition so each receipt remains one-of-one inside its tier.
 
 ---
 

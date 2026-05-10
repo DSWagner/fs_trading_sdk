@@ -304,8 +304,12 @@ describe('TIER_META — visual metadata sanity', () => {
     }
   });
 
-  it('common tier has zero border width (no visual highlight)', () => {
-    expect(TIER_META.common.borderWidth).toBe(0);
+  it('common tier has a hairline border (1px) so the receipt always reads as a card', () => {
+    // Was 0 (no border at all) but users couldn't see where the
+    // polaroid edge was on dark mode against the dark background.
+    // 1px is enough to define the silhouette without competing with the
+    // bolder rarity frames at higher tiers.
+    expect(TIER_META.common.borderWidth).toBe(1);
   });
 
   it('rarer tiers have strictly increasing visual weight', () => {
