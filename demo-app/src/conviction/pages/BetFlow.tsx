@@ -216,16 +216,13 @@ export function BetFlowPage() {
 
   const charsRemaining = Math.max(0, 400 - reasoning.length);
 
-  // Outcome used for the "After" preview: 80% of the way from the user's
-  // prediction toward the consensus mean. Gives a believable preview of
-  // what the developed receipt will look like.
-  const previewOutcome = (() => {
-    const mean = market.consensusMean;
-    if (typeof mean === 'number' && Number.isFinite(mean)) {
-      return prediction + (mean - prediction) * 0.8;
-    }
-    return prediction;
-  })();
+  // Outcome used for the "After" preview: equal to the user's prediction
+  // exactly, so the post-resolution preview always shows the fully
+  // developed, sharp, colored polaroid (i.e. "what your receipt looks
+  // like if you nail it"). The real Receipt page is what shows the
+  // ruined / undeveloped state for an actual miss — the preview never
+  // demoralizes the user mid-bet by guessing they will be wrong.
+  const previewOutcome = prediction;
 
   const expiresAt = (market as any).expiresAt ?? null;
 
@@ -304,51 +301,36 @@ export function BetFlowPage() {
   );
 
   // Chart card. On desktop this becomes part of the sticky right column
-  // alongside the polaroid; on mobile it lives inline in the form.
+  // alongside the polaroid (matched width, compact padding so the chart
+  // and the polaroid line up edge-to-edge). On mobile it lives inline in
+  // the form. The SDK's ConsensusChart renders its own title and
+  // subtitle, so the card itself stays metadata-light to avoid a wall of
+  // duplicated text above the curve.
   const chartCard = (
     <div
       style={{
         display: 'flex',
         flexDirection: 'column',
         gap: 6,
-        padding: '14px 12px 12px',
+        padding: '10px 10px 10px',
         background: palette.card,
         border: `1px solid ${palette.rule}`,
         borderRadius: 10,
         minWidth: 0,
+        width: '100%',
+        boxSizing: 'border-box',
       }}
       className="conviction-chart-shell"
     >
-      <div
-        style={{
-          fontFamily: fonts.mono,
-          fontSize: 10,
-          letterSpacing: 1.4,
-          color: palette.inkMute,
-        }}
-      >
-        CROWD vs. YOU
-      </div>
-      <div
-        style={{
-          fontFamily: fonts.body,
-          fontSize: 12,
-          color: palette.inkMute,
-          lineHeight: 1.4,
-          marginBottom: 4,
-        }}
-      >
-        Your trade preview (dashed) over the crowd's consensus (solid). The gap is your contrarian edge.
-      </div>
-      <ConsensusChart marketId={marketId} height={isMobile ? 260 : 300} />
+      <ConsensusChart marketId={marketId} height={isMobile ? 220 : 240} />
       {payout && (
         <div
           style={{
             display: 'flex',
-            gap: 16,
-            marginTop: 4,
+            gap: 14,
+            marginTop: 2,
             fontFamily: fonts.mono,
-            fontSize: 11,
+            fontSize: 10.5,
             color: palette.inkSoft,
             letterSpacing: 0.3,
             flexWrap: 'wrap',
@@ -383,7 +365,12 @@ export function BetFlowPage() {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : 'minmax(0, 1.25fr) minmax(0, 1fr)',
+          // Right column is locked to the polaroid's width (320px) so the
+          // polaroid and the consensus chart line up edge-to-edge instead
+          // of the chart spilling past the polaroid frame as it did when
+          // the column was a flex fraction (~560px wide). The left column
+          // takes everything else (~960px at the 1320px max-width).
+          gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) 320px',
           gap: isMobile ? 24 : 40,
           marginTop: 16,
         }}
@@ -594,16 +581,16 @@ export function BetFlowPage() {
               position: 'sticky',
               // The whole right column locks together at top: 88 so both
               // polaroid AND chart stay visible while the user scrolls
-              // through the form on the left. The internal flex column
-              // stacks them.
+              // through the form on the left. No internal scroll: the
+              // column width matches the polaroid and chart card so the
+              // content stacks naturally without needing an inner pane.
               top: 88,
               alignSelf: 'flex-start',
-              maxHeight: 'calc(100vh - 104px)',
-              overflowY: 'auto',
-              paddingRight: 4,
               display: 'flex',
               flexDirection: 'column',
               gap: 16,
+              width: '100%',
+              minWidth: 0,
             }}
             aria-label="Live preview of your receipt and the crowd consensus chart"
           >

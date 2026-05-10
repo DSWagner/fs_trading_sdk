@@ -265,8 +265,12 @@ export function Polaroid(props: PolaroidProps) {
   const photoX = padding;
   const photoY = padding;
 
-  // Numeric scale strip + caption area below the photo.
-  const scaleStripY = photoY + photoSize + 6;
+  // Numeric scale strip + caption area below the photo. The matte gap
+  // between the photo and the scale strip is sized to host the stake-
+  // driven ornament tick strip — at the maximum stake ticks are 11 px
+  // tall, so we keep at least ~14 px of clear matte between the photo's
+  // bottom edge and the start of the scale strip.
+  const scaleStripY = photoY + photoSize + 16;
   const scaleStripH = Math.max(28, Math.round(width * 0.1));
   const captionY = scaleStripY + scaleStripH + 4;
   const captionH = height - captionY - 12;
@@ -326,8 +330,20 @@ export function Polaroid(props: PolaroidProps) {
     : 'none';
 
   // Stake-driven frame ornament — small marks along the bottom of the
-  // photo border. More stake = more ornament ticks (visible up to 18).
-  const ornamentCount = Math.max(3, Math.min(18, Math.round(Math.log10(Math.max(1, collateral)) * 6 + 3)));
+  // photo border that read as a "weight gauge." Stake feeds three
+  // visible channels here:
+  //   - more dollars → more ticks (3 at $1, 18 at $1000+)
+  //   - more dollars → longer ticks (4px at $1, ~11px at $1000+)
+  //   - more dollars → bolder ticks (opacity ramps from 0.55 to 0.95)
+  // The previous tuning made the ticks effectively invisible, so the
+  // stake slider felt like it only randomized the colour. With these
+  // multipliers the ornament strip is the obvious "more skin in the
+  // game" indicator at every stake level.
+  const stakeUnit = clamp01(Math.log10(Math.max(1, collateral)) / 3);
+  const ornamentCount = Math.max(3, Math.min(18, Math.round(stakeUnit * 15 + 3)));
+  const ornamentLen = 4 + Math.round(stakeUnit * 7); // 4..11 px
+  const ornamentOpacity = 0.55 + stakeUnit * 0.4; // 0.55..0.95
+  const ornamentStroke = 0.9 + stakeUnit * 0.6; // 0.9..1.5
 
   // Conviction also drives a halo behind the sun: scaled radius and opacity.
   // High conviction = brighter, larger halo. Picked up automatically by
@@ -512,26 +528,6 @@ export function Polaroid(props: PolaroidProps) {
           filter={photoFilter}
         />
 
-        {/* Stake-driven ornament ticks along the bottom inside-edge of
-            the photo. More stake = more ticks. Reads as a subtle
-            "weight gauge" without explaining itself. */}
-        {Array.from({ length: ornamentCount }).map((_, i) => {
-          const tt = (i + 0.5) / ornamentCount;
-          const tickX = photoX + 6 + tt * (photoSize - 12);
-          return (
-            <line
-              key={`tick-${i}`}
-              x1={tickX}
-              y1={photoY + photoSize - 4}
-              x2={tickX}
-              y2={photoY + photoSize - 8}
-              stroke="rgba(255,255,250,0.5)"
-              strokeWidth="0.8"
-              filter={photoFilter}
-            />
-          );
-        })}
-
         {/* Outcome thread (post-resolution only) */}
         {outcomeT != null && (
           <>
@@ -650,6 +646,36 @@ export function Polaroid(props: PolaroidProps) {
         strokeWidth="0.5"
         rx="2"
       />
+
+      {/* Stake-driven ornament strip in the matte area between the photo
+          and the scale strip. Inside the photo the strip was hidden
+          behind the dark ground silhouette of most palettes; out here on
+          the cream/paper matte it reads as a clear "weight gauge":
+            - more dollars → more ticks (3 at $1, 18 at $1000+)
+            - more dollars → longer ticks (4..11 px)
+            - more dollars → bolder ticks (opacity 0.55..0.95)
+          The stroke colour follows the polaroid's ink tone so it works
+          in both light and dark themes. */}
+      <g aria-hidden="true">
+        {Array.from({ length: ornamentCount }).map((_, i) => {
+          const tt = (i + 0.5) / ornamentCount;
+          const tickX = photoX + 4 + tt * (photoSize - 8);
+          const midY = photoY + photoSize + (scaleStripY - (photoY + photoSize)) / 2;
+          return (
+            <line
+              key={`tick-${i}`}
+              x1={tickX}
+              y1={midY - ornamentLen / 2}
+              x2={tickX}
+              y2={midY + ornamentLen / 2}
+              stroke={palette.inkSoft}
+              strokeOpacity={ornamentOpacity}
+              strokeWidth={ornamentStroke}
+              strokeLinecap="round"
+            />
+          );
+        })}
+      </g>
 
       {/* Scale strip */}
       <ScaleStrip
@@ -882,16 +908,40 @@ function buildPhoto(opts: {
   // = flat horizon (uncertainty), high conviction = lifted dramatic horizon.
   const horizonY = 0.55 + (1 - opts.conviction) * 0.07 + (r2 - 0.5) * 0.05;
 
-  // Sun (or moon) — its position is locked to prediction (the principal
-  // visual readout). Its size and intensity scale with conviction AND a
-  // stake-driven bonus so a $200 stake gets a notably bigger sun than $5.
+  // Sun (or moon) — the principal visual readout. Its horizontal position
+  // tracks the DENSITY peak of the user's belief curve, not just the
+  // prediction value. That distinction matters for bimodal beliefs: the
+  // prediction value is the center BETWEEN the two peaks, so a sun
+  // pinned to `meanT` would float over the valley with the hills on
+  // either side. Instead we compute each peak's X-position from the
+  // same maths `densityAt` uses, so the suns sit directly above the
+  // hills they correspond to.
+  //
+  // For single-peak and range shapes the peak coincides with the
+  // prediction value, so this collapses to the previous behaviour and
+  // the single sun stays centred over the curve.
+  const toUnit = (x: number) => clamp01((x - opts.lowerBound) / range);
+  const isBimodal = opts.shape === 'bimodal';
+  // densityAt() for bimodal weights the right peak (0.7) heavier than
+  // the left peak (0.5), so we treat the right peak as the dominant
+  // sun and the left peak as the secondary moon.
+  const peakOffset = opts.spread * 1.6;
+  const primaryX = isBimodal ? toUnit(opts.prediction + peakOffset) : meanT;
+  const secondaryX = isBimodal ? toUnit(opts.prediction - peakOffset) : meanT;
+
+  // Stake feeds a clamped 0..1 boost that scales the sun radius, the
+  // ornament tick density, and the ornament tick length further down.
   const stakeBoost = clamp01(Math.log10(Math.max(1, opts.collateral)) / 3); // 0…1 over $1…$1000
   const sunY = horizonY - 0.18 - opts.conviction * 0.05;
-  const sunR = (opts.photoWidth * (0.16 + opts.conviction * 0.08 + stakeBoost * 0.04)) | 0;
+  // Bigger stake gets a more pronounced sun (up to +8% photo width on top
+  // of the conviction-driven sizing, was +4%). This makes the stake
+  // slider produce a visible "more skin in the game" signal rather than
+  // a barely-noticeable size delta.
+  const sunR = (opts.photoWidth * (0.14 + opts.conviction * 0.08 + stakeBoost * 0.08)) | 0;
   const sunCoreR = sunR * (0.4 + r3 * 0.1);
 
   const sun = {
-    x: meanT,
+    x: primaryX,
     y: sunY,
     r: sunR,
     coreR: sunCoreR,
@@ -899,12 +949,17 @@ function buildPhoto(opts: {
     glow: palettes.sunGlow,
   };
 
-  const sun2 = opts.shape === 'bimodal'
+  const sun2 = isBimodal
     ? {
-      x: clamp01(meanT > 0.5 ? meanT - 0.35 : meanT + 0.35),
-      y: sunY + 0.04,
-      r: sunR * 0.68,
-      coreR: sunCoreR * 0.68,
+      x: secondaryX,
+      // Secondary peak hangs a hair lower so the two suns don't read
+      // as one flat horizon of light — adds a touch of depth.
+      y: sunY + 0.03,
+      // Density weight on the secondary peak is 0.5/0.7 ≈ 0.71 of the
+      // primary's, so we scale the radius accordingly. Reads as "the
+      // less-likely peak is the smaller moon."
+      r: Math.round(sunR * 0.72),
+      coreR: sunCoreR * 0.72,
       core: palettes.sun2Core,
       glow: palettes.sunGlow,
     }
@@ -921,7 +976,12 @@ function buildPhoto(opts: {
     const sy = starRng() * horizonY * 0.85;
     const sr = 0.35 + starRng() * 1.15;
     const so = 0.3 + starRng() * 0.6;
-    if (Math.hypot(sx - sun.x, sy - sun.y) > 0.15) {
+    // Skip stars that fall under any sun (primary or, in bimodal, the
+    // secondary). Without the second check, bimodal layouts get a
+    // distracting starfield directly under the smaller moon.
+    const distToPrimary = Math.hypot(sx - sun.x, sy - sun.y);
+    const distToSecondary = sun2 ? Math.hypot(sx - sun2.x, sy - sun2.y) : Infinity;
+    if (distToPrimary > 0.15 && distToSecondary > 0.12) {
       stars.push({ x: sx, y: sy, r: sr, o: so });
     }
   }

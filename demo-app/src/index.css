@@ -152,6 +152,17 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   width: 100%;
 }
 
+/* Hide the SDK's chart title + subtitle inside the BetFlow sticky right
+ * column. The page header already shows the market title (in a much
+ * larger font), and the polaroid right above the chart reaffirms the
+ * subject as its caption. Showing the same title a third time pushes
+ * the chart further from the polaroid, which the user explicitly asked
+ * to avoid. The SDK component is left untouched; we just hide its
+ * header visually when nested inside our chart shell. */
+.conviction-chart-shell .fs-chart-header {
+  display: none !important;
+}
+
 /* Conviction: editorial loading / empty state animations. */
 @keyframes conviction-fade-in {
   from { opacity: 0; transform: translateY(4px); }
