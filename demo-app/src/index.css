@@ -176,6 +176,16 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   display: none !important;
 }
 
+/* Clip the chart-shell's children to its border-radius. Without this
+ * the Recharts SVG renders a straight-edged rectangle that pokes past
+ * the card's rounded corners on the right side, producing the
+ * "rounded-left, sharp-right" visual bug the user flagged. With
+ * overflow:hidden every corner of the chart inherits the parent's
+ * radius. */
+.conviction-chart-shell {
+  overflow: hidden;
+}
+
 /* Conviction: editorial loading / empty state animations. */
 @keyframes conviction-fade-in {
   from { opacity: 0; transform: translateY(4px); }

@@ -17,7 +17,7 @@ const BASE_URL = process.env.BASE_URL ?? 'http://localhost:3000';
 async function main() {
   await mkdir(OUT_DIR, { recursive: true });
   const browser = await chromium.launch();
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const page = await ctx.newPage();
 
   await page.goto(`${BASE_URL}/discover`, { waitUntil: 'domcontentloaded' });
