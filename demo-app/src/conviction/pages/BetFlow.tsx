@@ -57,6 +57,46 @@ export function BetFlowPage() {
   const initialisedRef = useRef(false);
   const ctxRef = useRef(ctx);
   const previewPayoutRef = useRef(previewPayout);
+
+  // Measure the right preview column so the polaroid and chart can size
+  // themselves to fill that 50% half of the page. We pass the same
+  // width to both visualisations so they have IDENTICAL dimensions in
+  // the column stack (polaroid on top, chart on bottom).
+  //
+  // We use a CALLBACK REF (not a normal ref + useEffect) so the
+  // ResizeObserver is set up the moment the aside mounts — which can
+  // happen after the component's first render (we early-return on
+  // loading/error states, then re-render with the aside attached). A
+  // useEffect with `[]` deps would miss that because it runs once on
+  // mount when the aside hasn't been rendered yet.
+  const [previewColumnWidth, setPreviewColumnWidth] = useState<number>(520);
+  const previewObserverRef = useRef<ResizeObserver | null>(null);
+  const setPreviewColumnRef = useCallback((el: HTMLElement | null) => {
+    previewObserverRef.current?.disconnect();
+    previewObserverRef.current = null;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    // Seed immediately with current width so we don't flash at the
+    // initial 520 state before the observer fires.
+    setPreviewColumnWidth(Math.floor(el.getBoundingClientRect().width));
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setPreviewColumnWidth(Math.floor(entry.contentRect.width));
+      }
+    });
+    ro.observe(el);
+    previewObserverRef.current = ro;
+  }, []);
+  useEffect(() => {
+    return () => {
+      previewObserverRef.current?.disconnect();
+      previewObserverRef.current = null;
+    };
+  }, []);
+  // Clamp to sane bounds so the polaroid never becomes microscopic or
+  // ridiculously huge. At a typical 1440 viewport the right column is
+  // ~680 px wide, so the polaroid hits the 600 cap.
+  const previewVisualWidth = Math.max(280, Math.min(600, previewColumnWidth));
+  const previewVisualHeight = Math.round(previewVisualWidth * 1.5);
   useEffect(() => {
     ctxRef.current = ctx;
     previewPayoutRef.current = previewPayout;
@@ -258,7 +298,7 @@ export function BetFlowPage() {
       shape={shape}
       lowerBound={lowerBound}
       upperBound={upperBound}
-      width={overrideWidth ?? (isMobile ? 280 : 420)}
+      width={overrideWidth ?? (isMobile ? 280 : previewVisualWidth)}
       expiresAt={expiresAt}
       resolutionState={previewMode === 'after' ? 'resolved' : 'open'}
       resolvedOutcome={previewMode === 'after' ? previewOutcome : null}
@@ -305,21 +345,24 @@ export function BetFlowPage() {
     </div>
   );
 
-  // Chart card. On desktop this sits SIDE-BY-SIDE with the polaroid in
-  // the wide sticky right column, fills the remaining horizontal space,
-  // and stretches vertically to match the polaroid block height (so the
-  // two visualisations form a balanced 2-up composition). On mobile it
-  // lives inline in the form.
+  // Chart card. On desktop this sits DIRECTLY UNDER the polaroid in the
+  // right column (50% of page width). The card width/height match the
+  // polaroid exactly so the two visualisations stack as two identically-
+  // sized rectangles (the user explicitly asked for "same width and
+  // height" with polaroid on top, chart on bottom).
   //
-  // The SDK's ConsensusChart renders its own title and subtitle, so the
-  // card stays metadata-light (we hide the duplicate title via CSS in
-  // index.css) to avoid a wall of repeated text above the curve.
+  // The SDK's ConsensusChart renders its own title and subtitle, which
+  // we hide via CSS (.conviction-chart-shell .fs-chart-header) so the
+  // chart sits cleanly inside our card without a duplicate header. The
+  // shell also gets overflow:hidden so the Recharts SVG is clipped to
+  // the card's rounded corners (fixes the rounded-left/sharp-right
+  // corner bug).
   //
-  // Chart height bumped to 600 desktop so it visually balances the
-  // 630-tall polaroid next to it. The card itself has overflow:hidden
-  // applied via CSS so the Recharts SVG's straight right edge is
-  // clipped to the card's rounded corners (without this the chart
-  // had the "rounded on the left, sharp on the right" bug).
+  // Chart inner height = polaroidHeight - card chrome (padding +
+  // payout strip + gap). This makes the OUTER chart card match the
+  // polaroid OUTER dimensions exactly.
+  const chartChromeHeight = 12 /* top pad */ + 14 /* bottom pad */ + 6 /* gap */ + (payout ? 20 : 0);
+  const chartInnerHeight = isMobile ? 220 : Math.max(240, previewVisualHeight - chartChromeHeight);
   const chartCard = (
     <div
       style={{
@@ -338,7 +381,7 @@ export function BetFlowPage() {
       className="conviction-chart-shell"
     >
       <div style={{ flex: '1 1 auto', minHeight: 0 }}>
-        <ConsensusChart marketId={marketId} height={isMobile ? 220 : 600} />
+        <ConsensusChart marketId={marketId} height={chartInnerHeight} />
       </div>
       {payout && (
         <div
@@ -382,16 +425,15 @@ export function BetFlowPage() {
       <div
         style={{
           display: 'grid',
-          // Flipped proportions. LEFT column is now locked at 360px —
-          // just enough to host the (compressed) form chrome. RIGHT
-          // column takes everything else, which at 1440 max-width gives
-          // it ~1040px (≈ 2/3 of the page). Inside the right column
-          // the polaroid and the chart sit side-by-side so BOTH
-          // visualisations dominate the page and are visible
-          // simultaneously without scrolling.
-          gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : '360px minmax(0, 1fr)',
+          // 50:50 split. The left column holds the form (sliders,
+          // shape chips, reasoning textarea, submit button). The right
+          // column holds the polaroid stacked above the chart, both
+          // sized to identical width and height so the right half of
+          // the page reads as a clean two-up vertical stack.
+          gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) minmax(0, 1fr)',
           gap: isMobile ? 24 : 32,
           marginTop: 16,
+          alignItems: 'start',
         }}
       >
         <div>
@@ -599,21 +641,18 @@ export function BetFlowPage() {
 
         {!isMobile && (
           <aside
+            ref={setPreviewColumnRef}
             style={{
-              position: 'sticky',
-              // Right column sticks at top: 88 so both polaroid and
-              // chart stay visible while the user scrolls the form on
-              // the left. Inside we put the LIVE PREVIEW header above
-              // a flex-row that hosts the polaroid + chart side-by-
-              // side; that way the visualisations are vertically
-              // aligned at the top (without the header on top of one
-              // but not the other, which would offset them).
-              top: 88,
-              alignSelf: 'flex-start',
+              // Right column = 50% of the page. Polaroid sits on top,
+              // chart sits directly below, both rendered at IDENTICAL
+              // dimensions (previewVisualWidth x previewVisualHeight).
+              // We center the stack inside the column so each
+              // visualisation has consistent breathing room on either
+              // side regardless of viewport size.
               display: 'flex',
               flexDirection: 'column',
-              alignItems: 'stretch',
-              gap: 12,
+              alignItems: 'center',
+              gap: 16,
               width: '100%',
               minWidth: 0,
             }}
@@ -621,6 +660,8 @@ export function BetFlowPage() {
           >
             <div
               style={{
+                width: previewVisualWidth,
+                maxWidth: '100%',
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
@@ -640,38 +681,18 @@ export function BetFlowPage() {
               </div>
               {previewToggle}
             </div>
+            <div style={{ width: previewVisualWidth, maxWidth: '100%' }}>
+              {previewPolaroid}
+            </div>
             <div
               style={{
+                width: previewVisualWidth,
+                maxWidth: '100%',
+                height: previewVisualHeight,
                 display: 'flex',
-                flexDirection: 'row',
-                flexWrap: 'wrap',
-                alignItems: 'flex-start',
-                gap: 24,
-                minWidth: 0,
               }}
             >
-              <div
-                style={{
-                  // Polaroid keeps its intrinsic width (420 desktop)
-                  // and does not flex.
-                  flex: '0 0 auto',
-                }}
-              >
-                {previewPolaroid}
-              </div>
-              <div
-                style={{
-                  // Chart fills the remainder of the row, wrapping
-                  // beneath the polaroid only when squeezed below
-                  // 360 px wide.
-                  flex: '1 1 360px',
-                  minWidth: 0,
-                  display: 'flex',
-                  alignSelf: 'stretch',
-                }}
-              >
-                {chartCard}
-              </div>
+              {chartCard}
             </div>
           </aside>
         )}

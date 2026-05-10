@@ -17,7 +17,7 @@ const BASE_URL = process.env.BASE_URL ?? 'http://localhost:3000';
 async function main() {
   await mkdir(OUT_DIR, { recursive: true });
   const browser = await chromium.launch();
-  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 1800 } });
   const page = await ctx.newPage();
 
   await page.goto(`${BASE_URL}/discover`, { waitUntil: 'domcontentloaded' });
@@ -26,6 +26,26 @@ async function main() {
   const href = await firstMarket.getAttribute('href');
   await page.goto(`${BASE_URL}${href}`, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1500);
+
+  // Verify the polaroid and chart card render at IDENTICAL dimensions.
+  // The user explicitly asked for "same width and height" in a column
+  // stack — this assertion guards against future regressions.
+  const dims = await page.evaluate(() => {
+    const aside = document.querySelector('aside[aria-label*="Live preview"]');
+    const polaroid = aside?.querySelector('svg');
+    const chartShell = aside?.querySelector('.conviction-chart-shell');
+    const chartWrap = chartShell?.parentElement;
+    return {
+      polaroidW: Math.round(polaroid?.getBoundingClientRect().width ?? 0),
+      polaroidH: Math.round(polaroid?.getBoundingClientRect().height ?? 0),
+      chartW: Math.round(chartWrap?.getBoundingClientRect().width ?? 0),
+      chartH: Math.round(chartWrap?.getBoundingClientRect().height ?? 0),
+    };
+  });
+  console.log('PREVIEW DIMS', JSON.stringify(dims));
+  if (dims.polaroidW !== dims.chartW || dims.polaroidH !== dims.chartH) {
+    throw new Error(`Polaroid and chart card dimensions must match. Got ${JSON.stringify(dims)}`);
+  }
 
   await page.screenshot({ path: join(OUT_DIR, 'betflow-before.png'), fullPage: false });
 
