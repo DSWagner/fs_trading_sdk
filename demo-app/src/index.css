@@ -64,3 +64,75 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
     transition-duration: 0.001ms !important;
   }
 }
+
+/* Conviction: professional range slider. Native accent-color renders the
+   filled portion in ember without a visible thumb on Chrome/Edge, which
+   reads as a solid red bar. We override with a thin track and a clearly
+   visible circular thumb. */
+.conviction-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  background: #E8DFD3;
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+  padding: 0;
+  margin: 6px 0;
+}
+
+.conviction-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  background: transparent;
+  border-radius: 3px;
+}
+.conviction-slider::-moz-range-track {
+  height: 4px;
+  background: #E8DFD3;
+  border-radius: 3px;
+  border: none;
+}
+
+.conviction-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #FBF6EE;
+  border: 2px solid #C2410C;
+  box-shadow: 0 1px 3px rgba(26, 24, 20, 0.18);
+  cursor: grab;
+  margin-top: -7px;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+.conviction-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #FBF6EE;
+  border: 2px solid #C2410C;
+  box-shadow: 0 1px 3px rgba(26, 24, 20, 0.18);
+  cursor: grab;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+
+.conviction-slider:hover::-webkit-slider-thumb {
+  transform: scale(1.08);
+  box-shadow: 0 2px 8px rgba(194, 65, 12, 0.32);
+}
+.conviction-slider:hover::-moz-range-thumb {
+  transform: scale(1.08);
+  box-shadow: 0 2px 8px rgba(194, 65, 12, 0.32);
+}
+
+.conviction-slider:active::-webkit-slider-thumb { cursor: grabbing; }
+.conviction-slider:active::-moz-range-thumb { cursor: grabbing; }
+
+.conviction-slider:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 4px rgba(194, 65, 12, 0.22);
+}
+.conviction-slider:focus-visible::-moz-range-thumb {
+  box-shadow: 0 0 0 4px rgba(194, 65, 12, 0.22);
+}

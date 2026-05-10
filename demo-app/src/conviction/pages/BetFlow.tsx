@@ -250,7 +250,14 @@ export function BetFlowPage() {
         ← Back to Discover
       </Link>
 
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.4fr 1fr', gap: isMobile ? 24 : 40, marginTop: 16 }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 1.4fr) minmax(0, 1fr)',
+          gap: isMobile ? 24 : 40,
+          marginTop: 16,
+        }}
+      >
         <div>
           <span style={{ fontFamily: fonts.mono, fontSize: 11, color: palette.ember, letterSpacing: 1.6 }}>
             STAKE A CONVICTION
@@ -736,13 +743,13 @@ function Slider({
         </span>
       </div>
       <input
+        className="conviction-slider"
         type="range"
         min={min}
         max={max}
         step={step}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        style={{ width: '100%', accentColor: palette.ember }}
       />
     </div>
   );
