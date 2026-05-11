@@ -11,8 +11,40 @@ html, body, #root {
   text-rendering: optimizeLegibility;
 }
 
+/* Defensive overflow clip on the html element.
+ *
+ * Without this, any element wider than the viewport (most commonly a
+ * fixed-width SVG that has not yet been constrained by max-width: 100%, or
+ * an intermediate React state where layout settles but content has not
+ * caught up) widens the document, which extends the horizontal scrollbar,
+ * which on subsequent re-layout passes can grow further when nested sticky
+ * elements re-measure against the new document width. The result is an
+ * infinitely growing horizontal scrollbar on browser zoom. Clipping the
+ * html element guarantees the document never extends beyond the viewport
+ * regardless of layout instability inside.
+ *
+ * `overflow-x: clip` is used in preference to `hidden` because it does not
+ * create a new containing block for `position: fixed` descendants (so the
+ * sticky NavBar and the sticky live-preview aside continue to anchor to
+ * the visual viewport correctly). Children that legitimately need to
+ * scroll horizontally (e.g. the mobile polaroid stack on the landing page)
+ * still establish their own scroll context on their own container.
+ */
+html {
+  overflow-x: clip;
+}
+
 #root {
   min-height: 100vh;
+}
+
+/* SVG polaroids must NEVER extend past their container's width. Without
+ * this, on browser zoom or narrow viewports the explicit width attribute
+ * the component sets on the SVG element wins over the container layout,
+ * which pushes the document horizontally wider than the viewport. */
+svg[role="img"][aria-label^="Polaroid receipt"] {
+  max-width: 100%;
+  height: auto;
 }
 
 a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible {
@@ -25,11 +57,16 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   body { font-size: 15px; }
 }
 
-/* Conviction: keep the consensus chart's legend from colliding with the X-axis label */
+/* Conviction: keep the consensus chart's legend from colliding with the
+ * X-axis label AND inside the bordered card. The earlier `bottom: -10px`
+ * override pushed the legend past the card's rounded bottom edge on most
+ * desktop widths; the chart-shell now reserves enough bottom padding
+ * (28px) to host the legend natively, so the legend just needs to be in
+ * the document flow with no negative offset. */
 .conviction-chart-shell .recharts-legend-wrapper {
   padding-top: 14px !important;
   position: relative !important;
-  bottom: -10px !important;
+  bottom: auto !important;
 }
 .conviction-chart-shell .recharts-default-legend {
   display: flex !important;
@@ -37,9 +74,29 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   justify-content: center !important;
   gap: 6px 18px !important;
   margin: 0 !important;
+  padding: 0 8px !important;
 }
 .conviction-chart-shell .recharts-legend-item {
   margin-right: 0 !important;
+}
+
+/* Constrain Recharts wrappers to the card width so on very narrow zooms
+ * the SVG can't push the card wider. We force the wrapper width so the
+ * absolutely-positioned ResponsiveContainer never overshoots its parent
+ * (which on mobile sat at ~354 while the container itself was 380). */
+.conviction-chart-shell .recharts-wrapper,
+.conviction-chart-shell .recharts-responsive-container {
+  max-width: 100% !important;
+  width: 100% !important;
+}
+
+/* The chart-shell's inner SDK container has `width: 100%`. We further
+ * constrain min-width to 0 so its content's intrinsic width cannot
+ * push the column past the viewport on narrow zooms. */
+.conviction-chart-shell .fs-chart-container,
+.conviction-chart-shell .fs-chart-body {
+  min-width: 0;
+  width: 100%;
 }
 
 /* Conviction: editorial loading / empty state animations. */

@@ -302,7 +302,20 @@ export function BetFlowPage() {
   );
 
   return (
-    <div style={{ maxWidth: 1120, margin: '0 auto', padding: isMobile ? '20px 16px 56px' : '32px 24px 80px' }}>
+    <div
+      style={{
+        maxWidth: 1120,
+        margin: '0 auto',
+        padding: isMobile ? '20px 16px 56px' : '32px 24px 80px',
+        // Belt-and-braces: even with minmax(0, ...) on the grid tracks and
+        // max-width: 100% on the polaroid SVGs, third-party chart libs
+        // (Recharts in this case) occasionally render absolutely-positioned
+        // sub-elements that overshoot the parent by a few pixels. Clip at
+        // the BetFlow outer wrapper so those never reach the document
+        // edge and trigger a horizontal scrollbar.
+        overflowX: 'clip',
+      }}
+    >
       <Link
         to="/discover"
         style={{ fontFamily: fonts.body, fontSize: 13, color: palette.inkMute, textDecoration: 'none', letterSpacing: 0.3 }}
@@ -313,7 +326,16 @@ export function BetFlowPage() {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 1.4fr) minmax(0, 1fr)',
+          // CRITICAL: every grid track uses minmax(0, ...) instead of bare
+          // 1fr. Bare `1fr` resolves to `minmax(min-content, 1fr)`, which
+          // lets the column expand past the viewport when any descendant
+          // exposes a large intrinsic min-content (Recharts' Responsive-
+          // Container, polaroid SVGs with explicit width attrs, etc.).
+          // With minmax(0, 1fr) the column is allowed to be as small as
+          // 0 and content must shrink to fit. Without this, on narrow
+          // viewports the document widens to ~1500px and the horizontal
+          // scrollbar appears to grow infinitely on zoom.
+          gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : 'minmax(0, 1.4fr) minmax(0, 1fr)',
           gap: isMobile ? 24 : 40,
           marginTop: 16,
         }}
@@ -551,7 +573,13 @@ export function BetFlowPage() {
                 background: palette.card,
                 border: `1px solid ${palette.rule}`,
                 borderRadius: 8,
-                padding: '12px 12px 28px',
+                // Bottom padding hosts the Recharts legend natively now
+                // that we no longer offset it past the card.
+                padding: '12px 12px 16px',
+                // Prevents the chart from forcing its grid track wider on
+                // narrow zoom levels. Recharts tooltips render via a fixed-
+                // position layer that escapes this constraint.
+                minWidth: 0,
               }}
             >
               <ConsensusChart marketId={marketId} height={320} />
