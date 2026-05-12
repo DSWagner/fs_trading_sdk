@@ -312,11 +312,15 @@ describe('TIER_META — visual metadata sanity', () => {
     expect(TIER_META.common.borderWidth).toBe(1);
   });
 
-  it('rarer tiers have strictly increasing visual weight', () => {
-    // We do not strictly require monotonic increase across every pair, but
-    // mythic must out-weight common, and legendary must out-weight rare.
-    expect(TIER_META.mythic.borderWidth).toBeGreaterThan(TIER_META.common.borderWidth);
-    expect(TIER_META.legendary.borderWidth).toBeGreaterThan(TIER_META.rare.borderWidth);
+  it('every rarity tier above common shares the same border thickness', () => {
+    // Per user feedback: the colored border MUST be the same thickness
+    // across rarities so the rarity color (not the frame width) is what
+    // changes. Common is the only exception - it has no rarity color
+    // and uses a thin 1 px neutral edge.
+    const above = ['uncommon', 'rare', 'epic', 'legendary', 'mythic'] as const;
+    const widths = above.map((t) => TIER_META[t].borderWidth);
+    expect(new Set(widths).size).toBe(1);
+    expect(widths[0]).toBeGreaterThan(TIER_META.common.borderWidth);
   });
 
   it('RARITY_ORDER lists tiers from common to mythic', () => {

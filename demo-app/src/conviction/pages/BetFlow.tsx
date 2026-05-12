@@ -763,9 +763,17 @@ export function BetFlowPage() {
             <div style={{ width: previewVisualWidth, maxWidth: '100%' }}>
               {previewPolaroid}
             </div>
+            {/* Chart wrapper now fills the FULL aside width while the
+                polaroid stays at its 1.5 portrait ratio above. The user
+                explicitly asked the chart to fit the aside width because
+                forcing it to match the polaroid width was making the
+                consensus curves look compressed. The chart's height is
+                still tied to the polaroid's height so the polaroid +
+                chart stack still bottoms out at the same y as the form
+                column. */}
             <div
               style={{
-                width: previewVisualWidth,
+                width: '100%',
                 maxWidth: '100%',
                 height: previewVisualHeight,
                 display: 'flex',

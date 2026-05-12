@@ -31,14 +31,22 @@ async function main() {
       polaroidH: Math.round(polaroid?.getBoundingClientRect().height ?? 0),
       chartW: Math.round(chartWrap?.getBoundingClientRect().width ?? 0),
       chartH: Math.round(chartWrap?.getBoundingClientRect().height ?? 0),
+      asideW: Math.round(aside?.getBoundingClientRect().width ?? 0),
       formH: Math.round(formCol?.getBoundingClientRect().height ?? 0),
       asideH: Math.round(aside?.getBoundingClientRect().height ?? 0),
     };
   });
   console.log(`VIEWPORT ${VIEWPORT} DIMS`, JSON.stringify(dims));
 
-  if (dims.polaroidW !== dims.chartW || dims.polaroidH !== dims.chartH) {
-    throw new Error(`Polaroid and chart card dimensions must match. Got ${JSON.stringify(dims)}`);
+  const expectedPolaroidH = Math.round(dims.polaroidW * 1.5);
+  if (Math.abs(dims.polaroidH - expectedPolaroidH) > 2) {
+    throw new Error(`Polaroid must keep a 1.5 portrait aspect ratio. Got ${dims.polaroidW}x${dims.polaroidH}.`);
+  }
+  if (dims.chartW <= dims.polaroidW) {
+    throw new Error(`Chart should be wider than the polaroid. Got chartW=${dims.chartW}, polaroidW=${dims.polaroidW}.`);
+  }
+  if (dims.chartW < dims.asideW * 0.95) {
+    throw new Error(`Chart should fill (most of) the aside width. Got chartW=${dims.chartW}, asideW=${dims.asideW}.`);
   }
   if (Math.abs(dims.formH - dims.asideH) > 4) {
     throw new Error(`Form column and visualisations column must end at the same height. Got formH=${dims.formH}, asideH=${dims.asideH}`);

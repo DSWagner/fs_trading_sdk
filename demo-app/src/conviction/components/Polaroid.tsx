@@ -482,8 +482,13 @@ export function Polaroid(props: PolaroidProps) {
         </clipPath>
       </defs>
 
-      {/* Rarity halo behind the card */}
-      {rarityMeta && rarityMeta.borderWidth > 0 && (
+      {/* Rarity halo behind the card. Only emitted for tiers above
+          common - common uses a thin neutral theme-aware edge with no
+          halo so it reads as the baseline. Tiers above common share a
+          UNIFORM 5 px frame in their rarity color (set in TIER_META)
+          plus a soft 7 px halo so the rarity hue is unmistakable in
+          both light and dark modes. */}
+      {rarityMeta && rarity && rarity !== 'common' && (
         <rect
           x={rarityMeta.borderWidth / 2}
           y={rarityMeta.borderWidth / 2}
@@ -493,7 +498,7 @@ export function Polaroid(props: PolaroidProps) {
           fill="none"
           stroke={rarityMeta.color}
           strokeWidth={rarityMeta.borderWidth + 2}
-          opacity="0.18"
+          opacity="0.22"
         />
       )}
       <rect
@@ -503,8 +508,8 @@ export function Polaroid(props: PolaroidProps) {
         height={height}
         rx="6"
         fill={palette.card}
-        stroke={rarityMeta && rarityMeta.borderWidth > 0 ? rarityMeta.color : palette.rule}
-        strokeWidth={rarityMeta && rarityMeta.borderWidth > 0 ? rarityMeta.borderWidth : 1}
+        stroke={rarityMeta && rarity && rarity !== 'common' ? rarityMeta.color : palette.rule}
+        strokeWidth={rarityMeta && rarity && rarity !== 'common' ? rarityMeta.borderWidth : 1}
       />
 
       {/* Photo */}

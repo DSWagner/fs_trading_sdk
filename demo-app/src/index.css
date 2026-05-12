@@ -1,10 +1,14 @@
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;0,9..144,800;1,9..144,400;1,9..144,500;1,9..144,600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital,wght@0,400;1,400&family=Space+Grotesk:wght@300;400;500;600;700&family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&display=swap');
 
 /*
  * Semantic theme variables. Light mode is the default; setting
  * `data-theme="dark"` on the root flips every value. The JS `palette`
  * object in `theme.ts` references these variables, so every component
  * follows the active theme without any prop drilling.
+ *
+ * Palette: pastel orange + pastel purple. The neutrals are faintly
+ * purple-tinted in both modes so the whole UI feels like one coherent
+ * "rare" family rather than a generic cream-and-ember Claude default.
  *
  * Why CSS vars over a React context:
  *   - Zero-cost: no re-renders on theme toggle
@@ -13,42 +17,48 @@
  *   - The whole UI swaps in a single style recalc, ~1 paint
  */
 :root {
-  --c-paper: #FBF6EE;
-  --c-paper-deep: #F3EADA;
-  --c-card: #FFFCF6;
-  --c-ink: #1A1814;
-  --c-ink-soft: #3F3A33;
-  --c-ink-mute: #6B5E50;
-  --c-ink-fade: #9C8E7E;
-  --c-rule: #E5DCCB;
-  --c-rule-soft: #EFE6D6;
-  --c-ember: #C2410C;
-  --c-ember-deep: #7C2D12;
-  --c-teal: #0E7490;
-  --c-jade: #15803D;
-  --c-rose: #9F1239;
-  --c-shadow: rgba(60, 40, 20, 0.12);
-  --c-shadow-deep: rgba(60, 40, 20, 0.22);
+  --c-paper: #FAF6FB;
+  --c-paper-deep: #F0EAF4;
+  --c-card: #FFFFFF;
+  --c-ink: #2A1B3D;
+  --c-ink-soft: #4D3D63;
+  --c-ink-mute: #7B6E8E;
+  --c-ink-fade: #B0A4C0;
+  --c-rule: #E5DCEE;
+  --c-rule-soft: #F0E9F5;
+  --c-ember: #E68A4F;
+  --c-ember-deep: #C26B30;
+  --c-teal: #9B7EC8;
+  --c-jade: #7BAA76;
+  --c-rose: #C45A6E;
+  --c-shadow: rgba(45, 25, 70, 0.10);
+  --c-shadow-deep: rgba(45, 25, 70, 0.18);
+  /* Slider thumb track that does not need to change between modes
+   * because it always sits on a card (which already flips). */
+  --c-slider-thumb-bg: #FFFFFF;
+  --c-slider-track: #E5DCEE;
   color-scheme: light;
 }
 
 :root[data-theme="dark"] {
-  --c-paper: #13110E;
-  --c-paper-deep: #0B0A08;
-  --c-card: #1B1814;
-  --c-ink: #F5EFE3;
-  --c-ink-soft: #D0C8B8;
-  --c-ink-mute: #9A917F;
-  --c-ink-fade: #5F584C;
-  --c-rule: #2A2520;
-  --c-rule-soft: #231F1B;
-  --c-ember: #F26B1F;
-  --c-ember-deep: #C2410C;
-  --c-teal: #2DA8B8;
-  --c-jade: #5DC18A;
-  --c-rose: #E04668;
-  --c-shadow: rgba(0, 0, 0, 0.50);
-  --c-shadow-deep: rgba(0, 0, 0, 0.70);
+  --c-paper: #161122;
+  --c-paper-deep: #0E0A18;
+  --c-card: #1E1830;
+  --c-ink: #F0E8F5;
+  --c-ink-soft: #C9BCD8;
+  --c-ink-mute: #9388AB;
+  --c-ink-fade: #5C4F73;
+  --c-rule: #2D2440;
+  --c-rule-soft: #211B33;
+  --c-ember: #F4A572;
+  --c-ember-deep: #E68A4F;
+  --c-teal: #C5A3F0;
+  --c-jade: #95C68A;
+  --c-rose: #E07F94;
+  --c-shadow: rgba(0, 0, 0, 0.45);
+  --c-shadow-deep: rgba(0, 0, 0, 0.65);
+  --c-slider-thumb-bg: #1E1830;
+  --c-slider-track: #2D2440;
   color-scheme: dark;
 }
 
@@ -57,7 +67,7 @@ html, body, #root {
   padding: 0;
   background: var(--c-paper);
   color: var(--c-ink);
-  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-family: 'Space Grotesk', system-ui, -apple-system, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
@@ -101,7 +111,7 @@ svg[role="img"][aria-label^="Polaroid receipt"] {
 }
 
 a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible {
-  outline: 2px solid #C2410C;
+  outline: 2px solid var(--c-ember);
   outline-offset: 2px;
 }
 
@@ -131,6 +141,49 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 }
 .conviction-chart-shell .recharts-legend-item {
   margin-right: 0 !important;
+}
+
+/* Force chart text to follow the active theme.
+ *
+ * Recharts paints SVG <text> using a `fill` attribute that is set once
+ * at the FunctionSpace SDK theme construction (it does not honor CSS
+ * variables natively). On dark mode that means the legend, axis tick
+ * labels, axis line, and tooltip text would otherwise be painted with
+ * the LIGHT-mode hex value the SDK was constructed with, which renders
+ * as low-contrast or invisible against the dark aubergine card. We
+ * override here using the active CSS variables so the chart text stays
+ * legible in both modes.
+ *
+ * `!important` is necessary because Recharts inlines `style="fill: ..."`
+ * on most of these elements; only an `!important` rule wins. */
+.conviction-chart-shell .recharts-legend-item-text,
+.conviction-chart-shell .recharts-text {
+  fill: var(--c-ink-soft) !important;
+  color: var(--c-ink-soft) !important;
+}
+.conviction-chart-shell .recharts-cartesian-axis-tick text,
+.conviction-chart-shell .recharts-cartesian-axis-tick-value {
+  fill: var(--c-ink-mute) !important;
+}
+.conviction-chart-shell .recharts-cartesian-axis-line,
+.conviction-chart-shell .recharts-cartesian-axis-tick-line {
+  stroke: var(--c-rule) !important;
+}
+.conviction-chart-shell .recharts-cartesian-grid-horizontal line,
+.conviction-chart-shell .recharts-cartesian-grid-vertical line {
+  stroke: var(--c-rule) !important;
+  stroke-opacity: 0.5;
+}
+/* Recharts tooltip: paint the floating panel to read in either mode. */
+.conviction-chart-shell .recharts-tooltip-wrapper .recharts-default-tooltip {
+  background: var(--c-card) !important;
+  border: 1px solid var(--c-rule) !important;
+  border-radius: 6px !important;
+  box-shadow: 0 6px 18px var(--c-shadow) !important;
+}
+.conviction-chart-shell .recharts-tooltip-wrapper .recharts-tooltip-label,
+.conviction-chart-shell .recharts-tooltip-wrapper .recharts-tooltip-item {
+  color: var(--c-ink) !important;
 }
 
 /* Constrain Recharts wrappers to the card width so on very narrow zooms
@@ -215,13 +268,17 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
    visible circular thumb.
    Sizes compressed from track 4px / thumb 18px down to track 3px /
    thumb 14px so the form chrome reads as small alongside the much
-   larger polaroid + chart on the right of the bet flow page. */
+   larger polaroid + chart on the right of the bet flow page.
+
+   Colors now go through CSS variables so the slider follows the active
+   theme - a pale lavender track with a card-colored thumb ringed in
+   pastel orange, in both light and dark modes. */
 .conviction-slider {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
   height: 3px;
-  background: #E8DFD3;
+  background: var(--c-slider-track);
   border-radius: 3px;
   outline: none;
   cursor: pointer;
@@ -236,7 +293,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 }
 .conviction-slider::-moz-range-track {
   height: 3px;
-  background: #E8DFD3;
+  background: var(--c-slider-track);
   border-radius: 3px;
   border: none;
 }
@@ -247,9 +304,9 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: #FBF6EE;
-  border: 2px solid #C2410C;
-  box-shadow: 0 1px 3px rgba(26, 24, 20, 0.18);
+  background: var(--c-slider-thumb-bg);
+  border: 2px solid var(--c-ember);
+  box-shadow: 0 1px 3px var(--c-shadow);
   cursor: grab;
   margin-top: -5.5px;
   transition: transform 120ms ease, box-shadow 120ms ease;
@@ -258,28 +315,36 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: #FBF6EE;
-  border: 2px solid #C2410C;
-  box-shadow: 0 1px 3px rgba(26, 24, 20, 0.18);
+  background: var(--c-slider-thumb-bg);
+  border: 2px solid var(--c-ember);
+  box-shadow: 0 1px 3px var(--c-shadow);
   cursor: grab;
   transition: transform 120ms ease, box-shadow 120ms ease;
 }
 
 .conviction-slider:hover::-webkit-slider-thumb {
   transform: scale(1.08);
-  box-shadow: 0 2px 8px rgba(194, 65, 12, 0.32);
+  box-shadow: 0 2px 8px var(--c-shadow-deep);
 }
 .conviction-slider:hover::-moz-range-thumb {
   transform: scale(1.08);
-  box-shadow: 0 2px 8px rgba(194, 65, 12, 0.32);
+  box-shadow: 0 2px 8px var(--c-shadow-deep);
 }
 
 .conviction-slider:active::-webkit-slider-thumb { cursor: grabbing; }
 .conviction-slider:active::-moz-range-thumb { cursor: grabbing; }
 
 .conviction-slider:focus-visible::-webkit-slider-thumb {
-  box-shadow: 0 0 0 4px rgba(194, 65, 12, 0.22);
+  box-shadow: 0 0 0 4px var(--c-shadow-deep);
 }
 .conviction-slider:focus-visible::-moz-range-thumb {
-  box-shadow: 0 0 0 4px rgba(194, 65, 12, 0.22);
+  box-shadow: 0 0 0 4px var(--c-shadow-deep);
+}
+
+/* Display headings. Instrument Serif is variable-optical-size; we set a
+ * sensible "opsz" so display sizes get the elegant, slightly tightened
+ * cuts rather than the default text-size geometry. */
+h1, h2, h3 {
+  font-family: 'Instrument Serif', 'Cormorant Garamond', Georgia, serif;
+  font-feature-settings: 'liga' 1, 'kern' 1;
 }

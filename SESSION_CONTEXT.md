@@ -1,6 +1,6 @@
 # Session handoff: Conviction (FS Trading SDK competition entry)
 
-> Last updated: 2026-05-12 (after the resize-stability + form-height-match fix)
+> Last updated: 2026-05-12 (after the palette + font + chart-width overhaul)
 > Parent transcript: `[Where we are right now](b5263758-f700-4040-9a30-693a3a1cf730)`
 
 ## TL;DR for the next session
@@ -40,7 +40,8 @@ Architectural rules: this repo is a strict 3-layer monorepo (`core` -> `react` -
 
 | SHA       | Title                                                                                                       |
 |-----------|-------------------------------------------------------------------------------------------------------------|
-| _pending_ | fix(conviction): pin preview createdAt + measure form natural height so columns truly match                 |
+| _pending_ | feat(conviction): pastel purple + pastel orange palette, distinctive font stack, chart fills aside, uniform rarity border |
+| `7ce9c8e` | fix(conviction): pin preview createdAt + measure form natural height so columns truly match                 |
 | `1aff35d` | polaroid + chart scale down so right column matches form height (width floor 280 -> 220)                    |
 | `e756ce3` | rarity-colored skies (grey/green/blue/purple/gold/orange) + lower-anchored reasoning quote                  |
 | `93e78eb` | 50:50 BetFlow layout with stacked equal-size visualisations (ResizeObserver via callback ref)               |
@@ -55,7 +56,7 @@ Architectural rules: this repo is a strict 3-layer monorepo (`core` -> `react` -
 The BetFlow page must satisfy ALL of these. The snapshot script `scripts/verify-conviction/snapshot-betflow.mjs` asserts the dimensions; do not break the assertions.
 
 1. **50:50 grid** at desktop: `gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)'`. Left column = form. Right column = polaroid stacked above chart.
-2. **Polaroid and chart have IDENTICAL bounding rects**. Both width and height must match (DOM-verified by the snapshot assertion `dims.polaroidW !== dims.chartW || dims.polaroidH !== dims.chartH`).
+2. **Polaroid keeps its 1.5 portrait ratio at `previewVisualWidth`. Chart is wider** - the chart wrapper is `width: 100%` so it fills the entire aside (`asideW`), which is wider than the polaroid by design. The user explicitly asked for this: forcing them to identical width compressed the consensus curves. The snapshot script asserts `polaroidH ~ polaroidW * 1.5`, `chartW > polaroidW`, and `chartW >= asideW * 0.95`.
 3. **Both columns end at the same vertical position**. The snapshot asserts `Math.abs(dims.formH - dims.asideH) <= 4`. The mechanism: the form column has TWO nested divs - an outer wrapper that carries `min-height: rightColumnTotalHeight` (so the grid cell stretches via `alignItems: stretch`), and an inner div with the `ResizeObserver` callback ref that measures the form's NATURAL content height (free of any min-height). The polaroid + chart are sized so their stacked height equals that natural height (down to a `MIN_VISUAL_WIDTH = 200` floor). When the floor kicks in, the outer wrapper's `min-height` keeps the columns matching at the bottom. This nested structure is the fix for the 2x mismatch the user reported - in the previous setup the ResizeObserver was on the same div as the min-height, so the observed value was the inflated one and the visuals were sized to match the inflated value, leaving the form's natural content much shorter than the visible right column.
 
 4. **Live preview polaroid is invariant under resize/zoom**. The `createdAt` prop on the preview Polaroid is pinned via `useMemo(() => new Date().toISOString(), [])`. Every parent re-render (resize, zoom, slider drag for unrelated state) used to fire the inline `new Date().toISOString()` JSX expression, which fed the polaroid seed via `seedFromInputs(...createdAt)` and reshuffled the suns and stars. The verify script `scripts/verify-conviction/verify-resize-stable.mjs` asserts the SVG signature is byte-identical across 1440 -> 1200 -> 1024 -> 1440 resizes.
@@ -93,6 +94,8 @@ const setRef = useCallback((el: HTMLElement | null) => {
 | legendary | 48      | 0.86 | luminous gold YELLOW |
 | mythic    | 24      | 0.92 | warm ORANGE          |
 
+**Polaroid frame thickness is UNIFORM at 5 px for every tier above common.** Common keeps a thin theme-aware 1 px neutral edge (using `palette.rule`, NOT a hardcoded grey, so it adapts to dark mode). Per user request: "make the border thickness the same and make the border slightly thicker so we can see the color in both dark mode and light mode." The COLOR is what changes between rarities, not the thickness. `RARITY_BORDER_WIDTH = 5` constant is defined at the top of `TIER_META` to enforce this.
+
 The develop filter in `Polaroid.tsx` (`photoSat`, `sepia`, `photoBlur` around line 384) must remain GENTLE (sat cut `* 0.25`, sepia `* 0.18`, blur `* 1.8`). The previous values (sat `* 0.75`, sepia `* 0.70`) washed every tier brown in the live preview and the user explicitly demanded the rarity hue stay visible during the "developing" animation.
 
 Verification script: `scripts/verify-conviction/snapshot-betflow-tiers.mjs`. Run it after any change to `RARITY_VISUAL`, `TIER_META`, or the develop filter. It walks the prediction slider across the six tiers and saves `snapshots/preview-tier-{common,uncommon,rare,epic,legendary,mythic}.png`.
@@ -107,6 +110,34 @@ const quoteAnchorY = photoY + photoSize * quoteAnchorFrac;
 ```
 
 This guarantees the quote scrim sits in the lower 28% of the photo no matter where `horizonY` lands. The quote MUST NOT touch the sky, the suns, or the mountain silhouette. User has flagged this regression three separate times in this conversation.
+
+## Palette + font contract (do not break casually)
+
+The user explicitly asked for a NON-Claude-default palette and font stack. The combination is "epic + mythic" rarity colors translated into a UI palette: pastel orange + pastel purple, with deep aubergine ink in light mode and lavender cream in dark mode.
+
+| Role        | Light hex   | Dark hex    | Notes                                                  |
+|-------------|-------------|-------------|--------------------------------------------------------|
+| paper       | `#FAF6FB`   | `#161122`   | Page background; faint lavender in light, deep aubergine in dark |
+| paper-deep  | `#F0EAF4`   | `#0E0A18`   | Footer / pressed states                                |
+| card        | `#FFFFFF`   | `#1E1830`   | Elevated surfaces (polaroid frame, chart, sliders)     |
+| ink         | `#2A1B3D`   | `#F0E8F5`   | Primary text                                           |
+| ink-soft    | `#4D3D63`   | `#C9BCD8`   | Body text, chart legend                                |
+| ink-mute    | `#7B6E8E`   | `#9388AB`   | Subtitles, axis ticks                                  |
+| ink-fade    | `#B0A4C0`   | `#5C4F73`   | Disabled / very subtle                                 |
+| rule        | `#E5DCEE`   | `#2D2440`   | Card borders, axis lines, polaroid common edge          |
+| ember       | `#E68A4F`   | `#F4A572`   | Pastel orange. Primary CTA, slider thumb ring          |
+| ember-deep  | `#C26B30`   | `#E68A4F`   | Hover / active                                         |
+| teal (purple) | `#9B7EC8` | `#C5A3F0`   | Pastel purple secondary accent. Variable name kept for backwards-compat with `palette.teal` call sites |
+| jade        | `#7BAA76`   | `#95C68A`   | Sage green for positive                                |
+| rose        | `#C45A6E`   | `#E07F94`   | Dusty rose for negative                                |
+
+Fonts:
+
+- **Display** = `"Instrument Serif"` (Google Fonts variable optical size, less mainstream than Fraunces/Playfair, slightly Bodoni-tinged)
+- **Body** = `"Space Grotesk"` (more personality than Inter, recognizable but not overplayed)
+- **Mono** = `"DM Mono"` (typewriter feel that fits the polaroid+receipts theme; replaces JetBrains Mono)
+
+Recharts dark-mode contrast: the SDK chart paints SVG `<text>` with a `fill` attribute set ONCE at provider construction (does not honor CSS variables natively). To keep legend / axis text / tick lines / tooltip readable on the dark aubergine card we override via CSS in `index.css` (search for ".conviction-chart-shell .recharts-text" and surrounding rules). Necessary because the chart provider is constructed in light mode and Recharts inlines `style="fill:..."` on text elements; only an `!important` rule wins.
 
 ## Open user-facing items (none blocking)
 

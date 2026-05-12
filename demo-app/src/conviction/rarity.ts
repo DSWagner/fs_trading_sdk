@@ -145,17 +145,23 @@ interface TierMeta {
  * to keep the rarity stamp consistent with the rest of the receipt.
  */
 /**
- * Per-tier visual treatment. Border widths and glow intensities were
- * bumped 2-3x from their original values because the user fed back that
- * the rarity tinge "as a thin frame around the polaroid is very poor
- * and almost not even visible." Now the rarer tiers wear a bold,
- * unmistakable frame in the tier signature colour, and the rarity
- * tinge also propagates through the polaroid's sky / sun glow /
- * ornament strip (see Polaroid.tsx rarityPalette).
+ * Per-tier visual treatment. Border widths are now UNIFORM at 5 px for
+ * every tier above common - the user explicitly asked that the colored
+ * frame be the same thickness across rarities and slightly thicker than
+ * the previous 1-7 px progression so the rarity hue is unmistakable in
+ * both light and dark modes. Common keeps a thin neutral 1 px stroke
+ * (no rarity color) so the rarer tiers still stand out as "stamped"
+ * versus the commodity baseline.
+ *
+ * The rarity tinge also propagates through the polaroid's sky / sun
+ * glow / ornament strip (see Polaroid.tsx `rarityPalette`).
  */
+const RARITY_BORDER_WIDTH = 5;
+
 export const TIER_META: Record<Rarity, TierMeta> = {
   common: {
-    // GREY — like any basic loot drop in any game. Neutral slate.
+    // GREY - like any basic loot drop in any game. Neutral slate. Thin
+    // border (1 px) because there is no rarity stamp to highlight.
     label: 'Common',
     color: '#8E8E93',
     glowColor: 'transparent',
@@ -165,51 +171,51 @@ export const TIER_META: Record<Rarity, TierMeta> = {
     badgeText: '#4A4A50',
   },
   uncommon: {
-    // GREEN — emerald / jade.
+    // GREEN - emerald / jade.
     label: 'Uncommon',
     color: '#33B26B',
     glowColor: 'rgba(51,178,107,0.40)',
-    borderWidth: 3,
+    borderWidth: RARITY_BORDER_WIDTH,
     badgeFill: '#DCF1E5',
     badgeStroke: '#33B26B',
     badgeText: '#1F6A40',
   },
   rare: {
-    // BLUE — azure / cobalt.
+    // BLUE - azure / cobalt.
     label: 'Rare',
     color: '#2E7DDC',
     glowColor: 'rgba(46,125,220,0.50)',
-    borderWidth: 4,
+    borderWidth: RARITY_BORDER_WIDTH,
     badgeFill: '#D6E6FA',
     badgeStroke: '#2E7DDC',
     badgeText: '#1A4A82',
   },
   epic: {
-    // PURPLE — violet / royal purple.
+    // PURPLE - violet / royal purple.
     label: 'Epic',
     color: '#9B4DD8',
     glowColor: 'rgba(155,77,216,0.60)',
-    borderWidth: 5,
+    borderWidth: RARITY_BORDER_WIDTH,
     badgeFill: '#EEDFFA',
     badgeStroke: '#9B4DD8',
     badgeText: '#542080',
   },
   legendary: {
-    // GOLDISH YELLOW — clearly yellow, not amber/brown.
+    // GOLDISH YELLOW - clearly yellow, not amber/brown.
     label: 'Legendary',
     color: '#F2C13B',
     glowColor: 'rgba(242,193,59,0.70)',
-    borderWidth: 6,
+    borderWidth: RARITY_BORDER_WIDTH,
     badgeFill: '#FDF3D4',
     badgeStroke: '#F2C13B',
     badgeText: '#6E5410',
   },
   mythic: {
-    // WARM ORANGE — clearly orange, not red.
+    // WARM ORANGE - clearly orange, not red.
     label: 'Mythic',
     color: '#EE6B1F',
     glowColor: 'rgba(238,107,31,0.80)',
-    borderWidth: 7,
+    borderWidth: RARITY_BORDER_WIDTH,
     badgeFill: '#FFE5D2',
     badgeStroke: '#EE6B1F',
     badgeText: '#6B2A07',

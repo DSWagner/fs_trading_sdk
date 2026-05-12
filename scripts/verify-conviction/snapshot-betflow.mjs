@@ -27,32 +27,40 @@ async function main() {
   await page.goto(`${BASE_URL}${href}`, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1500);
 
-  // Verify the polaroid and chart card render at IDENTICAL dimensions
-  // AND that the form column ends at the same vertical position as the
-  // visualisations column. The user explicitly asked for "same width
-  // and height" in a column stack AND for the two halves of the page
-  // to "end at the same height" — these assertions guard against
-  // future regressions.
+  // Verify the layout invariants the user has asked for:
+  //   1. Polaroid keeps its 1.5 portrait aspect ratio (height = 1.5 * width).
+  //   2. The chart fills the aside width (chartW close to asideW) while
+  //      the polaroid stays narrower than the chart - the user explicitly
+  //      asked for the chart to widen past the polaroid because forcing
+  //      them to identical width compressed the consensus curves.
+  //   3. The form column and the aside end at the same vertical position
+  //      so neither half has orphaned empty space below it.
   const dims = await page.evaluate(() => {
     const aside = document.querySelector('aside[aria-label*="Live preview"]');
     const polaroid = aside?.querySelector('svg');
     const chartShell = aside?.querySelector('.conviction-chart-shell');
     const chartWrap = chartShell?.parentElement;
-    // The form column is the first grid child (the div that contains
-    // the H1 and the form fields, sibling of the aside).
     const formCol = aside?.parentElement?.firstElementChild;
     return {
       polaroidW: Math.round(polaroid?.getBoundingClientRect().width ?? 0),
       polaroidH: Math.round(polaroid?.getBoundingClientRect().height ?? 0),
       chartW: Math.round(chartWrap?.getBoundingClientRect().width ?? 0),
       chartH: Math.round(chartWrap?.getBoundingClientRect().height ?? 0),
+      asideW: Math.round(aside?.getBoundingClientRect().width ?? 0),
       formH: Math.round(formCol?.getBoundingClientRect().height ?? 0),
       asideH: Math.round(aside?.getBoundingClientRect().height ?? 0),
     };
   });
   console.log('PREVIEW DIMS', JSON.stringify(dims));
-  if (dims.polaroidW !== dims.chartW || dims.polaroidH !== dims.chartH) {
-    throw new Error(`Polaroid and chart card dimensions must match. Got ${JSON.stringify(dims)}`);
+  const expectedPolaroidH = Math.round(dims.polaroidW * 1.5);
+  if (Math.abs(dims.polaroidH - expectedPolaroidH) > 2) {
+    throw new Error(`Polaroid must keep a 1.5 portrait aspect ratio. Got ${dims.polaroidW}x${dims.polaroidH}, expected height ~${expectedPolaroidH}.`);
+  }
+  if (dims.chartW <= dims.polaroidW) {
+    throw new Error(`Chart should be wider than the polaroid. Got chartW=${dims.chartW}, polaroidW=${dims.polaroidW}.`);
+  }
+  if (dims.chartW < dims.asideW * 0.95) {
+    throw new Error(`Chart should fill (most of) the aside width. Got chartW=${dims.chartW}, asideW=${dims.asideW}.`);
   }
   if (Math.abs(dims.formH - dims.asideH) > 4) {
     throw new Error(`Form column and visualisations column must end at the same height. Got formH=${dims.formH}, asideH=${dims.asideH}`);
