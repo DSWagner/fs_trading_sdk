@@ -1550,14 +1550,27 @@ function formatScaleNumber(value: number, units: string): string {
   if (!Number.isFinite(value)) return '—';
   const absV = Math.abs(value);
   let formatted: string;
+  // Locale is HARD-CODED to 'en-US' (not `undefined`) on purpose. The
+  // polaroid is a frozen artifact: when a user shares /r/{id} or an
+  // /e/{id} embed, the receipt must render IDENTICALLY for every
+  // viewer regardless of their browser locale. With `undefined` a
+  // German viewer's browser would render 1374 as "1.374" (period as
+  // thousands separator) while a US viewer's browser would render it
+  // as "1,374", and the polaroid would show different scale strips
+  // for the same shared link. Pinning to 'en-US' guarantees that the
+  // numeric scale strip ("you · 1,374") looks the same everywhere
+  // the polaroid is shared. See the dark-mode receipt screenshot the
+  // user flagged where "1.374" was misread as a one-point-three-
+  // seven-four decimal instead of one thousand three hundred and
+  // seventy four.
   if (absV >= 10_000) {
-    formatted = (value / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 }) + 'k';
+    formatted = (value / 1000).toLocaleString('en-US', { maximumFractionDigits: 1 }) + 'k';
   } else if (absV >= 100) {
-    formatted = value.toLocaleString(undefined, { maximumFractionDigits: 0 });
+    formatted = value.toLocaleString('en-US', { maximumFractionDigits: 0 });
   } else if (absV >= 1) {
-    formatted = value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+    formatted = value.toLocaleString('en-US', { maximumFractionDigits: 2 });
   } else {
-    formatted = value.toLocaleString(undefined, { maximumFractionDigits: 3 });
+    formatted = value.toLocaleString('en-US', { maximumFractionDigits: 3 });
   }
   return units ? `${formatted}${needsSpaceBeforeUnits(units) ? ' ' : ''}${units}` : formatted;
 }

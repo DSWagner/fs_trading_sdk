@@ -31,6 +31,28 @@ export interface ConsensusChartContentProps {
   height: number;
   overlayCurves?: OverlayCurve[];
   zoomable?: boolean;
+  /**
+   * Custom formatter for the X-axis tick labels (the outcome scale).
+   * Defaults to `v.toFixed(1)`. Passing a smarter formatter is the
+   * preferred way to display integer-priced markets without trailing
+   * `.0` decimals (e.g. `(v) => Math.round(v).toLocaleString('en-US')`).
+   */
+  xAxisTickFormatter?: (value: number) => string;
+  /**
+   * Custom formatter for the Y-axis tick labels (probability density).
+   * Defaults to `v.toFixed(3)`. Pass a smarter formatter when the
+   * density values fall outside the range that 3 fixed decimals
+   * displays cleanly.
+   */
+  yAxisTickFormatter?: (value: number) => string;
+  /**
+   * Custom formatter for the tooltip "Outcome" label and the
+   * consensus / preview / selected / payout values. Receives the raw
+   * value and a kind discriminator so a single function can format
+   * every tooltip line. Defaults to the existing `.toFixed(...)`
+   * behavior.
+   */
+  tooltipValueFormatter?: (value: number, kind: 'outcome' | 'consensus' | 'preview' | 'selected' | 'payout' | 'overlay') => string;
 }
 
 export function ConsensusChartContent({
@@ -39,6 +61,9 @@ export function ConsensusChartContent({
   height,
   overlayCurves,
   zoomable,
+  xAxisTickFormatter,
+  yAxisTickFormatter,
+  tooltipValueFormatter,
 }: ConsensusChartContentProps) {
   const ctx = useContext(FunctionSpaceContext);
   if (!ctx) throw new Error('ConsensusChartContent must be used within FunctionSpaceProvider');
@@ -160,46 +185,51 @@ export function ConsensusChartContent({
   const hasSelected = ctx.selectedPosition !== null;
   const hasPayout = chartData.some((d) => d.payout !== undefined);
 
+  const formatTooltip = (value: number, kind: 'outcome' | 'consensus' | 'preview' | 'selected' | 'payout' | 'overlay'): string => {
+    if (tooltipValueFormatter) return tooltipValueFormatter(value, kind);
+    if (kind === 'payout') return value.toFixed(2);
+    return value.toFixed(4);
+  };
+
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload?.length) return null;
     return (
       <div className="fs-tooltip">
-        <p className="fs-tooltip-label">Outcome: {Number(label).toFixed(4)}</p>
+        <p className="fs-tooltip-label">Outcome: {formatTooltip(Number(label), 'outcome')}</p>
         {payload.map((entry: any, i: number) => {
           if (entry.dataKey === 'consensus') {
             return (
               <p key={i} className="fs-tooltip-row" style={{ color: ctx.chartColors.consensus }}>
-                Market Consensus: {entry.value?.toFixed(4)}
+                Market Consensus: {entry.value !== undefined ? formatTooltip(entry.value, 'consensus') : ''}
               </p>
             );
           }
           if (entry.dataKey === 'preview') {
             return (
               <p key={i} className="fs-tooltip-row" style={{ color: ctx.chartColors.previewLine }}>
-                Trade Preview: {entry.value?.toFixed(4)}
+                Trade Preview: {entry.value !== undefined ? formatTooltip(entry.value, 'preview') : ''}
               </p>
             );
           }
           if (entry.dataKey === 'selected') {
             return (
               <p key={i} className="fs-tooltip-row" style={{ color: ctx.chartColors.positions[0] }}>
-                Selected Position: {entry.value?.toFixed(4)}
+                Selected Position: {entry.value !== undefined ? formatTooltip(entry.value, 'selected') : ''}
               </p>
             );
           }
           if (entry.dataKey === 'payout' && entry.value > 0) {
             return (
               <p key={i} className="fs-tooltip-row" style={{ color: ctx.chartColors.payout }}>
-                Potential Payout: ${entry.value?.toFixed(2)}
+                Potential Payout: ${formatTooltip(entry.value, 'payout')}
               </p>
             );
           }
-          // Handle overlay curves
           const overlay = overlayCurves?.find(o => o.id === entry.dataKey);
           if (overlay && entry.value !== undefined) {
             return (
               <p key={i} className="fs-tooltip-row" style={{ color: overlay.color || ctx.chartColors.payout }}>
-                {overlay.label}: {entry.value?.toFixed(4)}
+                {overlay.label}: {formatTooltip(entry.value, 'overlay')}
               </p>
             );
           }
@@ -243,7 +273,7 @@ export function ConsensusChartContent({
             domain={zoomable ? zoom.xDomain : ['dataMin', 'dataMax']}
             allowDataOverflow={zoomable && zoom.isZoomed}
             tick={{ fill: ctx.chartColors.axisText, fontSize: 12 }}
-            tickFormatter={(v: number) => v.toFixed(1)}
+            tickFormatter={xAxisTickFormatter ?? ((v: number) => v.toFixed(1))}
             label={{
               value: `Outcome${market?.xAxisUnits ? ` (${market.xAxisUnits})` : ''}`,
               position: 'insideBottom',
@@ -257,7 +287,7 @@ export function ConsensusChartContent({
             yAxisId="left"
             domain={densityDomain}
             tick={{ fill: ctx.chartColors.axisText, fontSize: 10 }}
-            tickFormatter={(v: number) => v.toFixed(3)}
+            tickFormatter={yAxisTickFormatter ?? ((v: number) => v.toFixed(3))}
             label={{
               value: 'Probability Density',
               angle: -90,
@@ -381,6 +411,12 @@ export interface ConsensusChartProps {
   height?: number;
   overlayCurves?: OverlayCurve[];
   zoomable?: boolean;
+  /** See ConsensusChartContentProps.xAxisTickFormatter. */
+  xAxisTickFormatter?: (value: number) => string;
+  /** See ConsensusChartContentProps.yAxisTickFormatter. */
+  yAxisTickFormatter?: (value: number) => string;
+  /** See ConsensusChartContentProps.tooltipValueFormatter. */
+  tooltipValueFormatter?: (value: number, kind: 'outcome' | 'consensus' | 'preview' | 'selected' | 'payout' | 'overlay') => string;
 }
 
 export function ConsensusChart({
@@ -388,6 +424,9 @@ export function ConsensusChart({
   height = 300,
   overlayCurves,
   zoomable,
+  xAxisTickFormatter,
+  yAxisTickFormatter,
+  tooltipValueFormatter,
 }: ConsensusChartProps) {
   const ctx = useContext(FunctionSpaceContext);
   if (!ctx) throw new Error('ConsensusChart must be used within FunctionSpaceProvider');
@@ -435,6 +474,9 @@ export function ConsensusChart({
         height={height}
         overlayCurves={overlayCurves}
         zoomable={zoomable}
+        xAxisTickFormatter={xAxisTickFormatter}
+        yAxisTickFormatter={yAxisTickFormatter}
+        tooltipValueFormatter={tooltipValueFormatter}
       />
     </div>
   );

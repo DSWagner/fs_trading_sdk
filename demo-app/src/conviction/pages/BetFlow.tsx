@@ -114,7 +114,15 @@ export function BetFlowPage() {
   // polaroid + gap between polaroid and chart. We subtract this from
   // formColumnHeight to compute the budget that the two visualisations
   // can share. Each visualisation gets exactly half.
-  const RIGHT_COL_CHROME = 30 /* header */ + 16 /* header→polaroid gap */ + 16 /* polaroid→chart gap */;
+  //
+  // The header is given the FULL aside width via the markup below
+  // (rather than the narrower previewVisualWidth) so the "LIVE
+  // PREVIEW · YOUR RECEIPT" label and the BEFORE/AFTER toggle stay
+  // on a single line at all desktop sizes. That fixes the alignment
+  // bug the user flagged: when the header wrapped to two lines the
+  // chrome silently grew from ~36 px to ~72 px and the right column
+  // ended up ~40 px taller than the form column.
+  const RIGHT_COL_CHROME = 36 /* single-line header row */ + 16 /* header→polaroid gap */ + 16 /* polaroid→chart gap */;
   // Width floor for the polaroid + chart. Below this the SVG glyphs in
   // the polaroid footer become unreadable. We deliberately set this
   // LOWER than the form's natural content height implies so the visuals
@@ -133,19 +141,36 @@ export function BetFlowPage() {
   // means the observed value is the form's NATURAL content height,
   // independent of any min-height we apply, so there is no oscillating
   // loop between "form taller -> visuals taller -> form taller".
-  const heightDerivedVisualHeight = Math.max(MIN_VISUAL_WIDTH * 1.5, (formColumnHeight - RIGHT_COL_CHROME) / 2);
+  // Floor on EACH visual's height. With MIN_VISUAL_WIDTH of 200, the
+  // ratio-locked floor on a single visual is 300 px tall.
+  const MIN_VISUAL_HEIGHT = MIN_VISUAL_WIDTH * 1.5;
+  // Floor on the WHOLE right-column stack (chrome + 2 visuals).
+  const MIN_VISUAL_TOTAL = RIGHT_COL_CHROME + 2 * MIN_VISUAL_HEIGHT;
+  const heightDerivedVisualHeight = Math.max(MIN_VISUAL_HEIGHT, (formColumnHeight - RIGHT_COL_CHROME) / 2);
   const heightDerivedVisualWidth = heightDerivedVisualHeight / 1.5;
   const previewVisualWidth = Math.max(
     MIN_VISUAL_WIDTH,
     Math.min(600, previewColumnWidth, heightDerivedVisualWidth),
   );
   const previewVisualHeight = Math.round(previewVisualWidth * 1.5);
-  // Final right-column height: header + 2 visualisations + gaps. The
-  // LEFT column wrapper gets this as its min-height so when the form's
-  // natural content is shorter than the visuals' floored size, the two
-  // columns still end at the same vertical position. When the form's
-  // natural content is TALLER than this, the visuals grow to match
-  // (because formColumnHeight feeds previewVisualHeight).
+  // Final right-column height: header + 2 visualisations + gaps.
+  //
+  // The LEFT column has TWO mechanisms working together to bottom-align
+  // its CTA with the right column's chart bottom (the user's reported
+  // "chart is lower than the rest of the elements" issue):
+  //
+  //   1. The inner form column has `min-height: MIN_VISUAL_TOTAL` so
+  //      it never shrinks below the visuals' floored size. This makes
+  //      the form column observably as tall as the right column when
+  //      the visuals hit their floor, so the columns end at the same
+  //      vertical position.
+  //   2. The auth + CTA group inside the inner form column carries
+  //      `margin-top: auto` (the inner div is `display: flex; flex-
+  //      direction: column`), which pushes the CTA to the bottom of
+  //      whatever container height the column ends up at. Combined
+  //      with (1), this means the CTA visually lands at the chart's
+  //      bottom y, eliminating the dead-space-below-CTA gap that the
+  //      user flagged.
   const rightColumnTotalHeight = RIGHT_COL_CHROME + 2 * previewVisualHeight;
   // Stable ISO timestamp for the live-preview polaroid. Computing this
   // inline (e.g. `createdAt={new Date().toISOString()}`) re-evaluated
@@ -375,7 +400,7 @@ export function BetFlowPage() {
         background: palette.card,
         border: `1px solid ${palette.rule}`,
         borderRadius: 999,
-        marginBottom: 10,
+        flexShrink: 0,
       }}
     >
       {(['before', 'after'] as const).map((mode) => (
@@ -439,7 +464,28 @@ export function BetFlowPage() {
       className="conviction-chart-shell"
     >
       <div style={{ flex: '1 1 auto', minHeight: 0 }}>
-        <ConsensusChart marketId={marketId} height={chartInnerHeight} />
+        <ConsensusChart
+          marketId={marketId}
+          height={chartInnerHeight}
+          xAxisTickFormatter={(v) => formatMarketNumber(v)}
+          yAxisTickFormatter={(v) => {
+            // Probability density values are typically tiny (0.0008 etc).
+            // Render them with as few characters as possible: 0 stays
+            // "0", and small values stick to 3 decimal places. This
+            // keeps the Y-axis tick column narrow so the chart curve
+            // gets more horizontal real estate.
+            if (v === 0) return '0';
+            if (Math.abs(v) >= 0.01) return v.toFixed(2);
+            return v.toFixed(3);
+          }}
+          tooltipValueFormatter={(value, kind) => {
+            if (kind === 'outcome') return formatMarketNumber(value);
+            if (kind === 'payout') {
+              return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            }
+            return value.toLocaleString('en-US', { maximumFractionDigits: 4 });
+          }}
+        />
       </div>
       {payout && (
         <div
@@ -454,8 +500,8 @@ export function BetFlowPage() {
             flexWrap: 'wrap',
           }}
         >
-          <span>MAX PAYOUT ${payout.maxPayout.toFixed(2)}</span>
-          <span>AT {payout.maxPayoutOutcome.toFixed(2)} {market.xAxisUnits ?? ''}</span>
+          <span>MAX PAYOUT ${payout.maxPayout.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+          <span>AT {formatMarketNumber(payout.maxPayoutOutcome)} {market.xAxisUnits ?? ''}</span>
         </div>
       )}
     </div>
@@ -498,23 +544,41 @@ export function BetFlowPage() {
         }}
       >
         <div
+          data-betflow-form-outer
           style={{
-            // OUTER form-column wrapper. Carries the min-height that
-            // stretches the column to match the visualisations on the
-            // right when the form's natural content is shorter than
-            // the floored polaroid+chart stack. The inner div below
-            // (with the ResizeObserver ref) is what we MEASURE: it is
-            // free of any min-height, so the observed value is always
-            // the form's pure natural content height. That breaks the
-            // feedback loop where a min-height-inflated form fed back
-            // into a larger right column which fed back into a larger
-            // min-height, leaving the form invisibly stretched (no
-            // background) and the user perceiving the right column as
-            // ~2x taller than the form.
-            minHeight: isMobile ? undefined : rightColumnTotalHeight,
+            // OUTER form-column wrapper. Mostly transparent now. The
+            // inner ref'd div below carries the min-height that
+            // stretches the column to match the right side. Keeping
+            // this outer wrapper around so the grid cell has a clean
+            // single-child structure even on mobile (where the inner
+            // gets `display: block` and no min-height).
+            display: 'flex',
+            flexDirection: 'column',
           }}
         >
-        <div ref={setFormColumnRef}>
+        <div
+          ref={setFormColumnRef}
+          data-betflow-form-inner
+          style={{
+            // The inner ref'd div is what the ResizeObserver MEASURES.
+            // Carrying min-height here (rather than on the outer
+            // wrapper) means the observed height is the floored
+            // value, which keeps the visuals computation stable and
+            // makes the right column's chart bottom land exactly at
+            // the column bottom in BOTH the "form natural >= floor"
+            // and "form natural < floor" cases.
+            //
+            // Display flex + flex-direction column is what enables
+            // `margin-top: auto` on the auth+CTA group below to push
+            // the CTA to the bottom of the column whenever the floor
+            // is in effect. When the form's natural content height
+            // exceeds the floor, marginTop:auto has no effect and the
+            // CTA sits at its natural position.
+            display: 'flex',
+            flexDirection: 'column',
+            minHeight: isMobile ? undefined : MIN_VISUAL_TOTAL,
+          }}
+        >
           <span style={{ fontFamily: fonts.mono, fontSize: 10.5, color: palette.ember, letterSpacing: 1.6 }}>
             STAKE A CONVICTION
           </span>
@@ -535,8 +599,8 @@ export function BetFlowPage() {
             {market.title}
           </h1>
           <div style={{ fontFamily: fonts.body, color: palette.inkMute, fontSize: isMobile ? 12 : 13, marginBottom: 16 }}>
-            Range {lowerBound}–{upperBound} {market.xAxisUnits ?? ''} · Pool ${(market.totalVolume ?? 0).toFixed(0)} ·
-            Consensus µ {(market.consensusMean ?? 0).toFixed(1)} {market.xAxisUnits ?? ''}
+            Range {formatMarketNumber(lowerBound)}{'\u2013'}{formatMarketNumber(upperBound)} {market.xAxisUnits ?? ''} · Pool ${formatMarketNumber(market.totalVolume ?? 0)} ·
+            Consensus µ {formatMarketNumber(market.consensusMean ?? 0)} {market.xAxisUnits ?? ''}
           </div>
 
           {isMobile && (
@@ -681,53 +745,75 @@ export function BetFlowPage() {
             />
           </Section>
 
-          {!isAuthenticated && (
-            <div style={{ marginTop: 24 }}>
-              <AuthGate />
-            </div>
-          )}
+          {/* Auth + CTA group. Carries `margin-top: auto` so it floats
+              to the bottom of the inner form column when the column
+              is taller than its natural content (i.e. when the right
+              column's polaroid + chart stack is taller than the form
+              and pushes the column's min-height up). The result: the
+              CTA bottom lines up with the chart bottom, eliminating
+              the visual "form ends 20 px above the chart" gap the
+              user reported. When the form's natural content already
+              exceeds the column floor, marginTop:auto is a no-op. */}
+          <div data-betflow-cta-group style={{ marginTop: 'auto', paddingTop: 24 }}>
+            {!isAuthenticated && (
+              <div style={{ marginBottom: 22 }}>
+                <AuthGate />
+              </div>
+            )}
 
-          <button
-            onClick={handleSubmit}
-            disabled={!isAuthenticated || submitting || buyLoading || !reasoning.trim()}
-            style={{
-              width: '100%',
-              marginTop: 22,
-              padding: '13px 20px',
-              background: isAuthenticated && reasoning.trim() ? palette.ember : palette.rule,
-              color: palette.card,
-              border: 'none',
-              borderRadius: 7,
-              fontFamily: fonts.display,
-              fontSize: 16,
-              fontWeight: 700,
-              letterSpacing: -0.1,
-              cursor: isAuthenticated && reasoning.trim() && !submitting ? 'pointer' : 'not-allowed',
-              boxShadow: `0 3px 10px ${palette.shadow}`,
-            }}
-          >
-            {submitting || buyLoading
-              ? 'Signing receipt…'
-              : !reasoning.trim()
-              ? 'Write your reasoning to bet'
-              : `Stake $${collateral} · Sign my receipt →`}
-          </button>
-          {(submitError || buyError) && (
-            <p style={{ fontFamily: fonts.body, color: palette.rose, marginTop: 12 }}>{submitError ?? buyError?.message}</p>
-          )}
+            <button
+              data-betflow-cta
+              onClick={handleSubmit}
+              disabled={!isAuthenticated || submitting || buyLoading || !reasoning.trim()}
+              style={{
+                width: '100%',
+                padding: '13px 20px',
+                // Active state: pastel-orange ember background with the
+                // card color (= white in light, deep aubergine in dark)
+                // for the label.
+                // Disabled state: rule-colored background + ink-mute
+                // label, so the text stays clearly readable in dark
+                // mode (where palette.card is dark aubergine and would
+                // wash against the dark rule background).
+                background: isAuthenticated && reasoning.trim() ? palette.ember : palette.rule,
+                color: isAuthenticated && reasoning.trim() ? palette.card : palette.inkMute,
+                border: 'none',
+                borderRadius: 7,
+                fontFamily: fonts.display,
+                fontSize: 16,
+                fontWeight: 700,
+                letterSpacing: -0.1,
+                cursor: isAuthenticated && reasoning.trim() && !submitting ? 'pointer' : 'not-allowed',
+                boxShadow: isAuthenticated && reasoning.trim() ? `0 3px 10px ${palette.shadow}` : 'none',
+                transition: 'background 160ms, box-shadow 160ms, color 160ms',
+              }}
+            >
+              {submitting || buyLoading
+                ? 'Signing receipt…'
+                : !reasoning.trim()
+                ? 'Write your reasoning to bet'
+                : `Stake $${collateral} · Sign my receipt →`}
+            </button>
+            {(submitError || buyError) && (
+              <p style={{ fontFamily: fonts.body, color: palette.rose, marginTop: 12 }}>{submitError ?? buyError?.message}</p>
+            )}
+          </div>
         </div>
         </div>
 
         {!isMobile && (
           <aside
             ref={setPreviewColumnRef}
+            data-betflow-aside
             style={{
               // Right column = 50% of the page. Polaroid sits on top,
-              // chart sits directly below, both rendered at IDENTICAL
-              // dimensions (previewVisualWidth x previewVisualHeight).
-              // We center the stack inside the column so each
-              // visualisation has consistent breathing room on either
-              // side regardless of viewport size.
+              // chart sits directly below. The polaroid keeps its 1.5
+              // portrait ratio at previewVisualWidth (centered in the
+              // column for breathing room), the chart fills the full
+              // aside width, and the chart wrapper carries flex-grow
+              // so any vertical slack from the form-column min-height
+              // gets absorbed by the chart rather than leaving an
+              // empty band below the chart card.
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
@@ -738,14 +824,21 @@ export function BetFlowPage() {
             aria-label="Live preview of your receipt and the crowd consensus chart"
           >
             <div
+              data-betflow-header
               style={{
-                width: previewVisualWidth,
-                maxWidth: '100%',
+                // Full aside width so "LIVE PREVIEW · YOUR RECEIPT"
+                // and the BEFORE/AFTER toggle stay on one line at
+                // every desktop size. This is the chrome that
+                // RIGHT_COL_CHROME budgets for; if this row ever
+                // wraps the column heights silently desync.
+                width: '100%',
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
                 gap: 12,
-                flexWrap: 'wrap',
+                flexWrap: 'nowrap',
+                height: 36,
+                flexShrink: 0,
               }}
             >
               <div
@@ -754,24 +847,30 @@ export function BetFlowPage() {
                   fontSize: 11,
                   color: palette.inkMute,
                   letterSpacing: 1.4,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  minWidth: 0,
                 }}
               >
                 LIVE PREVIEW · YOUR RECEIPT
               </div>
               {previewToggle}
             </div>
-            <div style={{ width: previewVisualWidth, maxWidth: '100%' }}>
+            <div data-betflow-polaroid style={{ width: previewVisualWidth, maxWidth: '100%' }}>
               {previewPolaroid}
             </div>
-            {/* Chart wrapper now fills the FULL aside width while the
-                polaroid stays at its 1.5 portrait ratio above. The user
-                explicitly asked the chart to fit the aside width because
-                forcing it to match the polaroid width was making the
-                consensus curves look compressed. The chart's height is
-                still tied to the polaroid's height so the polaroid +
-                chart stack still bottoms out at the same y as the form
-                column. */}
+            {/* Chart wrapper has the SAME outer height as the polaroid
+                (previewVisualHeight) so the polaroid + gap + chart
+                stack equals exactly chrome + 2 * previewVisualHeight,
+                which equals the form column height. That symmetry is
+                what makes the chart bottom edge land at the same y as
+                the form's CTA button bottom. flex-grow is intentionally
+                NOT used here: with both columns sized off the same
+                previewVisualHeight, no growing is needed and any flex
+                growth would actually break the symmetry. */}
             <div
+              data-betflow-chart
               style={{
                 width: '100%',
                 maxWidth: '100%',
@@ -858,9 +957,7 @@ function DisagreementBadge({
     bg = 'rgba(194, 65, 12, 0.22)';
   }
 
-  const offsetFormatted = offsetAbs >= 100
-    ? offsetAbs.toLocaleString(undefined, { maximumFractionDigits: 0 })
-    : offsetAbs.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  const offsetFormatted = formatMarketNumber(offsetAbs);
 
   return (
     <div
@@ -898,7 +995,7 @@ function DisagreementBadge({
           whiteSpace: 'nowrap',
         }}
       >
-        µ {consensusMean.toFixed(2)} {units}
+        µ {formatMarketNumber(consensusMean)} {units}
       </span>
     </div>
   );
@@ -1013,7 +1110,7 @@ function RarityHint({
             lineHeight: 1.3,
           }}
         >
-          {sub} {units && consensusMean != null ? `(consensus µ ${consensusMean.toFixed(1)} ${units})` : ''}
+          {sub} {units && consensusMean != null ? `(consensus µ ${formatMarketNumber(consensusMean)} ${units})` : ''}
         </div>
       </div>
     </div>
@@ -1041,6 +1138,48 @@ function ShapeChip({ active, onClick, label, sub }: { active: boolean; onClick: 
       <div style={{ fontSize: 11, color: palette.inkMute, marginTop: 2 }}>{sub}</div>
     </button>
   );
+}
+
+/**
+ * Market-number formatter used for the page subtitle row (range,
+ * pool, consensus mu). Picks the precision based on magnitude and
+ * uses 'en-US' so the thousand separator is always a comma. This is
+ * what fixes the "Pool $2205110" wall-of-digits and the "Consensus
+ * µ 1373.9" trailing-decimal-on-an-integer-price feel.
+ */
+function formatMarketNumber(value: number): string {
+  if (!Number.isFinite(value)) return '\u2014';
+  const absV = Math.abs(value);
+  // Big integer prices (>= 1) drop the decimal; tiny probabilities
+  // and small unit values keep it.
+  const decimals = absV >= 1000 ? 0 : absV >= 1 ? 1 : 3;
+  return value.toLocaleString('en-US', {
+    minimumFractionDigits: decimals === 0 ? 0 : 1,
+    maximumFractionDigits: decimals,
+  });
+}
+
+/**
+ * Default slider value formatter. Smart-rounds based on the slider's
+ * step:
+ *   - step >= 1: integer with thousand separators ("1,374")
+ *   - 0.1 <= step < 1: one decimal ("1.4")
+ *   - step < 0.1: two decimals ("1.37")
+ * Uses 'en-US' locale unconditionally so the value reads consistently
+ * regardless of viewer locale (matches the polaroid scale strip).
+ * Replaces the previous always-toFixed(2) which produced "1373.86" on
+ * integer-step price ranges.
+ */
+function defaultSliderFormat(value: number, step: number, units?: string): string {
+  if (!Number.isFinite(value)) return '—';
+  const decimals = step >= 1 ? 0 : step >= 0.1 ? 1 : 2;
+  const formatted = value.toLocaleString('en-US', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+  if (!units) return formatted;
+  const needsSpace = !(units === '%' || units === '$' || units === '€' || units === '£');
+  return `${formatted}${needsSpace ? ' ' : ''}${units}`;
 }
 
 function Slider({
@@ -1072,7 +1211,7 @@ function Slider({
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 2, fontFamily: fonts.body }}>
         <span style={{ fontSize: 12, color: palette.inkSoft, fontWeight: 500 }}>{label}</span>
         <span style={{ fontSize: 12, color: palette.ink, fontFamily: fonts.mono, letterSpacing: 0.3 }}>
-          {format ? format(value) : `${value.toFixed(2)} ${units ?? ''}`}
+          {format ? format(value) : defaultSliderFormat(value, step, units)}
         </span>
       </div>
       <input

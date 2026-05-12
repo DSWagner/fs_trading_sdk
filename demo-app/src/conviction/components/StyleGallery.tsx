@@ -68,15 +68,24 @@ export function StyleGallery() {
 
       <div
         style={{
-          display: 'flex',
-          gap: isMobile ? 12 : 18,
-          overflowX: 'auto',
-          paddingBottom: 18,
-          marginLeft: isMobile ? -16 : -8,
-          marginRight: isMobile ? -16 : -8,
-          paddingLeft: isMobile ? 16 : 8,
-          paddingRight: isMobile ? 16 : 8,
-          scrollSnapType: 'x mandatory',
+          // Desktop: a clean 6-column grid so EVERY tier (Common all
+          // the way to Mythic) is visible without horizontal scroll.
+          // Previously the grid was a horizontally-scrolling flex row
+          // and Mythic got clipped off the right edge of the viewport
+          // at desktop widths, hiding the rarest tier exactly where
+          // the section is supposed to advertise it.
+          // Mobile: fall back to a horizontal scroller so each tier
+          // stays large enough to read.
+          display: isMobile ? 'flex' : 'grid',
+          gridTemplateColumns: isMobile ? undefined : 'repeat(6, minmax(0, 1fr))',
+          gap: isMobile ? 12 : 14,
+          overflowX: isMobile ? 'auto' : 'visible',
+          paddingBottom: isMobile ? 18 : 4,
+          marginLeft: isMobile ? -16 : 0,
+          marginRight: isMobile ? -16 : 0,
+          paddingLeft: isMobile ? 16 : 0,
+          paddingRight: isMobile ? 16 : 0,
+          scrollSnapType: isMobile ? 'x mandatory' : undefined,
           WebkitOverflowScrolling: 'touch',
         }}
       >
@@ -91,14 +100,24 @@ export function StyleGallery() {
               onMouseEnter={() => setActive(tier)}
               onTouchStart={() => setActive(tier)}
               style={{
-                flex: '0 0 auto',
-                scrollSnapAlign: 'start',
+                flex: isMobile ? '0 0 auto' : undefined,
+                minWidth: 0,
+                scrollSnapAlign: isMobile ? 'start' : undefined,
                 transform: isActive ? 'translateY(-6px)' : 'none',
                 transition: 'transform 220ms ease',
                 cursor: 'pointer',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
               }}
             >
-              <Polaroid {...sample} width={isMobile ? 200 : 220} />
+              {/* Polaroid width:
+                  - Mobile carousel: fixed 200 px so it stays readable.
+                  - Desktop grid: pass undefined and let the polaroid
+                    measure its container's width via the existing
+                    width prop. We give the polaroid a fixed 195 px
+                    on desktop to fit 6 across at 1320 max-width. */}
+              <Polaroid {...sample} width={isMobile ? 200 : 195} />
               <div
                 style={{
                   marginTop: 8,

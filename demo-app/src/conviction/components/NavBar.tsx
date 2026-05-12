@@ -62,7 +62,7 @@ export function NavBar() {
                 }}
               >
                 @{user.username}
-                {!isNarrow && <> · ${user.walletValue != null ? user.walletValue.toFixed(0) : '—'}</>}
+                {!isNarrow && <> · ${user.walletValue != null ? user.walletValue.toLocaleString('en-US', { maximumFractionDigits: 0 }) : '\u2014'}</>}
               </span>
               {!isNarrow && (
                 <button

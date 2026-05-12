@@ -1,6 +1,6 @@
 # Session handoff: Conviction (FS Trading SDK competition entry)
 
-> Last updated: 2026-05-12 (after the futuristic-font + photo-vignette pass)
+> Last updated: 2026-05-12 (after the column-alignment + locale-stable-numbers + 6-tier-grid pass)
 > Parent transcript: `[Where we are right now](b5263758-f700-4040-9a30-693a3a1cf730)`
 
 ## TL;DR for the next session
@@ -40,7 +40,8 @@ Architectural rules: this repo is a strict 3-layer monorepo (`core` -> `react` -
 
 | SHA       | Title                                                                                                       |
 |-----------|-------------------------------------------------------------------------------------------------------------|
-| _pending_ | feat(conviction): Bricolage + Sora + Space Mono font stack, theme-aware photo vignette, three-layer drop shadow |
+| _pending_ | feat(conviction): pixel-perfect BetFlow column alignment, locale-stable scale strip, 6-tier landing grid    |
+| `35140eb` | feat(conviction): Bricolage + Sora + Space Mono font stack, theme-aware photo vignette, three-layer drop shadow |
 | `03d6e5a` | feat(conviction): pastel purple + pastel orange palette, distinctive font stack, chart fills aside, uniform rarity border |
 | `7ce9c8e` | fix(conviction): pin preview createdAt + measure form natural height so columns truly match                 |
 | `1aff35d` | polaroid + chart scale down so right column matches form height (width floor 280 -> 220)                    |
@@ -58,11 +59,18 @@ The BetFlow page must satisfy ALL of these. The snapshot script `scripts/verify-
 
 1. **50:50 grid** at desktop: `gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)'`. Left column = form. Right column = polaroid stacked above chart.
 2. **Polaroid keeps its 1.5 portrait ratio at `previewVisualWidth`. Chart is wider** - the chart wrapper is `width: 100%` so it fills the entire aside (`asideW`), which is wider than the polaroid by design. The user explicitly asked for this: forcing them to identical width compressed the consensus curves. The snapshot script asserts `polaroidH ~ polaroidW * 1.5`, `chartW > polaroidW`, and `chartW >= asideW * 0.95`.
-3. **Both columns end at the same vertical position**. The snapshot asserts `Math.abs(dims.formH - dims.asideH) <= 4`. The mechanism: the form column has TWO nested divs - an outer wrapper that carries `min-height: rightColumnTotalHeight` (so the grid cell stretches via `alignItems: stretch`), and an inner div with the `ResizeObserver` callback ref that measures the form's NATURAL content height (free of any min-height). The polaroid + chart are sized so their stacked height equals that natural height (down to a `MIN_VISUAL_WIDTH = 200` floor). When the floor kicks in, the outer wrapper's `min-height` keeps the columns matching at the bottom. This nested structure is the fix for the 2x mismatch the user reported - in the previous setup the ResizeObserver was on the same div as the min-height, so the observed value was the inflated one and the visuals were sized to match the inflated value, leaving the form's natural content much shorter than the visible right column.
+3. **Both columns end at the same vertical position - PIXEL-PERFECT**. The snapshot asserts `Math.abs(dims.formH - dims.asideH) <= 4` and the audit dims confirm `formInner.h = aside.h = 1048` and `cta.bottom = chart.bottom = 1180` at 1440 wide. The mechanism is a four-piece contract; do not break any of them:
+   - The form column has TWO nested divs. The OUTER wrapper is a flex column (no min-height). The INNER div carries the `ResizeObserver` callback ref AND `min-height: MIN_VISUAL_TOTAL = RIGHT_COL_CHROME + 2 * MIN_VISUAL_HEIGHT` so the form column never shrinks below the visuals' floor. The inner is also `display: flex; flex-direction: column` because (next bullet).
+   - The auth + CTA group inside the inner form column has `marginTop: 'auto'`. When the form's natural content is shorter than `MIN_VISUAL_TOTAL` (narrow viewports, before the user types reasoning), the CTA gets pushed to the bottom of the inflated column instead of leaving an empty band below the CTA. When the form's natural content is taller, marginTop:auto is a no-op.
+   - The polaroid + chart stack is symmetrical: the polaroid is `previewVisualHeight` tall, and the chart wrapper is `height: previewVisualHeight` (NOT `flex: 1 1 auto`). With both at the same height the aside total = `chrome + 2 * previewVisualHeight = formColumnHeight`.
+   - The header row above the polaroid (LIVE PREVIEW · YOUR RECEIPT + BEFORE/AFTER toggle) has `width: 100%` and `flexWrap: 'nowrap'` and a fixed `height: 36`. Previously it was constrained to `previewVisualWidth` and wrapped to two lines on every desktop size, silently inflating the chrome from ~36 to ~72 and putting the columns out of sync by ~40 px. **If you ever change this row, re-snapshot the betflow page and verify `aside.h === formInner.h` in `dims.json`.**
 
 4. **Live preview polaroid is invariant under resize/zoom**. The `createdAt` prop on the preview Polaroid is pinned via `useMemo(() => new Date().toISOString(), [])`. Every parent re-render (resize, zoom, slider drag for unrelated state) used to fire the inline `new Date().toISOString()` JSX expression, which fed the polaroid seed via `seedFromInputs(...createdAt)` and reshuffled the suns and stars. The verify script `scripts/verify-conviction/verify-resize-stable.mjs` asserts the SVG signature is byte-identical across 1440 -> 1200 -> 1024 -> 1440 resizes.
 5. **No inner scrollbars** anywhere on the page (no `overflow: scroll/auto` inside the columns).
 6. **Chart card has rounded corners on all four sides**. `.conviction-chart-shell { overflow: hidden }` in `index.css` clips the Recharts SVG to the card's border-radius.
+7. **Numeric labels are locale-stable**. The polaroid scale strip's `formatScaleNumber` and the BetFlow page's `formatMarketNumber` BOTH pass `'en-US'` to `toLocaleString` rather than the browser's `undefined` default. A polaroid is a frozen artifact: when a user shares `/r/{id}` or an `/e/{id}` embed, the receipt MUST render identically across every viewer's locale. Without this fix, a German viewer's browser turned `1374` into `"1.374"` (period-as-thousands-separator) while a US viewer's browser rendered it as `"1,374"`, and the same shared link looked different to different people. Same locale pinning is in `NavBar.tsx` for the wallet display.
+8. **The Landing page's "Six tiers. One belief." section shows ALL SIX tiers at desktop**. `StyleGallery.tsx` uses `display: 'grid'; gridTemplateColumns: 'repeat(6, minmax(0, 1fr))'` on desktop instead of a horizontally-scrolling flex row. Previously Mythic got clipped off the right edge of the viewport at desktop widths (the page advertised six tiers but only five were visible). Mobile keeps the carousel via the `isMobile` branch.
+9. **Chart axis ticks are integer-clean**. The SDK's `ConsensusChart` accepts optional `xAxisTickFormatter`, `yAxisTickFormatter`, and `tooltipValueFormatter` props (backward compatible defaults: `v.toFixed(1)`, `v.toFixed(3)`, `v.toFixed(4)`). BetFlow passes `formatMarketNumber` for the X-axis ticks and tooltip outcomes so price ticks read as `"0", "1,500", "3,000", "5,000"` instead of the previous `"0.0", "1500.0", "3000.0"`. Density values stay decimal but show `"0"` for the zero baseline instead of `"0.000"` to keep the y-axis tick column narrow.
 
 ## ResizeObserver pattern (do not break)
 
