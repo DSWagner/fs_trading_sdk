@@ -305,7 +305,17 @@ export function Polaroid(props: PolaroidProps) {
   const captionH = height - captionY - 12;
 
   const dateLabel = formatDate(createdAt);
-  const subjectLabel = truncate(marketTitle, 42);
+  // Soft cap on the title at 120 chars (only kicks in for truly
+  // absurd titles). The previous 42-char hard truncate was cutting
+  // perfectly normal market titles like "Tesla Optimus Units Sold
+  // or Deployed Internally by Dec 2026" (60 chars) down to "Tesla
+  // Optimus Units Sold or Deployed Inte…" before the wrapping
+  // function ever got to see them, even though the caption strip
+  // had vertical room for a third line. Now the wrap logic in
+  // `renderSvgCaption` decides whether the title fits in two or
+  // three lines based on the available caption height; the user
+  // sees the full title on every polaroid except pathological cases.
+  const subjectLabel = truncate(marketTitle, 120);
   const filterId = `develop-${seed}`;
   const grainId = `grain-${seed}`;
   const skyGradientId = `sky-${seed}`;
@@ -900,7 +910,19 @@ function renderSvgCaption(args: {
   // rasterizer falls back to a generic system serif that's ~0.55-0.6em.
   // We pick a conservative value so wrapping matches in both contexts.
   const titleCharsPerLine = Math.max(8, Math.floor(width / (titleSize * 0.56)));
-  const titleLines = wrapText(`"${subjectLabel}"`, titleCharsPerLine, 2);
+  // Pre-compute the footer baseline so we can decide whether a 3rd
+  // title line would overlap the footer. Mirrors the formula below.
+  const footerBaselineRel = height - 6 - footerSize - 6;
+  // Allow up to 3 title lines when the caption strip has vertical
+  // room for it (medium and large polaroids: receipt page, BetFlow
+  // preview at 1440 wide). On small gallery thumbnails the caption
+  // strip is too short for a 3rd line and we fall back to 2 lines
+  // with a final-line ellipsis. Threshold = last title baseline + a
+  // 6 px breathing margin must clear the footer baseline.
+  const lastTitleBaselineFor = (n: number) => titleSize + 4 + (n - 1) * titleLineHeight;
+  const canFitThreeLines = lastTitleBaselineFor(3) + 6 <= footerBaselineRel;
+  const maxTitleLines = canFitThreeLines ? 3 : 2;
+  const titleLines = wrapText(`"${subjectLabel}"`, titleCharsPerLine, maxTitleLines);
 
   // Approximate em-width for the mono text in the footer/date lines. The
   // fallback monospace is also a bit wider than JetBrains Mono, so the
