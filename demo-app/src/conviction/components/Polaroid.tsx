@@ -1825,13 +1825,78 @@ function ReasoningQuote({
   handle: string;
   polaroidWidth: number;
 }) {
-  const fontSize = Math.max(10, Math.round(polaroidWidth * 0.04));
-  const lineHeight = Math.round(fontSize * 1.18);
-  // Approximate char width for a serif italic at fontSize. ~0.45 of fontSize
-  // is a safe undercount that works for Fraunces italic.
-  const charsPerLine = Math.max(8, Math.floor(width / (fontSize * 0.45)));
-  const maxLines = Math.max(2, Math.floor((maxHeight - lineHeight) / lineHeight));
-  const lines = wrapText(text, charsPerLine, maxLines);
+  // Auto-fit the font size so the WHOLE reasoning fits inside the photo
+  // without ellipsis whenever possible. We pick the LARGEST font in the
+  // [MIN_FONT, MAX_FONT] window such that the wrapped text fits inside
+  // `maxHeight` after reserving room for the attribution row below.
+  //
+  // The hard floor on the input length (see MAX_REASONING_CHARS in
+  // pages/BetFlow.tsx) is calibrated so that even on a 280 px wide
+  // BetFlow preview the auto-fit lands at a readable font size (>= 10).
+  // On smaller polaroids (gallery thumbnails at ~200 wide) very long
+  // text may still hit the MIN_FONT floor and ellipsize the final line.
+  const MAX_FONT = Math.max(11, Math.round(polaroidWidth * 0.045));
+  // MIN_FONT floor of 8 lets gallery thumbnails (polaroidWidth ~200-220)
+  // fit ~130 characters across 3 lines without ellipsis. Above that the
+  // input cap (MAX_REASONING_CHARS in BetFlow) keeps the BetFlow preview
+  // and Receipt sizes well above 10 px even at the cap.
+  const MIN_FONT = Math.max(8, Math.round(polaroidWidth * 0.028));
+
+  // Vertical room taken by the "- @handle" row: an attribution font that
+  // is ~0.55 x the quote font, plus a 0.7 x quote font baseline gap.
+  function attributionReserve(font: number): number {
+    return Math.round(font * 0.55) + Math.round(font * 0.7);
+  }
+
+  // Try a single font size and return its wrap result if the whole text
+  // fits in the available vertical space (no truncation needed).
+  function tryFit(font: number): { lines: string[]; lineHeight: number } | null {
+    const lineHeight = Math.round(font * 1.18);
+    // Approximate char width for a serif italic at fontSize. ~0.45 of
+    // fontSize is a safe undercount that works for Fraunces italic.
+    const charsPerLine = Math.max(8, Math.floor(width / (font * 0.45)));
+    const lines = wrapText(text, charsPerLine, 999);
+    const lastLine = lines[lines.length - 1] ?? '';
+    // wrapText only adds ellipsis when the line count is clamped; with
+    // maxLines=999 we still need to verify no individual line was
+    // ellipsized for overshooting `charsPerLine`. That can happen when
+    // a single word is longer than charsPerLine - the wrapper inlines
+    // and then ellipsizes. Reject this font size in that case so we try
+    // a smaller one.
+    if (lastLine.endsWith('\u2026')) return null;
+    const availForLines = maxHeight - attributionReserve(font);
+    const usedHeight = lines.length * lineHeight;
+    if (usedHeight > availForLines) return null;
+    return { lines, lineHeight };
+  }
+
+  let chosenFont = MIN_FONT;
+  let fit: { lines: string[]; lineHeight: number } | null = null;
+  for (let f = MAX_FONT; f >= MIN_FONT; f--) {
+    const candidate = tryFit(f);
+    if (candidate) {
+      chosenFont = f;
+      fit = candidate;
+      break;
+    }
+  }
+  // Fallback: even at MIN_FONT the text does not fit. Wrap to whatever
+  // fits and let wrapText ellipsize the final line. This is the legacy
+  // behaviour and only triggers on tiny polaroids with very long text.
+  if (!fit) {
+    const lineHeight = Math.round(MIN_FONT * 1.18);
+    const charsPerLine = Math.max(8, Math.floor(width / (MIN_FONT * 0.45)));
+    const availForLines = Math.max(
+      lineHeight,
+      maxHeight - attributionReserve(MIN_FONT),
+    );
+    const maxLines = Math.max(1, Math.floor(availForLines / lineHeight));
+    fit = { lines: wrapText(text, charsPerLine, maxLines), lineHeight };
+    chosenFont = MIN_FONT;
+  }
+
+  const fontSize = chosenFont;
+  const { lines, lineHeight } = fit;
 
   return (
     <g>
@@ -1858,8 +1923,8 @@ function ReasoningQuote({
           fill="rgba(255,250,240,0.96)"
           letterSpacing="-0.1"
         >
-          {i === 0 ? `“${line}` : line}
-          {i === lines.length - 1 && '”'}
+          {i === 0 ? `\u201C${line}` : line}
+          {i === lines.length - 1 && '\u201D'}
         </text>
       ))}
       <text
@@ -1871,7 +1936,7 @@ function ReasoningQuote({
         fill="rgba(255,250,240,0.7)"
         letterSpacing="1.4"
       >
-        — @{handle}
+        {`@${handle}`}
       </text>
     </g>
   );

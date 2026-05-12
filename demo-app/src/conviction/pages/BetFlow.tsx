@@ -30,6 +30,15 @@ const PROMPTS = [
   'What evidence shaped this view?',
 ];
 
+// Hard cap on the reasoning textarea length. Sized so that the
+// auto-fit logic inside `ReasoningQuote` (in components/Polaroid.tsx)
+// never has to ellipsize on the polaroid sizes the user composes at
+// (BetFlow preview ~280 px, Receipt ~420 px). On smaller polaroids
+// (gallery thumbnails ~200 px) very long reasoning may still hit the
+// MIN_FONT floor and ellipsize, but the full text remains available
+// on the Receipt page that the thumbnail links to.
+const MAX_REASONING_CHARS = 240;
+
 export function BetFlowPage() {
   const navigate = useNavigate();
   const { marketId: rawId = '' } = useParams<{ marketId: string }>();
@@ -337,7 +346,7 @@ export function BetFlowPage() {
   const range = upperBound - lowerBound;
   const reasoningLen = reasoning.trim().length;
 
-  const charsRemaining = Math.max(0, 400 - reasoning.length);
+  const charsRemaining = Math.max(0, MAX_REASONING_CHARS - reasoning.length);
 
   // Outcome used for the "After" preview: equal to the user's prediction
   // exactly, so the post-resolution preview always shows the fully
@@ -627,7 +636,8 @@ export function BetFlowPage() {
             </p>
             <textarea
               value={reasoning}
-              onChange={(e) => setReasoning(e.target.value.slice(0, 400))}
+              onChange={(e) => setReasoning(e.target.value.slice(0, MAX_REASONING_CHARS))}
+              maxLength={MAX_REASONING_CHARS}
               rows={3}
               placeholder="If you turn out to be right, this becomes a meme. One paragraph is enough."
               style={{
