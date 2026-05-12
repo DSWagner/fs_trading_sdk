@@ -572,46 +572,59 @@ export function Polaroid(props: PolaroidProps) {
         {/* Aurora (legendary + mythic).
             Drawn AFTER the sky gradient and BEFORE the stars so the
             curtain washes the upper sky as ambient atmosphere; the
-            stars then twinkle on top. Mythic stacks multiple curtains
-            in different hues for a multi-color shimmer. Each band is
-            a smoothed sine wave with vertical gradient fading to
-            transparent. */}
+            stars then twinkle on top.
+            Each curtain is a tall wavy band running the full width of
+            the photo, with a vertical color stack that mimics a real
+            aurora photograph:
+              - 0% (very top)      fully transparent
+              - 20%                accent (rarity tint) at low alpha,
+                                   reproducing the faint red/pink
+                                   upper-altitude oxygen emission
+              - 55%                bright auroral green (peak body)
+              - 90%                green fading
+              - 100% (bottom)      fully transparent
+            Mythic stacks two curtains at offset phases for depth. */}
         {photo.aurora && (
           <g opacity={photo.aurora.intensity * (0.4 + progress * 0.6)} filter={photoFilter}>
-            {photo.aurora.bandYs.map((by, i) => {
-              const color = photo.aurora!.colors[i % photo.aurora!.colors.length];
-              const phase = photo.aurora!.phases[i];
+            {photo.aurora.curtains.map((c, i) => {
               const gradId = `aurora-${seed}-${i}`;
-              // Build a smooth sine-wave path that spans the full photo
-              // width, then close to form a vertical band ~ photoSize *
-              // 0.16 tall, so the curtain has body to fill with the
-              // vertical gradient.
-              const steps = 32;
-              const cy = photoY + by * photoSize;
-              const amp = photoSize * 0.025;
-              const bandH = photoSize * 0.16;
-              let topPath = `M ${photoX} ${cy}`;
+              const steps = 48;
+              const yTop = photoY + c.yTop * photoSize;
+              const yBot = photoY + c.yBot * photoSize;
+              const ampTop = c.ampTop * photoSize;
+              const ampBot = c.ampBot * photoSize;
+              // Top edge: gentle wave (the upper aurora boundary, more
+              // diffuse in real life so smaller amplitude is fine).
+              let topPath = `M ${photoX} ${yTop}`;
               for (let k = 1; k <= steps; k++) {
                 const t = k / steps;
                 const x = photoX + t * photoSize;
-                const y = cy + Math.sin(t * Math.PI * 2 + phase) * amp;
+                const y = yTop + Math.sin(t * Math.PI * 2.2 + c.phase) * ampTop;
                 topPath += ` L ${x} ${y}`;
               }
+              // Bottom edge: slightly different frequency + phase so
+              // the curtain drapes rather than reading as a parallel
+              // ribbon. Lower amplitude keeps the brightest band along
+              // a smoother lower boundary.
               let botPath = '';
               for (let k = steps; k >= 0; k--) {
                 const t = k / steps;
                 const x = photoX + t * photoSize;
-                const y = cy + bandH + Math.sin(t * Math.PI * 2 + phase + 0.6) * amp * 0.6;
+                const y =
+                  yBot +
+                  Math.sin(t * Math.PI * 1.6 + c.phase + 0.8) * ampBot;
                 botPath += ` L ${x} ${y}`;
               }
               const d = `${topPath} ${botPath} Z`;
               return (
-                <g key={`aurora-${i}`}>
+                <g key={`aurora-${i}`} opacity={c.opacity}>
                   <defs>
                     <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor={color} stopOpacity="0" />
-                      <stop offset="35%" stopColor={color} stopOpacity="0.65" />
-                      <stop offset="100%" stopColor={color} stopOpacity="0" />
+                      <stop offset="0%" stopColor={c.accentColor} stopOpacity="0" />
+                      <stop offset="18%" stopColor={c.accentColor} stopOpacity="0.30" />
+                      <stop offset="55%" stopColor={c.greenColor} stopOpacity="0.75" />
+                      <stop offset="90%" stopColor={c.greenColor} stopOpacity="0.30" />
+                      <stop offset="100%" stopColor={c.greenColor} stopOpacity="0" />
                     </linearGradient>
                   </defs>
                   <path d={d} fill={`url(#${gradId})`} />
@@ -1144,17 +1157,48 @@ interface CometSpec {
   intensity: number;
 }
 
+/**
+ * A single realistic auroral curtain. Real aurorae are wide vertical
+ * sheets of light whose lower edge sits at ~100 km altitude (oxygen
+ * green, ~558 nm) and whose upper edge fades into red/pink at higher
+ * altitude (oxygen red ~630 nm, or nitrogen). We render each curtain
+ * as a tall band running the width of the photo, with:
+ *
+ *   - a smooth gently-waving TOP edge (the upper aurora boundary),
+ *   - a steeper, lower-amplitude BOTTOM edge (so the band has thickness
+ *     and the bottom feels like the brightest part of the curtain),
+ *   - a vertical gradient that fades to transparent at the very top,
+ *     peaks in the auroral green band in the middle, and softens into
+ *     the rarity accent at the bottom fringe.
+ *
+ * Mythic stacks two curtains at slightly different horizontal phase so
+ * the composition reads as the kind of layered, draped aurora you see
+ * in long-exposure photography, NOT a tri-color rainbow.
+ */
+interface AuroraCurtainSpec {
+  /** Y position of the curtain's TOP edge centre, in normalised photo coords. */
+  yTop: number;
+  /** Y position of the curtain's BOTTOM edge centre, in normalised photo coords. */
+  yBot: number;
+  /** Horizontal phase offset for both the top and bottom wave; in radians. */
+  phase: number;
+  /** Top-edge wave amplitude as a fraction of photo height. Larger => more dramatic drape. */
+  ampTop: number;
+  /** Bottom-edge wave amplitude as a fraction of photo height. Usually < ampTop. */
+  ampBot: number;
+  /** Per-curtain opacity scalar; mythic's second band is slightly fainter for depth. */
+  opacity: number;
+  /** Realistic auroral green for the body (peaks in the middle of the curtain). */
+  greenColor: string;
+  /** Accent tint for the bottom fringe (rarity-tied so the palette stays coherent). */
+  accentColor: string;
+}
+
 interface AuroraSpec {
-  /** 0..1 overall opacity / intensity. */
+  /** 0..1 overall opacity / intensity (multiplied onto each curtain's own opacity). */
   intensity: number;
-  /** Number of overlapping curtains. Legendary = 1 (single soft band). Mythic = 2 or 3 (multi-band). */
-  bands: number;
-  /** Vertical anchor of the curtain centers in normalised photo Y. */
-  bandYs: number[];
-  /** Hex color per band. Mythic mixes accent + jade + magenta; legendary uses a single jade-ember blend. */
-  colors: string[];
-  /** Seed-derived phase offsets per band so each curtain waves differently. */
-  phases: number[];
+  /** Ordered list of curtains; legendary = 1, mythic = 2. Rendered back-to-front. */
+  curtains: AuroraCurtainSpec[];
 }
 
 interface NebulaSpec {
@@ -1529,27 +1573,32 @@ function buildPhoto(opts: {
   const eventRng = mulberry32(opts.seed ^ 0xc0_de_fe_ed);
 
   // -- Comets / shooting stars --
-  //   common    -> 0
-  //   uncommon  -> 35% chance of 1
-  //   rare      -> 65% chance of 1
-  //   epic      -> 1 always
-  //   legendary -> 1 always, 50% chance of 2
-  //   mythic    -> 2 always, 35% chance of 3
-  // Tail length and brightness also rise with tier so the highest tier
-  // reads as the most spectacular.
-  let cometCount: number;
-  if (rLevel === 0) cometCount = 0;
-  else if (rLevel === 1) cometCount = eventRng() < 0.35 ? 1 : 0;
-  else if (rLevel === 2) cometCount = eventRng() < 0.65 ? 1 : 0;
-  else if (rLevel === 3) cometCount = 1;
-  else if (rLevel === 4) cometCount = eventRng() < 0.5 ? 2 : 1;
-  else cometCount = eventRng() < 0.35 ? 3 : 2;
+  // A comet is a RARE celestial event in real life and we model it that
+  // way: never more than one per receipt, and only a small probability
+  // of appearing at all. The probability rises gently with rarity so
+  // higher tiers are slightly more likely to surface one - never to the
+  // point where mythic always has a comet.
+  //
+  //   common    ->  0%   (never)
+  //   uncommon  ->  8%
+  //   rare      -> 14%
+  //   epic      -> 22%
+  //   legendary -> 32%
+  //   mythic    -> 45%
+  let cometChance: number;
+  if (rLevel === 0) cometChance = 0;
+  else if (rLevel === 1) cometChance = 0.08;
+  else if (rLevel === 2) cometChance = 0.14;
+  else if (rLevel === 3) cometChance = 0.22;
+  else if (rLevel === 4) cometChance = 0.32;
+  else cometChance = 0.45;
+  const cometCount = eventRng() < cometChance ? 1 : 0;
 
   const comets: CometSpec[] = [];
-  for (let i = 0; i < cometCount; i++) {
+  if (cometCount === 1) {
     // Place the comet head somewhere in the upper-mid sky, avoiding the
-    // sun halos. Up to 6 placement attempts per comet so cometless
-    // areas of the sky get used.
+    // sun halos. Up to 6 placement attempts so cometless areas of the
+    // sky get used.
     let cx = 0.5;
     let cy = 0.3;
     for (let attempt = 0; attempt < 6; attempt++) {
@@ -1564,8 +1613,8 @@ function buildPhoto(opts: {
       }
       if (!nearSun) break;
     }
-    // Tail length grows with tier: 0.10 .. 0.20 of photo width.
-    const tailLen = 0.10 + 0.02 * rLevel + eventRng() * 0.05;
+    // Tail length grows mildly with tier: 0.12 .. 0.22 of photo width.
+    const tailLen = 0.12 + 0.02 * rLevel + eventRng() * 0.04;
     // Tail angle biased downward-left or downward-right - reads as a
     // falling streak. Random sign keeps things varied.
     const angleBase = (Math.PI / 4) + eventRng() * (Math.PI / 4);
@@ -1613,27 +1662,48 @@ function buildPhoto(opts: {
   }
 
   // -- Aurora curtain -- legendary+ only.
+  //
+  // Real aurorae are wide green sheets that fade upward into faint
+  // red/pink at higher altitude. We model that by drawing each curtain
+  // with a realistic auroral green at the body and the rarity ACCENT
+  // tint at the bottom fringe (so legendary -> gold-warm fringe,
+  // mythic -> ember/crimson fringe; both palette-coherent). Mythic
+  // stacks a second fainter curtain at an offset phase so the result
+  // reads as layered draping, not multi-color chaos.
+  const auroralGreen = '#4DD9A0';
   let aurora: AuroraSpec | null = null;
   if (rLevel >= 4) {
     const isMythic = rLevel === 5;
-    const bands = isMythic ? 3 : 1;
-    const bandYs: number[] = [];
-    const phases: number[] = [];
-    for (let i = 0; i < bands; i++) {
-      bandYs.push(0.06 + i * 0.04 + (eventRng() - 0.5) * 0.02);
-      phases.push(eventRng() * Math.PI * 2);
+    // Curtain 1: the dominant one. Top of curtain sits high in the sky;
+    // bottom is roughly 25-30% of photo height lower.
+    const curtain1: AuroraCurtainSpec = {
+      yTop: 0.06 + eventRng() * 0.04,
+      yBot: 0.30 + eventRng() * 0.05,
+      phase: eventRng() * Math.PI * 2,
+      ampTop: 0.018 + eventRng() * 0.008,
+      ampBot: 0.010 + eventRng() * 0.006,
+      opacity: isMythic ? 0.95 : 0.80,
+      greenColor: auroralGreen,
+      accentColor: palettes.accent,
+    };
+    const curtains: AuroraCurtainSpec[] = [curtain1];
+    if (isMythic) {
+      // Curtain 2: layered behind, shifted horizontally + slightly
+      // taller, fainter. Adds depth without changing the palette.
+      curtains.unshift({
+        yTop: 0.04 + eventRng() * 0.03,
+        yBot: 0.34 + eventRng() * 0.05,
+        phase: curtain1.phase + Math.PI * (0.45 + eventRng() * 0.25),
+        ampTop: 0.022 + eventRng() * 0.008,
+        ampBot: 0.012 + eventRng() * 0.006,
+        opacity: 0.55,
+        greenColor: auroralGreen,
+        accentColor: palettes.accent,
+      });
     }
-    // Legendary: single soft jade-green band.
-    // Mythic: jade + magenta + accent for that "out-of-this-world" wash.
-    const colors = isMythic
-      ? ['#6DE3B5', '#D77AD3', palettes.accent]
-      : ['#6DE3B5'];
     aurora = {
-      intensity: isMythic ? 0.65 + eventRng() * 0.10 : 0.42 + eventRng() * 0.08,
-      bands,
-      bandYs,
-      colors,
-      phases,
+      intensity: isMythic ? 0.70 + eventRng() * 0.10 : 0.55 + eventRng() * 0.08,
+      curtains,
     };
   }
 
