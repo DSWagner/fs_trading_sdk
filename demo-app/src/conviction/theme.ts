@@ -125,24 +125,29 @@ export const DARK_RAW = {
 } as const;
 
 /**
- * Font stack. Picked deliberately to step away from the Inter +
- * Fraunces/Playfair + JetBrains Mono combination that every Claude-built
- * app ships with by default.
+ * Font stack. Picked deliberately to feel modern and futuristic and to
+ * step well away from any combination that ships as a default in
+ * AI-coding-agent starter kits (Inter, Fraunces, Playfair, JetBrains
+ * Mono, DM Mono, Geist).
  *
- *   - Display: "Instrument Serif". A more recent, less common editorial
- *     serif. Variable optical size, slightly Bodoni-tinged, distinct
- *     from Fraunces.
- *   - Body: "Space Grotesk". Has enough character to feel deliberate
- *     without being weird; reads as confident and modern, not generic
- *     Inter. Pairs well with the receipt aesthetic.
- *   - Mono: "DM Mono". Typewriter-flavored monospace that fits the
- *     polaroid + receipts theme far better than the engineering-default
- *     JetBrains Mono.
+ *   - Display: "Bricolage Grotesque". A sculptural variable typeface
+ *     by Mathieu Triay (2023). Two variation axes - optical size and
+ *     wonk - give it a deliberately modern, slightly off-center feel
+ *     that no mainstream design system has copied yet. Reads as
+ *     confident, contemporary, distinctive.
+ *   - Body: "Sora". Geometric sans by Soumitra Roy Choudhury. Reads
+ *     as cleanly futuristic without being a sci-fi caricature; the
+ *     letterforms have just enough geometric precision to feel
+ *     forward-leaning.
+ *   - Mono: "Space Mono". Designed by Colophon Foundry. Carries a
+ *     retro-futurist NASA-display vibe that pairs well with the
+ *     receipts/polaroid theme and reads as deliberate rather than
+ *     defaulted-to.
  */
 export const fonts = {
-  display: '"Instrument Serif", "Cormorant Garamond", Georgia, "Times New Roman", serif',
-  body: '"Space Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif',
-  mono: '"DM Mono", "JetBrains Mono", ui-monospace, "Cascadia Code", monospace',
+  display: '"Bricolage Grotesque", "Funnel Display", "Outfit", system-ui, sans-serif',
+  body: '"Sora", "Outfit", system-ui, -apple-system, "Segoe UI", sans-serif',
+  mono: '"Space Mono", "IBM Plex Mono", ui-monospace, "Cascadia Code", monospace',
 };
 
 /**

@@ -1,6 +1,6 @@
 # Session handoff: Conviction (FS Trading SDK competition entry)
 
-> Last updated: 2026-05-12 (after the palette + font + chart-width overhaul)
+> Last updated: 2026-05-12 (after the futuristic-font + photo-vignette pass)
 > Parent transcript: `[Where we are right now](b5263758-f700-4040-9a30-693a3a1cf730)`
 
 ## TL;DR for the next session
@@ -40,7 +40,8 @@ Architectural rules: this repo is a strict 3-layer monorepo (`core` -> `react` -
 
 | SHA       | Title                                                                                                       |
 |-----------|-------------------------------------------------------------------------------------------------------------|
-| _pending_ | feat(conviction): pastel purple + pastel orange palette, distinctive font stack, chart fills aside, uniform rarity border |
+| _pending_ | feat(conviction): Bricolage + Sora + Space Mono font stack, theme-aware photo vignette, three-layer drop shadow |
+| `03d6e5a` | feat(conviction): pastel purple + pastel orange palette, distinctive font stack, chart fills aside, uniform rarity border |
 | `7ce9c8e` | fix(conviction): pin preview createdAt + measure form natural height so columns truly match                 |
 | `1aff35d` | polaroid + chart scale down so right column matches form height (width floor 280 -> 220)                    |
 | `e756ce3` | rarity-colored skies (grey/green/blue/purple/gold/orange) + lower-anchored reasoning quote                  |
@@ -131,11 +132,17 @@ The user explicitly asked for a NON-Claude-default palette and font stack. The c
 | jade        | `#7BAA76`   | `#95C68A`   | Sage green for positive                                |
 | rose        | `#C45A6E`   | `#E07F94`   | Dusty rose for negative                                |
 
-Fonts:
+Fonts (current, after the second pass):
 
-- **Display** = `"Instrument Serif"` (Google Fonts variable optical size, less mainstream than Fraunces/Playfair, slightly Bodoni-tinged)
-- **Body** = `"Space Grotesk"` (more personality than Inter, recognizable but not overplayed)
-- **Mono** = `"DM Mono"` (typewriter feel that fits the polaroid+receipts theme; replaces JetBrains Mono)
+- **Display** = `"Bricolage Grotesque"` (Google Fonts, Mathieu Triay 2023). Variable typeface with `opsz` (optical size) and `wdth` axes used as a wonk proxy. We bias `opsz` toward 96 (display end) and `wght` toward 600. Reads as sculptural and contemporary; deliberately NOT a default-Inter / Fraunces / Geist look.
+- **Body** = `"Sora"` (Soumitra Roy Choudhury). Geometric sans, futuristic-leaning without being a sci-fi caricature. Replaces Space Grotesk.
+- **Mono** = `"Space Mono"` (Colophon Foundry). Retro-futurist NASA-display vibe that matches the polaroid + receipts aesthetic. Replaces DM Mono / JetBrains Mono.
+
+Why this combination matters: the user has rejected two earlier font choices ("Inter + Fraunces" and "Instrument Serif + Space Grotesk + DM Mono") as too mainstream / "AI-default". Do NOT casually revert to those. If a future change needs a different font, pick something equally distinctive and document it here.
+
+Photo vignette overlay (in `Polaroid.tsx`, search for `photoVignetteId`): a radial-gradient `<rect>` rendered on top of the photo content (after the film grain, before the reasoning quote) that fades from fully transparent at center to `palette.card` opacity at the corners. Stop opacities scale with `developIntensity` so the bleed-absorption is strongest in the blurred/developing state where the user reported the dark-mode "halo" issue. Because it fills with `palette.card`, the photo edges blend into the matte in BOTH light and dark modes - the polaroid reads as one cohesive object regardless of theme. Do NOT remove this. The original report: "in the dark mode the polaroid image doesn't look good when out of focus and not sharp blurred because the color of the homaly is not close to the background".
+
+Polaroid drop shadow stack: three-layer Material-style elevation (`baseShadow` in `Polaroid.tsx` around line 354). Tight 0/1/2 + mid 0/6/14 + far 0/24/48 with `palette.shadowDeep` on the far layer. This makes the polaroid card visibly lift off the page in dark mode where a single soft shadow is invisible against `palette.paper = #161122`. Do NOT collapse back to a single shadow.
 
 Recharts dark-mode contrast: the SDK chart paints SVG `<text>` with a `fill` attribute set ONCE at provider construction (does not honor CSS variables natively). To keep legend / axis text / tick lines / tooltip readable on the dark aubergine card we override via CSS in `index.css` (search for ".conviction-chart-shell .recharts-text" and surrounding rules). Necessary because the chart provider is constructed in light mode and Recharts inlines `style="fill:..."` on text elements; only an `!important` rule wins.
 
@@ -171,6 +178,7 @@ node scripts/verify-conviction/snapshot-betflow.mjs              # main layout +
 node scripts/verify-conviction/snapshot-betflow-tiers.mjs        # all 6 rarity tier previews
 node scripts/verify-conviction/snapshot-rarity-tiers.mjs         # resolved-state tier snapshots
 node scripts/verify-conviction/snapshot-betflow-narrow.mjs       # form/aside height match at narrow viewports (set VW=1024)
+node scripts/verify-conviction/snapshot-light-dark.mjs           # light + dark betflow screenshots for visual review
 node scripts/verify-conviction/verify-resize-stable.mjs          # polaroid SVG is byte-identical across resizes
 ```
 

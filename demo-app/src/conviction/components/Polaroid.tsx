@@ -313,6 +313,7 @@ export function Polaroid(props: PolaroidProps) {
   const sunGradientId = `sun-${seed}`;
   const photoClipId = `photoclip-${seed}`;
   const captionClipId = `capclip-${seed}`;
+  const photoVignetteId = `photovig-${seed}`;
 
   const accuracyLabel = (() => {
     if (!developed) {
@@ -350,7 +351,21 @@ export function Polaroid(props: PolaroidProps) {
   // Outer shadow + animated develop filter on the whole SVG. The animated
   // filter overlays the time-based one on top of any natural sharpening —
   // it's just the one-time "polaroid pulled from the camera" reveal.
-  const baseShadow = `drop-shadow(0 12px 24px ${palette.shadow}) drop-shadow(0 2px 6px ${palette.shadow})`;
+  //
+  // We use a three-layer Material-style elevation stack (tight + mid +
+  // ambient) instead of a single shadow. This is what makes the
+  // polaroid feel *lifted* off the page in both modes:
+  //   - In light mode the layers stack into a soft, sun-lit drop.
+  //   - In dark mode palette.shadowDeep is rgba(0,0,0,0.65), which on
+  //     the deep aubergine paper would be invisible if applied as a
+  //     single shadow. Splitting into three falloff curves with a far
+  //     ambient layer makes the card's silhouette read clearly even
+  //     against a dark background.
+  const baseShadow = [
+    `drop-shadow(0 1px 2px ${palette.shadow})`,
+    `drop-shadow(0 6px 14px ${palette.shadow})`,
+    `drop-shadow(0 24px 48px ${palette.shadowDeep})`,
+  ].join(' ');
   const developFilter = animPhase === 'pre'
     ? `${baseShadow} saturate(0.18) blur(1.6px) brightness(0.9) contrast(0.92)`
     : baseShadow;
@@ -480,6 +495,34 @@ export function Polaroid(props: PolaroidProps) {
         <clipPath id={captionClipId}>
           <rect x={padding} y={captionY} width={photoSize} height={captionH} />
         </clipPath>
+        {/* Theme-aware photo vignette. The photo content (sky, suns,
+            silhouette) is rendered theme-agnostically because it is a
+            frozen "artifact". But in dark mode that bright photo
+            content can sit on a dark matte with too much contrast at
+            the photo edges, creating a "halo doesn't match background"
+            feeling. We bridge that transition by drawing a radial
+            gradient overlay on top of the photo: fully transparent in
+            the centre, fading to palette.card opacity at the corners.
+            Because palette.card is the SAME color as the matte, the
+            photo's edges visually dissolve into the matte in BOTH
+            light and dark modes - the polaroid feels like one
+            cohesive object, not "bright photo glued onto dark frame".
+            We also bias the gradient slightly stronger when the photo
+            is in the developing/blurred state, since that is where
+            the user reported the issue. */}
+        <radialGradient
+          id={photoVignetteId}
+          cx="50%"
+          cy="50%"
+          r="72%"
+          fx="50%"
+          fy="50%"
+        >
+          <stop offset="0%" stopColor={palette.card} stopOpacity="0" />
+          <stop offset="60%" stopColor={palette.card} stopOpacity="0" />
+          <stop offset="88%" stopColor={palette.card} stopOpacity={(0.18 + developIntensity * 0.18).toFixed(3)} />
+          <stop offset="100%" stopColor={palette.card} stopOpacity={(0.42 + developIntensity * 0.22).toFixed(3)} />
+        </radialGradient>
       </defs>
 
       {/* Rarity halo behind the card. Only emitted for tiers above
@@ -616,6 +659,26 @@ export function Polaroid(props: PolaroidProps) {
           fill="white"
           filter={`url(#${grainId})`}
           opacity={0.4 + developIntensity * 0.2}
+        />
+
+        {/* Theme-aware vignette overlay. Fades the photo's outer ring
+            into palette.card so the bright photo content (sky, suns,
+            silhouettes) blends into the surrounding matte in BOTH
+            light and dark modes. This is what fixes the dark-mode
+            "halo color is not close to the background" issue: the
+            photo's edges now physically transition to the same color
+            as the matte that contains them, so the polaroid reads as
+            one cohesive object regardless of theme. We deliberately
+            draw this AFTER the film grain (so the grain itself fades
+            at the edges too) but BEFORE the reasoning quote (so the
+            payoff text always sits clearly on top, fully readable). */}
+        <rect
+          x={photoX}
+          y={photoY}
+          width={photoSize}
+          height={photoSize}
+          fill={`url(#${photoVignetteId})`}
+          pointerEvents="none"
         />
 
         {/* Reasoning quote — ONLY when developed + accurate. This is the
