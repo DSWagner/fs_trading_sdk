@@ -1,6 +1,6 @@
 # Session handoff: Conviction (FS Trading SDK competition entry)
 
-> Last updated: 2026-05-12 (commit `1aff35d`)
+> Last updated: 2026-05-12 (after the resize-stability + form-height-match fix)
 > Parent transcript: `[Where we are right now](b5263758-f700-4040-9a30-693a3a1cf730)`
 
 ## TL;DR for the next session
@@ -40,6 +40,7 @@ Architectural rules: this repo is a strict 3-layer monorepo (`core` -> `react` -
 
 | SHA       | Title                                                                                                       |
 |-----------|-------------------------------------------------------------------------------------------------------------|
+| _pending_ | fix(conviction): pin preview createdAt + measure form natural height so columns truly match                 |
 | `1aff35d` | polaroid + chart scale down so right column matches form height (width floor 280 -> 220)                    |
 | `e756ce3` | rarity-colored skies (grey/green/blue/purple/gold/orange) + lower-anchored reasoning quote                  |
 | `93e78eb` | 50:50 BetFlow layout with stacked equal-size visualisations (ResizeObserver via callback ref)               |
@@ -55,9 +56,11 @@ The BetFlow page must satisfy ALL of these. The snapshot script `scripts/verify-
 
 1. **50:50 grid** at desktop: `gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)'`. Left column = form. Right column = polaroid stacked above chart.
 2. **Polaroid and chart have IDENTICAL bounding rects**. Both width and height must match (DOM-verified by the snapshot assertion `dims.polaroidW !== dims.chartW || dims.polaroidH !== dims.chartH`).
-3. **Both columns end at the same vertical position**. The snapshot asserts `Math.abs(dims.formH - dims.asideH) <= 4`. The mechanism: a `ResizeObserver` measures the form column's natural height, then the polaroid + chart are sized so their stacked height equals that natural height (down to a `MIN_VISUAL_WIDTH = 220` floor). When the floor kicks in, the form gets a `min-height` bump so the columns still match at the bottom.
-4. **No inner scrollbars** anywhere on the page (no `overflow: scroll/auto` inside the columns).
-5. **Chart card has rounded corners on all four sides**. `.conviction-chart-shell { overflow: hidden }` in `index.css` clips the Recharts SVG to the card's border-radius.
+3. **Both columns end at the same vertical position**. The snapshot asserts `Math.abs(dims.formH - dims.asideH) <= 4`. The mechanism: the form column has TWO nested divs - an outer wrapper that carries `min-height: rightColumnTotalHeight` (so the grid cell stretches via `alignItems: stretch`), and an inner div with the `ResizeObserver` callback ref that measures the form's NATURAL content height (free of any min-height). The polaroid + chart are sized so their stacked height equals that natural height (down to a `MIN_VISUAL_WIDTH = 200` floor). When the floor kicks in, the outer wrapper's `min-height` keeps the columns matching at the bottom. This nested structure is the fix for the 2x mismatch the user reported - in the previous setup the ResizeObserver was on the same div as the min-height, so the observed value was the inflated one and the visuals were sized to match the inflated value, leaving the form's natural content much shorter than the visible right column.
+
+4. **Live preview polaroid is invariant under resize/zoom**. The `createdAt` prop on the preview Polaroid is pinned via `useMemo(() => new Date().toISOString(), [])`. Every parent re-render (resize, zoom, slider drag for unrelated state) used to fire the inline `new Date().toISOString()` JSX expression, which fed the polaroid seed via `seedFromInputs(...createdAt)` and reshuffled the suns and stars. The verify script `scripts/verify-conviction/verify-resize-stable.mjs` asserts the SVG signature is byte-identical across 1440 -> 1200 -> 1024 -> 1440 resizes.
+5. **No inner scrollbars** anywhere on the page (no `overflow: scroll/auto` inside the columns).
+6. **Chart card has rounded corners on all four sides**. `.conviction-chart-shell { overflow: hidden }` in `index.css` clips the Recharts SVG to the card's border-radius.
 
 ## ResizeObserver pattern (do not break)
 
@@ -133,9 +136,11 @@ cd packages/docs && npx docusaurus build  # docs build
 Snapshot scripts (start the dev server first with `npm run dev` in `demo-app/`):
 
 ```
-node scripts/verify-conviction/snapshot-betflow.mjs        # main layout + invariants
-node scripts/verify-conviction/snapshot-betflow-tiers.mjs  # all 6 rarity tier previews
-node scripts/verify-conviction/snapshot-rarity-tiers.mjs   # resolved-state tier snapshots
+node scripts/verify-conviction/snapshot-betflow.mjs              # main layout + invariants
+node scripts/verify-conviction/snapshot-betflow-tiers.mjs        # all 6 rarity tier previews
+node scripts/verify-conviction/snapshot-rarity-tiers.mjs         # resolved-state tier snapshots
+node scripts/verify-conviction/snapshot-betflow-narrow.mjs       # form/aside height match at narrow viewports (set VW=1024)
+node scripts/verify-conviction/verify-resize-stable.mjs          # polaroid SVG is byte-identical across resizes
 ```
 
 ## Currently running processes
@@ -148,6 +153,28 @@ if ($conn) { Stop-Process -Id $conn.OwningProcess -Force }
 ```
 
 Then `cd demo-app && npm run dev`.
+
+## Competition eligibility audit (re-checked 2026-05-12)
+
+Cross-reference: `https://ecosystem.functionspace.dev/competition` and `https://ecosystem.functionspace.dev/competition/setupguide`.
+
+Code-side compliance (everything that we control):
+
+- Public fork of `functionspace/fs_trading_sdk` (verified: `git remote -v` shows upstream pointing at the canonical repo). Required.
+- `demo-app/.env` contains the exact required dev endpoint: `VITE_FS_BASE_URL=https://fs-engine-api-dev.onrender.com`.
+- Auth flows go through `PasswordlessAuthWidget` from `@functionspace/ui` (see `components/AuthGate.tsx`). No password forms anywhere.
+- All belief/payout math is via `@functionspace/core` (`generateGaussian`, `generateRange`, `generateBelief`). No reimplemented bucket math.
+- All data and trades go through `@functionspace/react` hooks (`useMarket`, `useBuy`, `usePreviewPayout`, `useAuth`). No raw `fetch` in `BetFlow.tsx`.
+- Local dev runs on port 3000 exactly (the setup guide forbids falling back to 3001).
+- Commit author: every commit MUST be `DSWagner <35304153+DSWagner@users.noreply.github.com>` (per "Git rules" above).
+
+Submission-side actions (the USER must do these at submission time):
+
+- Follow `@functionspaceHQ` on X.
+- Tag `@functionSPACEHQ` in a post about the build with a screenshot or demo video.
+- Submit at `https://ecosystem.functionspace.dev/competition/submit` with: Telegram handle, project name, "what you built", market IDs used (the live demo lets the user pick from `discoverMarkets`), GitHub repo URL (`https://github.com/DSWagner/fs_trading_sdk`), Deployed URL (Vercel), X post URL, IP-terms acknowledgement.
+
+Submissions can be updated until close (~18 May 2026) and the most recent submission per repo URL is what gets judged.
 
 ## Useful pointers
 

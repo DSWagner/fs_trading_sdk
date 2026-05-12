@@ -115,34 +115,46 @@ export function BetFlowPage() {
   // formColumnHeight to compute the budget that the two visualisations
   // can share. Each visualisation gets exactly half.
   const RIGHT_COL_CHROME = 30 /* header */ + 16 /* header→polaroid gap */ + 16 /* polaroid→chart gap */;
-  // Lowered the width floor from 280 → 220 so the visualisations can
-  // SHRINK to match the form's natural content height instead of
-  // forcing the form to grow to match an oversized polaroid. The user
-  // explicitly asked for the two halves of the page to end at the
-  // same vertical position with NO scrolling, and the previous 280
-  // floor was creating a ~240 px empty area below the form's submit
-  // button on a typical 1024 wide viewport. At 220 wide the polaroid's
-  // smallest serif glyphs (the timestamped footer) are still ~5 px tall
-  // which is the practical readability floor for editorial typography.
-  const MIN_VISUAL_WIDTH = 220;
+  // Width floor for the polaroid + chart. Below this the SVG glyphs in
+  // the polaroid footer become unreadable. We deliberately set this
+  // LOWER than the form's natural content height implies so the visuals
+  // can shrink to match the form rather than the form being stretched
+  // (invisibly, with empty space) to match an oversized right column.
+  const MIN_VISUAL_WIDTH = 200;
+  // The polaroid width is whichever is SMALLEST of: the column width
+  // (so it never overflows horizontally), the height-derived width (so
+  // the stacked polaroid + chart fit inside the form's natural height),
+  // and a 600 px hard cap (so the polaroid is never absurdly large on
+  // ultrawide monitors). Floor at MIN_VISUAL_WIDTH to keep text legible.
+  //
+  // Note on the feedback structure: formColumnHeight is observed on the
+  // INNER div of the form column, while the OUTER wrapper carries the
+  // min-height that stretches the column to match the right side. That
+  // means the observed value is the form's NATURAL content height,
+  // independent of any min-height we apply, so there is no oscillating
+  // loop between "form taller -> visuals taller -> form taller".
   const heightDerivedVisualHeight = Math.max(MIN_VISUAL_WIDTH * 1.5, (formColumnHeight - RIGHT_COL_CHROME) / 2);
   const heightDerivedVisualWidth = heightDerivedVisualHeight / 1.5;
-  // The polaroid width is whichever is SMALLER: the column width (so it
-  // never overflows horizontally), the height-derived width (so the
-  // stacked polaroid + chart fit inside formColumnHeight), and a 600 px
-  // hard cap (so the polaroid is never absurdly large on ultrawide
-  // monitors). Floor at MIN_VISUAL_WIDTH to keep text legible.
   const previewVisualWidth = Math.max(
     MIN_VISUAL_WIDTH,
     Math.min(600, previewColumnWidth, heightDerivedVisualWidth),
   );
   const previewVisualHeight = Math.round(previewVisualWidth * 1.5);
-  // Final right-column height: header + 2 visualisations + gaps. We
-  // also stretch the LEFT column to at least this height (min-height)
-  // so even if the form's natural content is shorter than the
-  // visualisations the two columns still end at the same vertical
-  // position.
+  // Final right-column height: header + 2 visualisations + gaps. The
+  // LEFT column wrapper gets this as its min-height so when the form's
+  // natural content is shorter than the visuals' floored size, the two
+  // columns still end at the same vertical position. When the form's
+  // natural content is TALLER than this, the visuals grow to match
+  // (because formColumnHeight feeds previewVisualHeight).
   const rightColumnTotalHeight = RIGHT_COL_CHROME + 2 * previewVisualHeight;
+  // Stable ISO timestamp for the live-preview polaroid. Computing this
+  // inline (e.g. `createdAt={new Date().toISOString()}`) re-evaluated
+  // on every render, and since createdAt is one of the inputs to the
+  // polaroid seed, every parent re-render (resize, zoom, slider drag
+  // for unrelated state) reshuffled the suns and stars. Pinning it to
+  // a useMemo with [] deps freezes the timestamp for the lifetime of
+  // the page so resize/zoom no longer randomise the polaroid.
+  const previewCreatedAt = useMemo(() => new Date().toISOString(), []);
   useEffect(() => {
     ctxRef.current = ctx;
     previewPayoutRef.current = previewPayout;
@@ -336,7 +348,7 @@ export function BetFlowPage() {
       marketUnits={market.xAxisUnits}
       username={user?.username ?? 'you'}
       reasoning={reasoning || 'Your reasoning will appear here.'}
-      createdAt={new Date().toISOString()}
+      createdAt={previewCreatedAt}
       prediction={prediction}
       spread={spread}
       conviction={conviction}
@@ -486,16 +498,23 @@ export function BetFlowPage() {
         }}
       >
         <div
-          ref={setFormColumnRef}
           style={{
-            // Stretch to at least the right-column height so the form
-            // never appears as a short skinny column with a giant empty
-            // area below it. If the form's natural content is already
-            // taller, this min-height is a no-op and the visualisations
-            // (which size themselves to formColumnHeight) grow to match.
+            // OUTER form-column wrapper. Carries the min-height that
+            // stretches the column to match the visualisations on the
+            // right when the form's natural content is shorter than
+            // the floored polaroid+chart stack. The inner div below
+            // (with the ResizeObserver ref) is what we MEASURE: it is
+            // free of any min-height, so the observed value is always
+            // the form's pure natural content height. That breaks the
+            // feedback loop where a min-height-inflated form fed back
+            // into a larger right column which fed back into a larger
+            // min-height, leaving the form invisibly stretched (no
+            // background) and the user perceiving the right column as
+            // ~2x taller than the form.
             minHeight: isMobile ? undefined : rightColumnTotalHeight,
           }}
         >
+        <div ref={setFormColumnRef}>
           <span style={{ fontFamily: fonts.mono, fontSize: 10.5, color: palette.ember, letterSpacing: 1.6 }}>
             STAKE A CONVICTION
           </span>
@@ -696,6 +715,7 @@ export function BetFlowPage() {
           {(submitError || buyError) && (
             <p style={{ fontFamily: fonts.body, color: palette.rose, marginTop: 12 }}>{submitError ?? buyError?.message}</p>
           )}
+        </div>
         </div>
 
         {!isMobile && (
