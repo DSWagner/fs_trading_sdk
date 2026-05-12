@@ -259,7 +259,7 @@ Open bets get a palette anchored to their **potential rarity** — the tier the 
 
 - Rarity → hue table: `RARITY_VISUAL` in `components/Polaroid.tsx`.
 - Anchored palette generator: `rarityPalette(rarity, seed, conviction, developed)` in `components/Polaroid.tsx`. Returns sky, ground, sun cores, sun glow, and accent colour as `#rrggbb` strings.
-- Sun count + placement: `sunCount()` and the seed-driven placement loop inside `buildPhoto()` in `components/Polaroid.tsx`.
+- Stellar topology + placement: `rarityTopology()` and the hierarchical placement loop inside `buildPhoto()` in `components/Polaroid.tsx`. Each tier emits a physically-stable multi-star system: 1 star (common), 2-star binary (uncommon), 2+2 hierarchical quadruple (rare), 2+2+1 (epic), 2+2+2 Castor-like sextuple (legendary), 2+2+2+1 (mythic). Three is deliberately skipped to avoid the chaotic three-body configuration. Pair-internal separation a1 and group-to-group separation a2 are sized so a2/a1 stays comfortably > 2.
 - Reasoning quote anchor: see the `ReasoningQuote` callsite that uses `photo.horizonY` for `y` and `maxHeight`.
 - Frame widths + glows per tier: `TIER_META` in `rarity.ts` (now 1 / 3 / 4 / 5 / 6 / 7 px).
 - Effective rarity for live preview: `effectiveRarity` memo in the `Polaroid` component (resolved → actual, open → `potentialRarity`).

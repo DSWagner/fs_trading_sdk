@@ -1,6 +1,6 @@
 # Session handoff: Conviction (FS Trading SDK competition entry)
 
-> Last updated: 2026-05-12 (after the column-alignment + locale-stable-numbers + 6-tier-grid pass)
+> Last updated: 2026-05-12 (after the hierarchical star-system topology pass: 1/2/4/5/6/7 stars per tier, 3 skipped for the three-body problem)
 > Parent transcript: `[Where we are right now](b5263758-f700-4040-9a30-693a3a1cf730)`
 
 ## TL;DR for the next session
@@ -40,7 +40,8 @@ Architectural rules: this repo is a strict 3-layer monorepo (`core` -> `react` -
 
 | SHA       | Title                                                                                                       |
 |-----------|-------------------------------------------------------------------------------------------------------------|
-| _pending_ | feat(conviction): pixel-perfect BetFlow column alignment, locale-stable scale strip, 6-tier landing grid    |
+| _pending_ | feat(conviction): hierarchical multi-star topology per rarity (1/2/4/5/6/7, no 3-body problem)             |
+| `0b9c4bc` | feat(conviction): pixel-perfect BetFlow column alignment, locale-stable scale strip, 6-tier landing grid    |
 | `35140eb` | feat(conviction): Bricolage + Sora + Space Mono font stack, theme-aware photo vignette, three-layer drop shadow |
 | `03d6e5a` | feat(conviction): pastel purple + pastel orange palette, distinctive font stack, chart fills aside, uniform rarity border |
 | `7ce9c8e` | fix(conviction): pin preview createdAt + measure form natural height so columns truly match                 |
@@ -104,6 +105,19 @@ const setRef = useCallback((el: HTMLElement | null) => {
 | mythic    | 24      | 0.92 | warm ORANGE          |
 
 **Polaroid frame thickness is UNIFORM at 5 px for every tier above common.** Common keeps a thin theme-aware 1 px neutral edge (using `palette.rule`, NOT a hardcoded grey, so it adapts to dark mode). Per user request: "make the border thickness the same and make the border slightly thicker so we can see the color in both dark mode and light mode." The COLOR is what changes between rarities, not the thickness. `RARITY_BORDER_WIDTH = 5` constant is defined at the top of `TIER_META` to enforce this.
+
+**Stellar topology per tier (hierarchical multi-star physics).** `rarityTopology()` in `Polaroid.tsx` returns group sizes:
+
+| Tier      | Total stars | Topology (group sizes) | Why                                  |
+|-----------|-------------|------------------------|--------------------------------------|
+| common    | 1           | `[1]`                  | Single star, naturally stable        |
+| uncommon  | 2           | `[2]`                  | Binary pair, naturally stable        |
+| rare      | 4           | `[2, 2]`               | Hierarchical quadruple (2 binaries)  |
+| epic      | 5           | `[2, 2, 1]`            | Two binaries + distant single        |
+| legendary | 6           | `[2, 2, 2]`            | Three binaries (Castor-like)         |
+| mythic    | 7           | `[2, 2, 2, 1]`         | Three binaries + distant single      |
+
+Three is INTENTIONALLY skipped. Three similar-mass close stars are the classic three-body problem and would be chaotic, so we never emit such a configuration. Every system we emit is hierarchical: pair-internal separation a1 (~0.08-0.20 normalised photo units) is small, group-to-group separation a2 (~0.30-0.45) is large, and a2/a1 stays in the 2.5-5x range. Group centres for 2+ groups are placed on a deterministic 2D template (line, triangle, or quad) with small seed-driven jitter; star radius scales DOWN as total body count rises so 7-star systems do not turn into a single blob. If you change the topology, also update the snapshot expectations in `scripts/verify-conviction/snapshot-betflow-tiers.mjs` and re-run that script to verify each tier still reads visually.
 
 The develop filter in `Polaroid.tsx` (`photoSat`, `sepia`, `photoBlur` around line 384) must remain GENTLE (sat cut `* 0.25`, sepia `* 0.18`, blur `* 1.8`). The previous values (sat `* 0.75`, sepia `* 0.70`) washed every tier brown in the live preview and the user explicitly demanded the rarity hue stay visible during the "developing" animation.
 

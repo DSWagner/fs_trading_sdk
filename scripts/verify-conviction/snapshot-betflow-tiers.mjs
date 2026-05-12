@@ -6,10 +6,13 @@
  * effectiveRarity + rarityPalette pipeline (preview → potentialRarity).
  *
  * Expectations after the rewrite:
- *   - Each preview's sky is the tier's signature colour (cream → jade →
- *     azure → violet → gold → ember), never randomized.
- *   - Sun count: 1 for common..epic, 2 for legendary, 3 for mythic.
- *   - Suns sit RANDOMLY in the upper-half sky (NOT pinned to prediction).
+ *   - Each preview's sky is the tier's signature colour (cream -> jade ->
+ *     azure -> violet -> gold -> ember), never randomized.
+ *   - Star count: 1 / 2 / 4 / 5 / 6 / 7 for common / uncommon / rare /
+ *     epic / legendary / mythic. Three is intentionally skipped (3-body
+ *     problem); counts >= 4 are laid out as hierarchical pairs of
+ *     binaries plus optional singletons.
+ *   - Stars sit RANDOMLY in the upper-half sky (NOT pinned to prediction).
  *   - Reasoning quote, when visible (After Resolution preview), sits
  *     over the ground silhouette only — never over sky/sun/hills.
  */

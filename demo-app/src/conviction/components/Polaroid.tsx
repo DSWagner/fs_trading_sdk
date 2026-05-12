@@ -582,8 +582,11 @@ export function Polaroid(props: PolaroidProps) {
             filter={photoFilter}
           />
         ))}
-        {/* Suns — 1..3 disks depending on rarity. Glow uses a shared
-            radial gradient; each sun draws its own bright core. */}
+        {/* Stellar bodies. Count is rarity-driven (1/2/4/5/6/7 for
+            common/uncommon/rare/epic/legendary/mythic) and laid out
+            hierarchically as binary pairs plus optional singles. Glow
+            uses a shared radial gradient; each star draws its own
+            bright core. */}
         {photo.suns.map((s, i) => (
           <g key={`sun-${i}`}>
             <circle
@@ -1003,10 +1006,12 @@ interface SunSpec {
   core: string;
   glow: string;
   /**
-   * 0..1 — relative weight in the composition. The first sun is the
-   * "main" sun (weight 1); subsequent suns are progressively smaller so
-   * legendary/mythic layouts read as a "main + companion" group rather
-   * than three identical disks.
+   * 0..1 - relative weight in the composition. Within each binary pair
+   * the primary star is "full size" (weight 1) and its companion shrinks
+   * to ~0.82 so the pair reads as "primary + smaller mate". Across
+   * groups, secondary and tertiary groups fall off gently (~0.88, 0.78)
+   * so the eye knows which system is dominant. Solo stars sit at ~0.65
+   * to read as distant rather than primary.
    */
   weight: number;
 }
@@ -1015,12 +1020,17 @@ interface PhotoSpec {
   sky: { top: string; mid: string; bottom: string };
   ground: { top: string; bottom: string; line: string };
   /**
-   * Suns array — 1 entry for common..epic, 2 for legendary, 3 for
-   * mythic. Positions are seed-driven within the upper-half "sky" area,
-   * with collision avoidance so two suns never overlap. The position
-   * intentionally does NOT track the user's prediction or belief peaks
-   * (the silhouette/hills already show those); the sun is the receipt's
-   * decorative signature, free to land wherever the seed picks.
+   * Stellar bodies in the sky. Count and arrangement come from
+   * `rarityTopology()` — 1 / 2 / 4 / 5 / 6 / 7 stars for
+   * common / uncommon / rare / epic / legendary / mythic. The list is
+   * laid out as a HIERARCHICAL multiple-star system (tight binary pairs
+   * spaced far apart from each other and from any singletons) so every
+   * receipt depicts a gravitationally stable configuration. Three close,
+   * similar-mass stars (the chaotic three-body problem) are deliberately
+   * never emitted. The configuration intentionally does NOT track the
+   * user's prediction or belief peaks (the silhouette/hills already show
+   * those); the system is the receipt's decorative signature, free to
+   * land wherever the seed picks.
    */
   suns: SunSpec[];
   stars: Array<{ x: number; y: number; r: number; o: number; accent: boolean }>;
@@ -1080,72 +1090,198 @@ function buildPhoto(opts: {
   // ornament tick density, and the ornament tick length further down.
   const stakeBoost = clamp01(Math.log10(Math.max(1, opts.collateral)) / 3); // 0…1 over $1…$1000
 
-  // SUN COUNT — driven purely by rarity. Common..epic get one sun. Legendary
-  // gets two. Mythic gets three. The bimodal-shape-specific dual-sun rule
-  // is gone; the user explicitly asked for the sun count to be a rarity
-  // signal instead. Bimodality is still visible via the silhouette's two
-  // hills, so no information is lost.
-  const count = sunCount(opts.rarity);
+  // STAR SYSTEM - driven purely by rarity, laid out as a HIERARCHICAL
+  // multiple-star system so every receipt depicts a gravitationally
+  // stable configuration:
+  //
+  //   common 1, uncommon 2, rare 4, epic 5, legendary 6, mythic 7.
+  //
+  // Three stars is intentionally absent. A 3-body system of similar-mass
+  // stars in close proximity is chaotic (the classical three-body problem)
+  // and would resolve, in real life, by ejecting one body or settling
+  // into a binary plus a distant single. We jump straight from 2 -> 4 to
+  // honor that physics. Every count >= 4 is built from binary pairs
+  // (each pair is a tightly-bound 2-body system, naturally stable) plus
+  // optional singletons placed far enough away to be hierarchical.
+  //
+  // Hierarchical stability condition: a2 / a1 >> 2, where a1 is the
+  // intra-group (pair) separation and a2 is the closest distance between
+  // group centers. With pairSep ~ 0.08-0.18 (in normalised photo coords)
+  // and group separation ~ 0.30-0.45, a2/a1 lands in the 2.5-5x range,
+  // comfortably hierarchical.
+  const topology = rarityTopology(opts.rarity);
+  const totalBodies = topology.reduce((s, n) => s + n, 0);
+  const numGroups = topology.length;
 
-  // Sun positions: seed-driven random, no semantic tie to prediction. The
-  // user's prediction is already conveyed by the silhouette's peak and the
-  // numeric scale strip below the photo — the sun is the receipt's
-  // decorative signature. We sample positions with collision avoidance so
-  // multi-sun layouts have visible separation.
+  // Deterministic RNG for layout: derived from the prediction seed so the
+  // composition is stable across re-renders / resizes / zooms.
   const sunRng = mulberry32(opts.seed ^ 0x5_7c0c0);
-  const minSep = count >= 3 ? 0.20 : 0.26; // tighter min-separation for 3-sun
+
+  // Sky band the suns are allowed to occupy. We keep them strictly above
+  // the silhouette horizon so the reasoning quote in the lower half stays
+  // legible.
+  const skyXMin = 0.15;
+  const skyXMax = 0.85;
+  const skyYMin = 0.10;
+  const skyYMax = Math.max(0.20, horizonY - 0.18);
+  const skyXSpan = skyXMax - skyXMin;
+  const skyYSpan = Math.max(0.05, skyYMax - skyYMin);
+
+  // As body count rises, each star has to shrink so 4-7 disks fit in the
+  // sky band without overlapping. The single-star case keeps the original
+  // dramatic-sun size; multi-star configurations drop to "moon-sized"
+  // companions.
+  const radiusScale =
+    totalBodies === 1 ? 1.0 :
+    totalBodies === 2 ? 0.58 :
+    totalBodies === 4 ? 0.34 :
+    totalBodies === 5 ? 0.30 :
+    totalBodies === 6 ? 0.27 :
+    totalBodies === 7 ? 0.25 :
+    1.0;
+  const baseSunR =
+    opts.photoWidth *
+    radiusScale *
+    (0.13 + opts.conviction * 0.07 + stakeBoost * 0.06);
+
+  // Pair-internal separation a1 (normalised, center-to-center). Loose
+  // enough for count=2 (whole sky to itself) but tightens for 4+ star
+  // configs so multiple groups fit and the a2/a1 ratio stays > 2.5.
+  const pairSep =
+    totalBodies === 2 ? 0.20 :
+    totalBodies <= 5 ? 0.12 :
+    0.10;
+
+  // Group center placement templates. Each layout is a deterministic
+  // 2D arrangement that maximises the minimum inter-group distance for
+  // the given number of groups, then the seed adds small jitter for
+  // organic variety. Coordinates are fractions of the (skyXSpan,
+  // skyYSpan) box anchored at (skyXMin, skyYMin).
+  type Slot = { fx: number; fy: number };
+  const slots: Slot[] =
+    numGroups === 1
+      ? [{ fx: 0.50, fy: 0.40 }]
+      : numGroups === 2
+        ? [
+            { fx: 0.22, fy: 0.40 },
+            { fx: 0.78, fy: 0.55 },
+          ]
+        : numGroups === 3
+          ? [
+              { fx: 0.50, fy: 0.18 },
+              { fx: 0.18, fy: 0.75 },
+              { fx: 0.82, fy: 0.72 },
+            ]
+          : [
+              { fx: 0.20, fy: 0.22 },
+              { fx: 0.80, fy: 0.25 },
+              { fx: 0.22, fy: 0.78 },
+              { fx: 0.78, fy: 0.75 },
+            ];
+
+  // Permute which slot receives which topology entry, so the singleton
+  // in 5- or 7-star systems doesn't always land in the same corner.
+  // Fisher-Yates shuffle of [0..numGroups-1] driven by the same seed RNG.
+  const slotOrder = Array.from({ length: numGroups }, (_, i) => i);
+  for (let i = slotOrder.length - 1; i > 0; i--) {
+    const j = Math.floor(sunRng() * (i + 1));
+    [slotOrder[i], slotOrder[j]] = [slotOrder[j], slotOrder[i]];
+  }
+
+  // Per-group seed jitter: small in normalised photo units so the
+  // template layout stays recognisable as hierarchical.
+  const jitterAmp = numGroups === 1 ? 0.06 : 0.04;
+  const groupCenters = slots.map((s) => {
+    const jx = (sunRng() - 0.5) * jitterAmp;
+    const jy = (sunRng() - 0.5) * jitterAmp;
+    return {
+      x: clamp(skyXMin + (s.fx + jx) * skyXSpan, skyXMin, skyXMax),
+      y: clamp(skyYMin + (s.fy + jy) * skyYSpan, skyYMin, skyYMax),
+    };
+  });
+
   const suns: SunSpec[] = [];
-  // Base sun radius from conviction + stake. The first sun is "full size";
-  // companion suns scale down so the composition reads as "main + smaller
-  // accents" rather than identical disks.
-  const baseSunR = opts.photoWidth * (0.13 + opts.conviction * 0.07 + stakeBoost * 0.06);
-  for (let i = 0; i < count; i++) {
-    let placed = false;
-    let x = 0.5;
-    let y = 0.3;
-    for (let attempt = 0; attempt < 24; attempt++) {
-      // Constrain to the upper portion of the photo so the sun stays
-      // unambiguously in the SKY (above the silhouette hills) and the
-      // bottom half stays clean for the reasoning quote.
-      x = 0.15 + sunRng() * 0.70;
-      y = 0.10 + sunRng() * Math.max(0.05, horizonY - 0.25);
-      let ok = true;
-      for (const prev of suns) {
-        // Treat sun positions as 2D points scaled to photo space (which is
-        // square-ish), so the separation calculation reads naturally.
-        if (Math.hypot(x - prev.x, y - prev.y) < minSep) {
-          ok = false;
-          break;
-        }
+  // Cycle through the three accent hues across all stars so the ensemble
+  // feels like one stellar family while still letting each star carry a
+  // micro-variation. Available cores: [sunCore, sun2Core, sun3Core].
+  const sunCores = [palettes.sunCore, palettes.sun2Core, palettes.sun3Core];
+
+  // Walk topology in the permuted slot order so the largest group always
+  // lands in slot 0 visually unless the shuffle moved it.
+  let bodyIndex = 0;
+  for (let gIdx = 0; gIdx < numGroups; gIdx++) {
+    const slot = slotOrder[gIdx];
+    const center = groupCenters[slot];
+    const size = topology[gIdx];
+    // Primary group (gIdx === 0 in topology order) is the dominant system
+    // in the composition. Falloff per group is gentle so distant binaries
+    // still read clearly.
+    const groupScale = gIdx === 0 ? 1.0 : gIdx === 1 ? 0.92 : 0.84;
+
+    if (size === 1) {
+      // Single star. Slightly smaller than a group's primary so it reads
+      // as a distant solo rather than a primary, but still distinct from
+      // the dot-stars in the background sky.
+      const weight = (gIdx === 0 ? 1.0 : 0.68) * groupScale;
+      const r = Math.max(7, Math.round(baseSunR * weight));
+      const coreR = r * (0.42 + r3 * 0.1);
+      suns.push({
+        x: center.x,
+        y: center.y,
+        r,
+        coreR,
+        core: sunCores[bodyIndex % sunCores.length],
+        glow: palettes.sunGlow,
+        weight,
+      });
+      bodyIndex++;
+    } else {
+      // Binary pair. Orient at a seed-driven angle and offset each member
+      // by half of pairSep on opposite sides of the group center. The y
+      // component is squashed (0.55x) so the pair leans horizontal -
+      // more pleasing on the wide-aspect photo than vertical stacks.
+      const theta = sunRng() * Math.PI * 2;
+      const dx = (Math.cos(theta) * pairSep) / 2;
+      const dy = ((Math.sin(theta) * pairSep) / 2) * 0.55;
+      // Primary in this group + companion in this group. We gently
+      // randomize which side gets which weight so binaries don't all look
+      // "big-on-the-left, small-on-the-right".
+      const flip = sunRng() < 0.5;
+      const primaryWeight = 1.0 * groupScale;
+      const companionWeight = 0.82 * groupScale;
+      const aPos = { x: center.x - dx, y: center.y - dy };
+      const bPos = { x: center.x + dx, y: center.y + dy };
+      const primaryPos = flip ? bPos : aPos;
+      const companionPos = flip ? aPos : bPos;
+      {
+        const r = Math.max(7, Math.round(baseSunR * primaryWeight));
+        const coreR = r * (0.42 + r3 * 0.1);
+        suns.push({
+          x: clamp(primaryPos.x, skyXMin, skyXMax),
+          y: clamp(primaryPos.y, skyYMin, skyYMax),
+          r,
+          coreR,
+          core: sunCores[bodyIndex % sunCores.length],
+          glow: palettes.sunGlow,
+          weight: primaryWeight,
+        });
+        bodyIndex++;
       }
-      if (ok) {
-        placed = true;
-        break;
+      {
+        const r = Math.max(6, Math.round(baseSunR * companionWeight));
+        const coreR = r * (0.42 + r3 * 0.1);
+        suns.push({
+          x: clamp(companionPos.x, skyXMin, skyXMax),
+          y: clamp(companionPos.y, skyYMin, skyYMax),
+          r,
+          coreR,
+          core: sunCores[bodyIndex % sunCores.length],
+          glow: palettes.sunGlow,
+          weight: companionWeight,
+        });
+        bodyIndex++;
       }
     }
-    if (!placed) {
-      // Fallback: evenly distribute along the upper third if collision-
-      // avoidance keeps failing (e.g. extreme parameters). Guarantees we
-      // always emit `count` suns even if the random walk struggled.
-      x = 0.2 + (i / Math.max(1, count - 1)) * 0.6;
-      y = 0.18 + (i % 2) * 0.08;
-    }
-    // Companion suns shrink: first = 100%, second = 78%, third = 62%.
-    const weight = i === 0 ? 1 : i === 1 ? 0.78 : 0.62;
-    const r = Math.max(8, Math.round(baseSunR * weight));
-    const coreR = r * (0.4 + r3 * 0.1);
-    // Slight hue variation between companion suns (still anchored to the
-    // tier's accent hue family) so they don't look like clones.
-    const sunCore = i === 0 ? palettes.sunCore : i === 1 ? palettes.sun2Core : palettes.sun3Core;
-    suns.push({
-      x,
-      y,
-      r,
-      coreR,
-      core: sunCore,
-      glow: palettes.sunGlow,
-      weight,
-    });
   }
 
   // Stars — count varies with conviction, density with seed. High-conviction
@@ -1228,19 +1364,39 @@ function buildPhoto(opts: {
 }
 
 /**
- * Number of suns to draw, by rarity tier.
- *   Common..Epic  → 1 sun (the receipt's signature glow).
- *   Legendary     → 2 suns (a "main" sun plus a companion).
- *   Mythic        → 3 suns (rare celestial event — three lights in the sky).
+ * Hierarchical stellar topology, by rarity tier.
  *
- * The user explicitly asked for the sun count to scale with rarity rather
- * than encoding semantic meaning. Bimodal-shape information is preserved
- * by the silhouette's two-peak hill shape.
+ * Each entry is a list of GROUP SIZES. A group is a tightly-bound cluster
+ * (single star or close binary). Groups are placed far apart so that the
+ * full system is gravitationally stable in the hierarchical sense:
+ *
+ *     1 star  -> single (naturally stable)
+ *     2 stars -> binary pair (naturally stable)
+ *     3 stars -> FORBIDDEN. Three close, similar-mass stars are the
+ *                three-body problem and resolve chaotically. We skip
+ *                this count entirely.
+ *     4 stars -> 2 + 2  (two distant binary pairs; hierarchical quadruple)
+ *     5 stars -> 2 + 2 + 1  (two binaries plus one distant single)
+ *     6 stars -> 2 + 2 + 2  (three distant binaries; "Castor-like")
+ *     7 stars -> 2 + 2 + 2 + 1  (three binaries plus one distant single)
+ *
+ * Counts: common 1, uncommon 2, rare 4, epic 5, legendary 6, mythic 7.
+ *
+ * The placement code below enforces the hierarchical condition a2/a1 >> 2
+ * by drawing pair members tightly around a group center while spacing the
+ * group centers at least ~5x further apart, so every emitted system would
+ * survive the n-body stability test.
  */
-function sunCount(rarity: Rarity | null): number {
-  if (rarity === 'mythic') return 3;
-  if (rarity === 'legendary') return 2;
-  return 1;
+function rarityTopology(rarity: Rarity | null): number[] {
+  switch (rarity) {
+    case 'mythic':    return [2, 2, 2, 1];
+    case 'legendary': return [2, 2, 2];
+    case 'epic':      return [2, 2, 1];
+    case 'rare':      return [2, 2];
+    case 'uncommon':  return [2];
+    case 'common':    return [1];
+    default:          return [1];
+  }
 }
 
 /**

@@ -826,14 +826,18 @@ export function BetFlowPage() {
             <div
               data-betflow-header
               style={{
-                // Full aside width so "LIVE PREVIEW · YOUR RECEIPT"
-                // and the BEFORE/AFTER toggle stay on one line at
-                // every desktop size. This is the chrome that
-                // RIGHT_COL_CHROME budgets for; if this row ever
-                // wraps the column heights silently desync.
+                // Full aside width with a three-cell flex layout:
+                // left label, centered toggle, right spacer. The label
+                // and the spacer have equal flex weight (flex: 1 1 0)
+                // so the toggle's center column lands exactly on the
+                // aside's horizontal center, which is also the
+                // polaroid's center (the aside is alignItems: center
+                // with the polaroid at previewVisualWidth). The fixed
+                // 36 px height keeps RIGHT_COL_CHROME accurate; if you
+                // change this row, re-snapshot betflow and verify
+                // formInner.h === aside.h in dims.json.
                 width: '100%',
                 display: 'flex',
-                justifyContent: 'space-between',
                 alignItems: 'center',
                 gap: 12,
                 flexWrap: 'nowrap',
@@ -843,6 +847,8 @@ export function BetFlowPage() {
             >
               <div
                 style={{
+                  flex: '1 1 0',
+                  minWidth: 0,
                   fontFamily: fonts.mono,
                   fontSize: 11,
                   color: palette.inkMute,
@@ -850,12 +856,13 @@ export function BetFlowPage() {
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
-                  minWidth: 0,
+                  textAlign: 'left',
                 }}
               >
                 LIVE PREVIEW · YOUR RECEIPT
               </div>
-              {previewToggle}
+              <div style={{ flex: '0 0 auto' }}>{previewToggle}</div>
+              <div style={{ flex: '1 1 0', minWidth: 0 }} aria-hidden="true" />
             </div>
             <div data-betflow-polaroid style={{ width: previewVisualWidth, maxWidth: '100%' }}>
               {previewPolaroid}
