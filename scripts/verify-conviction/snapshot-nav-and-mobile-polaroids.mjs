@@ -40,10 +40,24 @@ async function main() {
     await page.goto(`${BASE_URL}/`, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(600);
 
-    const signInBtn = page.locator('[data-testid="navbar-sign-in"]');
-    const exists = await signInBtn.count();
-    log.push(`desktop nav sign-in button present: ${exists === 1}`);
-    if (exists !== 1) throw new Error('NavBar sign-in button missing');
+    // Wait for nav auth host to render.
+    const authHost = page.locator('[data-testid="navbar-sign-in"]');
+    await authHost.waitFor({ state: 'visible', timeout: 5000 });
+
+    // Confirm there is exactly ONE visible trigger button - the SDK's
+    // "Sign In / Sign Up" button restyled by our CSS - and NOT the
+    // redundant "Sign In to Trade" hint span (we hid it via display: none).
+    const triggers = await authHost.locator('button.fs-auth-btn-primary').count();
+    log.push(`navbar visible trigger buttons: ${triggers} (expected 1)`);
+    if (triggers !== 1) throw new Error(`Expected exactly 1 trigger button, got ${triggers}`);
+
+    const hiddenHint = await page.evaluate(() => {
+      const span = document.querySelector('[data-testid="navbar-sign-in"] .fs-auth-actions > span');
+      if (!span) return 'absent';
+      return getComputedStyle(span).display;
+    });
+    log.push(`navbar "Sign In to Trade" hint computed display: ${hiddenHint} (expected "none")`);
+    if (hiddenHint !== 'none') throw new Error(`"Sign In to Trade" hint is still visible: ${hiddenHint}`);
 
     // Capture closed state.
     await page.screenshot({
@@ -51,31 +65,31 @@ async function main() {
       clip: { x: 0, y: 0, width: 1440, height: 80 },
     });
 
-    // Click and verify modal appears.
-    await signInBtn.click();
+    // Click and verify the SDK's own modal appears (not a nested one).
+    await authHost.locator('button.fs-auth-btn-primary').click();
     await page.waitForTimeout(400);
-    const modalCount = await page.locator('[role="dialog"][aria-modal="true"]').count();
-    log.push(`modal opened: ${modalCount === 1}`);
-    if (modalCount !== 1) throw new Error('Sign-in modal did not open');
+    const sdkModalCount = await page.locator('.fs-auth-modal-backdrop').count();
+    log.push(`SDK modal opened: ${sdkModalCount === 1} (count=${sdkModalCount})`);
+    if (sdkModalCount !== 1) throw new Error('SDK sign-in modal did not open');
 
-    // Modal should contain the PasswordlessAuthWidget input.
-    const inputCount = await page.locator('[role="dialog"] input').count();
-    log.push(`modal contains input(s): ${inputCount}`);
+    // The username input should be visible inside the modal.
+    const inputCount = await page.locator('.fs-auth-modal input[type="text"]').count();
+    log.push(`modal username input(s) present: ${inputCount}`);
 
     await page.screenshot({ path: join(OUT_DIR, 'desktop-nav-modal-open.png'), fullPage: false });
 
-    // Close via Escape.
+    // Close via Escape (SDK widget handles its own Escape).
     await page.keyboard.press('Escape');
     await page.waitForTimeout(300);
-    const modalAfterEscape = await page.locator('[role="dialog"][aria-modal="true"]').count();
+    const modalAfterEscape = await page.locator('.fs-auth-modal-backdrop').count();
     log.push(`modal closed via Escape: ${modalAfterEscape === 0}`);
 
     // Re-open and close via backdrop click.
-    await signInBtn.click();
+    await authHost.locator('button.fs-auth-btn-primary').click();
     await page.waitForTimeout(300);
-    await page.mouse.click(20, 400); // backdrop area outside modal card
+    await page.mouse.click(20, 400);
     await page.waitForTimeout(300);
-    const modalAfterBackdrop = await page.locator('[role="dialog"][aria-modal="true"]').count();
+    const modalAfterBackdrop = await page.locator('.fs-auth-modal-backdrop').count();
     log.push(`modal closed via backdrop click: ${modalAfterBackdrop === 0}`);
 
     await ctx.close();
@@ -98,9 +112,9 @@ async function main() {
     }, mode);
     await page.waitForTimeout(900);
 
-    // NavBar in mobile view should also expose the Sign in button.
-    const mobileNavBtn = await page.locator('[data-testid="navbar-sign-in"]').count();
-    log.push(`mobile (${mode}) nav sign-in button present: ${mobileNavBtn === 1}`);
+    // NavBar in mobile view should also expose exactly one visible trigger.
+    const mobileTriggers = await page.locator('[data-testid="navbar-sign-in"] button.fs-auth-btn-primary').count();
+    log.push(`mobile (${mode}) nav trigger buttons: ${mobileTriggers} (expected 1)`);
 
     // Capture the landing fold so we can see the polaroid carousel.
     await page.screenshot({

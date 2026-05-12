@@ -396,6 +396,214 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   box-shadow: 0 0 0 4px var(--c-shadow-deep);
 }
 
+/* ── SDK PasswordlessAuthWidget visual reconciliation ──
+ *
+ * The competition rules require us to use `PasswordlessAuthWidget` from
+ * `@functionspace/ui` for every auth surface; no custom auth flows are
+ * allowed. The widget ships with its own visual chrome that does not
+ * fit the editorial palette:
+ *
+ *   1. The "idle" view next to its trigger button shows a static span
+ *      that says "Sign In to Trade". When the widget is rendered in
+ *      the NavBar (next to our own header label) or inside the
+ *      BetFlow AuthGate (which already says "Sign your conviction."
+ *      above), this hint is redundant and adds visual noise. Hide it.
+ *
+ *   2. The trigger button is a generic indigo `--fs-primary` rectangle.
+ *      We restyle it (only in the NavBar context) as a pastel-ember
+ *      pill matching the rest of the header chrome.
+ *
+ *   3. The widget renders its own modal (`fs-auth-modal-backdrop` +
+ *      `fs-auth-modal`) which uses the SDK's dark surface tokens. On
+ *      our pastel-purple paper this looks like a foreign black box.
+ *      Restyle it to match our editorial card.
+ *
+ *   4. The signed-in user-bar inside the widget duplicates the
+ *      username + wallet + sign-out chrome the NavBar already
+ *      provides itself. Hide it inside the NavBar context.
+ *
+ * Selectors are scoped under `.conviction-navbar-auth` for the NavBar
+ * changes and under `:root` (no prefix) for changes that should apply
+ * wherever the widget appears in the Conviction app (its modal).
+ */
+
+/* NavBar: strip the widget's default card chrome so it sits flush in
+ * the header bar and only the trigger button is visible.
+ *
+ * IMPORTANT: use the direct-child combinator (`>`). The SDK modal also
+ * carries a `.fs-passwordless-auth` class on its inner card, but the
+ * modal node is a GRANDCHILD via `.fs-auth-modal-backdrop`. Using `>`
+ * here scopes the transparency reset to ONLY the idle wrapper. If we
+ * used a descendant selector the modal would also lose its background
+ * and padding and render unreadable. */
+.conviction-navbar-auth > .fs-passwordless-auth {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  height: auto !important;
+}
+
+/* Hide the redundant "Sign In to Trade" hint span next to the trigger.
+ * The only direct `<span>` child of `.fs-auth-actions` in the SDK
+ * widget IS this hint. */
+.conviction-navbar-auth .fs-auth-actions > span,
+.conviction-authgate-host .fs-auth-actions > span {
+  display: none !important;
+}
+
+/* Drop the gap and flex sizing so the button doesn't stretch full
+ * width when its sibling span disappears. */
+.conviction-navbar-auth .fs-auth-actions {
+  gap: 0 !important;
+}
+.conviction-navbar-auth .fs-auth-actions .fs-auth-btn {
+  flex: 0 0 auto !important;
+}
+
+/* Restyle the NavBar trigger as an ember outlined pill, and rewrite
+ * the visible label via CSS so the button reads "Sign in to bet" or
+ * "Sign in" instead of the SDK default "Sign In / Sign Up".
+ *
+ * IMPORTANT: scope to `.fs-auth-actions` so the modal's submit button
+ * (which lives inside `.fs-auth-form-footer`, not `.fs-auth-actions`)
+ * keeps its SDK label intact. Otherwise the modal submit reads
+ * "Sign in to betSign In / Sign Up" - the `::before` pseudo-element
+ * concatenates with the un-hidden modal label. */
+.conviction-navbar-auth .fs-auth-actions .fs-auth-btn.fs-auth-btn-primary {
+  background: transparent !important;
+  border: 1px solid var(--c-ember) !important;
+  color: var(--c-ember) !important;
+  border-radius: 999px !important;
+  padding: 7px 14px !important;
+  font-family: 'Space Mono', 'JetBrains Mono', monospace !important;
+  font-weight: 600 !important;
+  letter-spacing: 1px !important;
+  text-transform: uppercase !important;
+  white-space: nowrap !important;
+  cursor: pointer !important;
+  transition: background 160ms ease, color 160ms ease, transform 160ms ease !important;
+  font-size: 0 !important;
+}
+.conviction-navbar-auth .fs-auth-actions .fs-auth-btn.fs-auth-btn-primary::before {
+  content: 'Sign in to bet';
+  font-size: 12px;
+  letter-spacing: 1px;
+  font-weight: 600;
+}
+.conviction-navbar-auth[data-compact='true'] .fs-auth-actions .fs-auth-btn.fs-auth-btn-primary::before {
+  content: 'Sign in';
+}
+.conviction-navbar-auth .fs-auth-actions .fs-auth-btn.fs-auth-btn-primary:hover:not(:disabled) {
+  background: var(--c-ember) !important;
+  color: var(--c-card) !important;
+  filter: none !important;
+  transform: translateY(-1px) !important;
+}
+
+/* Hide the SDK's signed-in user-bar inside the NavBar context: our
+ * own NavBar code already renders the username + wallet + signout
+ * pill, so the SDK bar would be a duplicate. (Outside the NavBar the
+ * SDK bar still paints normally.) */
+.conviction-navbar-auth .fs-auth-user-bar {
+  display: none !important;
+}
+
+/* ── SDK modal restyle, applied globally to the Conviction app ──
+ *
+ * The SDK paints its modal with `var(--fs-surface)` etc., which on
+ * dark mode is near-black and on light mode is a bluish-grey. Override
+ * to use our pastel-purple card colors so the modal feels native. */
+.fs-auth-modal-backdrop {
+  background: rgba(20, 12, 40, 0.55) !important;
+  backdrop-filter: blur(6px) !important;
+  -webkit-backdrop-filter: blur(6px) !important;
+  z-index: 200 !important;
+}
+.fs-auth-modal {
+  background: var(--c-card) !important;
+  border: 1px solid var(--c-rule) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 24px 60px var(--c-shadow-deep), 0 8px 20px var(--c-shadow) !important;
+  padding: 24px 26px !important;
+  max-width: 420px !important;
+}
+
+/* Form title sits like an editorial display heading. */
+.fs-auth-modal .fs-auth-form-title {
+  font-family: 'Bricolage Grotesque', 'Funnel Display', system-ui, sans-serif !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.5px !important;
+  font-size: 22px !important;
+  color: var(--c-ink) !important;
+  margin: 0 0 4px 0 !important;
+}
+.fs-auth-modal .fs-auth-label-hint {
+  font-family: 'Sora', system-ui, sans-serif !important;
+  color: var(--c-ink-mute) !important;
+  font-size: 13px !important;
+  opacity: 1 !important;
+  margin-bottom: 8px !important;
+}
+
+/* Inputs match the conviction text field. */
+.fs-auth-modal .fs-auth-label {
+  font-family: 'Space Mono', monospace !important;
+  font-size: 11px !important;
+  letter-spacing: 1.2px !important;
+  text-transform: uppercase !important;
+  color: var(--c-ink-mute) !important;
+}
+.fs-auth-modal .fs-auth-input {
+  background: var(--c-paper) !important;
+  border: 1px solid var(--c-rule) !important;
+  color: var(--c-ink) !important;
+  font-family: 'Sora', system-ui, sans-serif !important;
+  font-size: 14px !important;
+  padding: 10px 12px !important;
+  border-radius: 6px !important;
+}
+.fs-auth-modal .fs-auth-input:focus {
+  border-color: var(--c-ember) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-ember) 25%, transparent) !important;
+}
+
+/* Modal primary CTA reuses the ember pill treatment. */
+.fs-auth-modal .fs-auth-btn.fs-auth-btn-primary {
+  background: var(--c-ember) !important;
+  color: var(--c-card) !important;
+  border: none !important;
+  border-radius: 8px !important;
+  padding: 10px 16px !important;
+  font-family: 'Space Mono', monospace !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  letter-spacing: 1px !important;
+  text-transform: uppercase !important;
+}
+.fs-auth-modal .fs-auth-btn.fs-auth-btn-primary:hover:not(:disabled) {
+  background: var(--c-ember-deep) !important;
+  filter: none !important;
+}
+.fs-auth-modal .fs-auth-btn.fs-auth-btn-secondary {
+  background: transparent !important;
+  color: var(--c-ink-soft) !important;
+  border: 1px solid var(--c-rule) !important;
+  border-radius: 8px !important;
+  padding: 10px 16px !important;
+  font-family: 'Space Mono', monospace !important;
+  font-size: 12px !important;
+  letter-spacing: 1px !important;
+  text-transform: uppercase !important;
+}
+.fs-auth-modal .fs-auth-mode-link {
+  color: var(--c-ink-mute) !important;
+  font-family: 'Sora', system-ui, sans-serif !important;
+  font-size: 12px !important;
+}
+.fs-auth-modal .fs-auth-mode-link:hover {
+  color: var(--c-ember) !important;
+}
+
 /* Display headings. Bricolage Grotesque is a variable typeface with two
  * variation axes - optical size (opsz) and "wonk" (wdth here used as
  * proxy). We bias the optical size toward the display end and pull the

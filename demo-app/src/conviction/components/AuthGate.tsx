@@ -35,6 +35,7 @@ export function AuthGate({ onSignedIn }: { onSignedIn?: (username: string) => vo
 
   return (
     <div
+      className="conviction-authgate-host"
       style={{
         background: palette.card,
         border: `1px solid ${palette.rule}`,
@@ -64,7 +65,7 @@ export function AuthGate({ onSignedIn }: { onSignedIn?: (username: string) => vo
           lineHeight: 1.5,
         }}
       >
-        Pick a handle. No password, no email — just the name future-you will be answering for.
+        Pick a handle. No password, no email, just the name future-you will be answering for.
       </p>
       <PasswordlessAuthWidget
         onLogin={(loggedInUser) => {
