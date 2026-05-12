@@ -595,13 +595,22 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   letter-spacing: 1px !important;
   text-transform: uppercase !important;
 }
+/* Conviction is a passwordless-only flow. The competition rules require
+ * us to use the SDK's `PasswordlessAuthWidget` unmodified, which ships
+ * with internal links that pivot the form into the admin / password
+ * flow ("Admin Login", "Back to Sign In / Sign Up", "Create Admin
+ * Account"). Conviction users never have password-protected accounts,
+ * so these links are dead ends for them and just create confusion
+ * ("why are there two ways to sign in?").
+ *
+ * We hide them at the CSS layer so the widget itself stays untouched
+ * (its React tree, props, and onLogin contract are exactly as the SDK
+ * shipped them). If the engine ever returns PASSWORD_REQUIRED for a
+ * username, the widget still auto-pivots to the admin view via its
+ * own `showAdminLogin` state - that path is reachable when forced by
+ * the backend, just no longer self-discoverable from the UI. */
 .fs-auth-modal .fs-auth-mode-link {
-  color: var(--c-ink-mute) !important;
-  font-family: 'Sora', system-ui, sans-serif !important;
-  font-size: 12px !important;
-}
-.fs-auth-modal .fs-auth-mode-link:hover {
-  color: var(--c-ember) !important;
+  display: none !important;
 }
 
 /* Display headings. Bricolage Grotesque is a variable typeface with two

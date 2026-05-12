@@ -76,6 +76,18 @@ async function main() {
     const inputCount = await page.locator('.fs-auth-modal input[type="text"]').count();
     log.push(`modal username input(s) present: ${inputCount}`);
 
+    // Admin Login / mode-pivot links must be hidden by CSS so the
+    // user sees a single passwordless flow only. The widget itself
+    // still ships them (we cannot modify the SDK component), but
+    // they must be display:none for our users.
+    const modeLinkDisplay = await page.evaluate(() => {
+      const link = document.querySelector('.fs-auth-modal .fs-auth-mode-link');
+      if (!link) return 'absent';
+      return getComputedStyle(link).display;
+    });
+    log.push(`modal "Admin Login" link computed display: ${modeLinkDisplay} (expected "none")`);
+    if (modeLinkDisplay !== 'none') throw new Error(`Admin Login link is still visible: ${modeLinkDisplay}`);
+
     await page.screenshot({ path: join(OUT_DIR, 'desktop-nav-modal-open.png'), fullPage: false });
 
     // Close via Escape (SDK widget handles its own Escape).
