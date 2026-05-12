@@ -1,13 +1,23 @@
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, NavLink } from 'react-router-dom';
 import { useAuth } from '@functionspace/react';
 import { palette, fonts } from '../theme';
 import { useIsMobile, useIsNarrow } from '../useMediaQuery';
 import { useDarkMode } from '../useDarkMode';
+import { AuthGate } from './AuthGate';
 
 export function NavBar() {
   const { user, isAuthenticated, logout } = useAuth();
   const isMobile = useIsMobile();
   const isNarrow = useIsNarrow();
+  const [signInOpen, setSignInOpen] = useState(false);
+
+  useEffect(() => {
+    if (isAuthenticated && signInOpen) {
+      setSignInOpen(false);
+    }
+  }, [isAuthenticated, signInOpen]);
   return (
     <header
       style={{
@@ -83,14 +93,156 @@ export function NavBar() {
                 </button>
               )}
             </>
-          ) : !isMobile ? (
-            <span style={{ fontFamily: fonts.mono, fontSize: 12, color: palette.inkFade }}>
-              Guest mode · sign in to bet
-            </span>
-          ) : null}
+          ) : (
+            <SignInButton
+              isMobile={isMobile}
+              isNarrow={isNarrow}
+              onClick={() => setSignInOpen(true)}
+            />
+          )}
         </div>
       </div>
+      {signInOpen && !isAuthenticated && (
+        <SignInModal onClose={() => setSignInOpen(false)} />
+      )}
     </header>
+  );
+}
+
+/**
+ * Header CTA for guests. Renders as a real <button>, so keyboard focus,
+ * click handlers, and screen readers all work. Compact "Sign in" label on
+ * narrow viewports; full "Guest · Sign in to bet" on desktop.
+ *
+ * Visually styled as an ember-outlined pill so it is unmistakably
+ * interactive (the old guest-mode hint was a low-contrast static span and
+ * users were missing it entirely).
+ */
+function SignInButton({
+  isMobile,
+  isNarrow,
+  onClick,
+}: {
+  isMobile: boolean;
+  isNarrow: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      data-testid="navbar-sign-in"
+      style={{
+        background: 'transparent',
+        border: `1px solid ${palette.ember}`,
+        color: palette.ember,
+        padding: isMobile ? '6px 10px' : '7px 14px',
+        fontSize: 12,
+        fontFamily: fonts.mono,
+        fontWeight: 600,
+        letterSpacing: 1,
+        borderRadius: 999,
+        cursor: 'pointer',
+        textTransform: 'uppercase',
+        whiteSpace: 'nowrap',
+        transition: 'background 160ms ease, color 160ms ease, transform 160ms ease',
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = palette.ember;
+        e.currentTarget.style.color = palette.card;
+        e.currentTarget.style.transform = 'translateY(-1px)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = 'transparent';
+        e.currentTarget.style.color = palette.ember;
+        e.currentTarget.style.transform = 'none';
+      }}
+    >
+      {isMobile || isNarrow ? 'Sign in' : 'Sign in to bet'}
+    </button>
+  );
+}
+
+/**
+ * Lightweight modal hosted via React Portal so it escapes the sticky
+ * header's stacking context and overlays the entire viewport. Uses the
+ * same `AuthGate` component that the bet-flow page wraps around the
+ * SDK's `PasswordlessAuthWidget`, so the auth surface is identical
+ * whether the user signs in from the header or from the prediction
+ * composer. Closes on Escape, on backdrop click, and automatically
+ * when authentication succeeds (handled by the parent effect).
+ */
+function SignInModal({ onClose }: { onClose: () => void }) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onClose]);
+
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
+  return createPortal(
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Sign in"
+      onClick={onClose}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 200,
+        background: 'rgba(20, 12, 40, 0.55)',
+        backdropFilter: 'blur(6px)',
+        WebkitBackdropFilter: 'blur(6px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 20,
+        animation: 'conviction-fade-in 180ms ease both',
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: '100%',
+          maxWidth: 420,
+          position: 'relative',
+        }}
+      >
+        <button
+          type="button"
+          aria-label="Close sign-in"
+          onClick={onClose}
+          style={{
+            position: 'absolute',
+            top: -10,
+            right: -10,
+            width: 32,
+            height: 32,
+            borderRadius: '50%',
+            background: palette.card,
+            border: `1px solid ${palette.rule}`,
+            color: palette.inkSoft,
+            cursor: 'pointer',
+            fontSize: 16,
+            lineHeight: 1,
+            boxShadow: `0 2px 8px ${palette.shadow}`,
+          }}
+        >
+          ×
+        </button>
+        <AuthGate />
+      </div>
+    </div>,
+    document.body,
   );
 }
 

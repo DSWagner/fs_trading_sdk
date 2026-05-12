@@ -360,10 +360,15 @@ function MobilePolaroidStack({ receipts, narrow }: { receipts: PolaroidProps[]; 
         display: 'flex',
         gap: 12,
         overflowX: 'auto',
-        padding: '12px 4px 24px',
+        // Browsers force `overflow-y: auto` when `overflow-x` is `auto`,
+        // so the rotated polaroids (which poke 18-20 px above their
+        // bounding box at a 3-4 deg tilt on a ~520 px-tall polaroid)
+        // were being clipped at the top - the rarity-coloured top
+        // border disappeared on tilt. Reserve 28 px of vertical padding
+        // on both sides so every tilt + the polaroid's drop shadow has
+        // room to breathe without painting outside the scroll viewport.
+        padding: '28px 16px 32px',
         margin: '0 -16px',
-        paddingLeft: 16,
-        paddingRight: 16,
         scrollSnapType: 'x mandatory',
         WebkitOverflowScrolling: 'touch',
       }}
@@ -375,8 +380,6 @@ function MobilePolaroidStack({ receipts, narrow }: { receipts: PolaroidProps[]; 
             flex: '0 0 auto',
             transform: `rotate(${i % 2 === 0 ? -3 : 4}deg)`,
             scrollSnapAlign: 'center',
-            paddingTop: 8,
-            paddingBottom: 8,
           }}
         >
           <Polaroid {...r} width={width} />

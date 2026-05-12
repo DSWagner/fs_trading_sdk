@@ -1,6 +1,6 @@
 # Session handoff: Conviction (FS Trading SDK competition entry)
 
-> Last updated: 2026-05-12 (after the dual-polaroid BetFlow redesign: before-resolution and after-resolution polaroids side-by-side, toggle removed, label centered)
+> Last updated: 2026-05-12 (after the responsive-polish pass: thin global scrollbars, mobile polaroid stacks no longer clip the rarity top-stripe on hover/rotation, and NavBar "Sign in to bet" is now a real ember-pill button that opens an AuthGate modal portal)
 > Parent transcript: `[Where we are right now](b5263758-f700-4040-9a30-693a3a1cf730)`
 
 ## TL;DR for the next session
@@ -40,7 +40,8 @@ Architectural rules: this repo is a strict 3-layer monorepo (`core` -> `react` -
 
 | SHA       | Title                                                                                                       |
 |-----------|-------------------------------------------------------------------------------------------------------------|
-| _pending_ | feat(conviction): side-by-side before/after polaroids in BetFlow preview, toggle removed, centered label    |
+| _pending_ | feat(conviction): thin global scrollbars, NavBar sign-in modal, mobile polaroid stacks no longer clip top   |
+| `cf07d2c` | feat(conviction): side-by-side before/after polaroids in BetFlow preview, toggle removed, centered label    |
 | `f1dd726` | feat(polaroid): auto-fit reasoning font + 240-char input cap so quotes always fit inside the photo          |
 | `d94341c` | feat(conviction): hierarchical multi-star topology per rarity (1/2/4/5/6/7, no 3-body problem)             |
 | `0b9c4bc` | feat(conviction): pixel-perfect BetFlow column alignment, locale-stable scale strip, 6-tier landing grid    |

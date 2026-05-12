@@ -74,6 +74,61 @@ html, body, #root {
   transition: background-color 220ms ease, color 220ms ease;
 }
 
+/* Modern, near-invisible scrollbars.
+ *
+ * Native scrollbars on Windows + Chrome are wide (~17 px) and paint in OS
+ * chrome that clashes hard with the editorial pastel-purple/orange palette
+ * (especially in dark mode where the default grey thumb sits on a black
+ * track on top of an aubergine card). We replace them globally with a thin
+ * 6 px track that uses our `--c-rule` and `--c-ink-fade` tokens, so every
+ * scrollable area in the app gets the same neutral, on-brand treatment.
+ *
+ * Firefox supports the standard `scrollbar-width` / `scrollbar-color`
+ * properties; Chrome / Edge / Safari (Webkit) honour the older
+ * `::-webkit-scrollbar` pseudo-elements. We declare both. The thumb only
+ * paints when the user is actively hovering or scrolling - otherwise the
+ * track is transparent so the scrollbar reads as invisible. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--c-ink-fade) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  transition: background-color 160ms ease;
+}
+*:hover > ::-webkit-scrollbar-thumb,
+:hover::-webkit-scrollbar-thumb,
+::-webkit-scrollbar:hover ::-webkit-scrollbar-thumb {
+  background-color: var(--c-ink-fade);
+  background-clip: padding-box;
+}
+/* Fallback for the most common case: any scrollable element shows the
+ * thumb on hover. The `:hover` chain above is too specific in some
+ * browsers, so we also paint the thumb directly when the scrollable
+ * element itself is hovered. */
+:hover::-webkit-scrollbar-thumb {
+  background-color: var(--c-ink-fade);
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--c-ink-mute);
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 /* Defensive overflow clip on the html element.
  *
  * Without this, any element wider than the viewport (most commonly a

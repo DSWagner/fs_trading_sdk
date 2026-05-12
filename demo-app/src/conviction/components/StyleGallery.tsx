@@ -80,6 +80,13 @@ export function StyleGallery() {
           gridTemplateColumns: isMobile ? undefined : 'repeat(6, minmax(0, 1fr))',
           gap: isMobile ? 12 : 14,
           overflowX: isMobile ? 'auto' : 'visible',
+          // Browsers force overflow-y to `auto` when overflow-x is `auto`,
+          // so the polaroid's hover lift (`translateY(-6px)`) was being
+          // clipped at the top edge by the scroll container, hiding the
+          // colored rarity stripe. Reserve enough top padding to host
+          // the lift plus a few px of shadow breathing room. The desktop
+          // grid (which doesn't scroll) doesn't need this.
+          paddingTop: isMobile ? 14 : 0,
           paddingBottom: isMobile ? 18 : 4,
           marginLeft: isMobile ? -16 : 0,
           marginRight: isMobile ? -16 : 0,
