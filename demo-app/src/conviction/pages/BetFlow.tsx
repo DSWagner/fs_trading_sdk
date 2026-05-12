@@ -59,7 +59,6 @@ export function BetFlowPage() {
   const [conviction, setConviction] = useState<number>(0.7);
   const [reasoning, setReasoning] = useState<string>('');
   const [payout, setPayout] = useState<PayoutCurve | null>(null);
-  const [previewMode, setPreviewMode] = useState<'before' | 'after'>('before');
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -120,46 +119,49 @@ export function BetFlowPage() {
     };
   }, []);
   // Chrome in the right column = header row + gap between header and
-  // polaroid + gap between polaroid and chart. We subtract this from
-  // formColumnHeight to compute the budget that the two visualisations
-  // can share. Each visualisation gets exactly half.
+  // polaroid row + gap between polaroid row and chart. We subtract this
+  // from formColumnHeight to compute the budget that the two
+  // visualisations (polaroid row + chart) can share. Each gets exactly
+  // half.
   //
-  // The header is given the FULL aside width via the markup below
-  // (rather than the narrower previewVisualWidth) so the "LIVE
-  // PREVIEW · YOUR RECEIPT" label and the BEFORE/AFTER toggle stay
-  // on a single line at all desktop sizes. That fixes the alignment
-  // bug the user flagged: when the header wrapped to two lines the
-  // chrome silently grew from ~36 px to ~72 px and the right column
-  // ended up ~40 px taller than the form column.
-  const RIGHT_COL_CHROME = 36 /* single-line header row */ + 16 /* header→polaroid gap */ + 16 /* polaroid→chart gap */;
-  // Width floor for the polaroid + chart. Below this the SVG glyphs in
-  // the polaroid footer become unreadable. We deliberately set this
-  // LOWER than the form's natural content height implies so the visuals
-  // can shrink to match the form rather than the form being stretched
-  // (invisibly, with empty space) to match an oversized right column.
-  const MIN_VISUAL_WIDTH = 200;
-  // The polaroid width is whichever is SMALLEST of: the column width
-  // (so it never overflows horizontally), the height-derived width (so
-  // the stacked polaroid + chart fit inside the form's natural height),
-  // and a 600 px hard cap (so the polaroid is never absurdly large on
-  // ultrawide monitors). Floor at MIN_VISUAL_WIDTH to keep text legible.
-  //
-  // Note on the feedback structure: formColumnHeight is observed on the
-  // INNER div of the form column, while the OUTER wrapper carries the
-  // min-height that stretches the column to match the right side. That
-  // means the observed value is the form's NATURAL content height,
-  // independent of any min-height we apply, so there is no oscillating
-  // loop between "form taller -> visuals taller -> form taller".
-  // Floor on EACH visual's height. With MIN_VISUAL_WIDTH of 200, the
-  // ratio-locked floor on a single visual is 300 px tall.
+  // The right column now hosts TWO polaroids side-by-side ("before
+  // resolution" on the left, "after resolution" on the right) instead
+  // of the old single polaroid with a toggle. The header was simplified
+  // to a centered "LIVE PREVIEW * YOUR RECEIPT" label after the user
+  // reported the toggle and the label competing for horizontal space
+  // and the label getting cropped at narrower viewports.
+  const RIGHT_COL_CHROME = 36 /* header row */ + 16 /* header to polaroid row gap */ + 16 /* polaroid row to chart gap */;
+  // Gap between the two side-by-side polaroids.
+  const POLAROID_PAIR_GAP = 12;
+  // Width floor for EACH polaroid. Below this the SVG glyphs in the
+  // polaroid footer become unreadable. With two polaroids side-by-side
+  // the aside must be at least 2 * MIN_VISUAL_WIDTH + POLAROID_PAIR_GAP
+  // wide for the layout to render at full quality; below that the
+  // polaroids hit the floor and the page may scroll horizontally on
+  // ultra-narrow viewports (mobile uses a separate vertical layout).
+  const MIN_VISUAL_WIDTH = 180;
+  // Floor on EACH polaroid's height. With MIN_VISUAL_WIDTH of 180 the
+  // ratio-locked floor on a single polaroid is 270 px tall.
   const MIN_VISUAL_HEIGHT = MIN_VISUAL_WIDTH * 1.5;
-  // Floor on the WHOLE right-column stack (chrome + 2 visuals).
+  // Floor on the WHOLE right-column stack (chrome + polaroid row + chart).
   const MIN_VISUAL_TOTAL = RIGHT_COL_CHROME + 2 * MIN_VISUAL_HEIGHT;
+  // heightDerivedVisualWidth: the largest polaroid width such that
+  // polaroid row + chart both fit inside the form's natural height.
+  // Each row gets exactly half the visual budget (formColumnHeight -
+  // chrome), and the polaroid row height = polaroidWidth * 1.5.
   const heightDerivedVisualHeight = Math.max(MIN_VISUAL_HEIGHT, (formColumnHeight - RIGHT_COL_CHROME) / 2);
   const heightDerivedVisualWidth = heightDerivedVisualHeight / 1.5;
+  // The polaroid PAIR (two polaroids + gap) has to fit in
+  // previewColumnWidth. So each polaroid can be at most
+  // (previewColumnWidth - POLAROID_PAIR_GAP) / 2 wide. The 450 cap
+  // keeps each polaroid from blowing up on ultrawide monitors.
   const previewVisualWidth = Math.max(
     MIN_VISUAL_WIDTH,
-    Math.min(600, previewColumnWidth, heightDerivedVisualWidth),
+    Math.min(
+      450,
+      (previewColumnWidth - POLAROID_PAIR_GAP) / 2,
+      heightDerivedVisualWidth,
+    ),
   );
   const previewVisualHeight = Math.round(previewVisualWidth * 1.5);
   // Final right-column height: header + 2 visualisations + gaps.
@@ -361,23 +363,28 @@ export function BetFlowPage() {
   // Factory so the same live preview can render at multiple sizes:
   // big sticky right-aside on desktop, regular top-of-form on mobile.
   // Pulls EVERY slider input into the polaroid so every change re-renders
-  // the visual — the stake slider now perturbs the seed and shifts the
+  // the visual: the stake slider perturbs the seed and shifts the
   // ornament density, conviction shifts the sun radius and star count,
   // etc. Without these inputs feeding the seed the polaroid would only
   // react to prediction/spread/shape.
   //
-  // Desktop width: 420 so the live preview reads as a major visual
-  // alongside the consensus chart on the right of the page. The right
-  // column hosts polaroid + chart in a side-by-side flex row that
-  // together occupy ~2/3 of the page width.
-  const renderPreviewPolaroid = (overrideWidth?: number) => (
+  // `mode` is 'before' (still developing, no reasoning visible) or
+  // 'after' (fully developed, sharp, colored, with the reasoning over
+  // the ground silhouette). The right aside renders BOTH side-by-side
+  // so the user can see what their receipt looks like in flight and
+  // what it will look like once the market resolves in their favor.
+  const renderPreviewPolaroid = (
+    mode: 'before' | 'after',
+    overrideWidth?: number,
+  ) => (
     <Polaroid
       marketId={market.marketId}
       // The position id changes per "preview snapshot" so the seed reacts
       // to slider drags. We use a deterministic suffix from the slider
       // tuple so identical slider configs always look identical, but any
-      // drag re-seeds.
-      positionId={`preview-${prediction.toFixed(3)}-${spread.toFixed(3)}-${conviction.toFixed(3)}-${collateral.toFixed(0)}-${shape}`}
+      // drag re-seeds. The mode is included so the two polaroids do not
+      // collide on caches keyed by positionId.
+      positionId={`preview-${mode}-${prediction.toFixed(3)}-${spread.toFixed(3)}-${conviction.toFixed(3)}-${collateral.toFixed(0)}-${shape}`}
       marketTitle={market.title}
       marketUnits={market.xAxisUnits}
       username={user?.username ?? 'you'}
@@ -390,51 +397,13 @@ export function BetFlowPage() {
       shape={shape}
       lowerBound={lowerBound}
       upperBound={upperBound}
-      width={overrideWidth ?? (isMobile ? 280 : previewVisualWidth)}
+      width={overrideWidth ?? (isMobile ? 260 : previewVisualWidth)}
       expiresAt={expiresAt}
-      resolutionState={previewMode === 'after' ? 'resolved' : 'open'}
-      resolvedOutcome={previewMode === 'after' ? previewOutcome : null}
+      resolutionState={mode === 'after' ? 'resolved' : 'open'}
+      resolvedOutcome={mode === 'after' ? previewOutcome : null}
       consensusAtBet={market.consensusMean ?? null}
-      animateDevelop={previewMode === 'after'}
+      animateDevelop={mode === 'after'}
     />
-  );
-
-  const previewPolaroid = renderPreviewPolaroid();
-
-  const previewToggle = (
-    <div
-      style={{
-        display: 'inline-flex',
-        padding: 2,
-        background: palette.card,
-        border: `1px solid ${palette.rule}`,
-        borderRadius: 999,
-        flexShrink: 0,
-      }}
-    >
-      {(['before', 'after'] as const).map((mode) => (
-        <button
-          key={mode}
-          type="button"
-          onClick={() => setPreviewMode(mode)}
-          style={{
-            border: 'none',
-            background: previewMode === mode ? palette.ember : 'transparent',
-            color: previewMode === mode ? palette.card : palette.inkMute,
-            padding: '6px 14px',
-            fontFamily: fonts.mono,
-            fontSize: 11,
-            letterSpacing: 1,
-            textTransform: 'uppercase',
-            borderRadius: 999,
-            cursor: 'pointer',
-            transition: 'background 160ms, color 160ms',
-          }}
-        >
-          {mode === 'before' ? 'Before resolution' : 'After resolution'}
-        </button>
-      ))}
-    </div>
   );
 
   // Chart card. On desktop this sits DIRECTLY UNDER the polaroid in the
@@ -619,14 +588,27 @@ export function BetFlowPage() {
                 flexDirection: 'column',
                 alignItems: 'center',
                 marginBottom: 24,
+                gap: 16,
               }}
             >
-              <div style={{ fontFamily: fonts.mono, fontSize: 11, color: palette.inkMute, letterSpacing: 1.4, marginBottom: 12, alignSelf: 'flex-start' }}>
+              <div
+                style={{
+                  fontFamily: fonts.mono,
+                  fontSize: 11,
+                  color: palette.inkMute,
+                  letterSpacing: 1.4,
+                  textAlign: 'center',
+                }}
+              >
                 LIVE PREVIEW · YOUR RECEIPT
               </div>
-              {previewToggle}
-              {previewPolaroid}
-              <div style={{ marginTop: 20, width: '100%' }}>{chartCard}</div>
+              {/* On mobile the two polaroids stack vertically (before
+                  on top, after below) so each one stays at a readable
+                  size; side-by-side at typical phone widths would
+                  squash both polaroids below the legible floor. */}
+              {renderPreviewPolaroid('before')}
+              {renderPreviewPolaroid('after')}
+              <div style={{ width: '100%' }}>{chartCard}</div>
             </div>
           )}
 
@@ -836,56 +818,64 @@ export function BetFlowPage() {
             <div
               data-betflow-header
               style={{
-                // Full aside width with a three-cell flex layout:
-                // left label, centered toggle, right spacer. The label
-                // and the spacer have equal flex weight (flex: 1 1 0)
-                // so the toggle's center column lands exactly on the
-                // aside's horizontal center, which is also the
-                // polaroid's center (the aside is alignItems: center
-                // with the polaroid at previewVisualWidth). The fixed
-                // 36 px height keeps RIGHT_COL_CHROME accurate; if you
-                // change this row, re-snapshot betflow and verify
+                // Centered "LIVE PREVIEW * YOUR RECEIPT" label, no toggle
+                // now that the right aside renders both before- and
+                // after-resolution polaroids side-by-side below. The
+                // fixed 36 px height keeps RIGHT_COL_CHROME accurate; if
+                // you change this row, re-snapshot betflow and verify
                 // formInner.h === aside.h in dims.json.
                 width: '100%',
                 display: 'flex',
                 alignItems: 'center',
-                gap: 12,
-                flexWrap: 'nowrap',
+                justifyContent: 'center',
                 height: 36,
                 flexShrink: 0,
               }}
             >
               <div
                 style={{
-                  flex: '1 1 0',
-                  minWidth: 0,
                   fontFamily: fonts.mono,
                   fontSize: 11,
                   color: palette.inkMute,
                   letterSpacing: 1.4,
                   whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  textAlign: 'left',
+                  textAlign: 'center',
                 }}
               >
                 LIVE PREVIEW · YOUR RECEIPT
               </div>
-              <div style={{ flex: '0 0 auto' }}>{previewToggle}</div>
-              <div style={{ flex: '1 1 0', minWidth: 0 }} aria-hidden="true" />
             </div>
-            <div data-betflow-polaroid style={{ width: previewVisualWidth, maxWidth: '100%' }}>
-              {previewPolaroid}
+            {/* Two polaroids side-by-side: the LEFT one is the bet in
+                flight (open, still developing, no reasoning shown), the
+                RIGHT one is the receipt as it would look once the
+                market resolves in the user's favor (fully developed,
+                sharp, colored, with the reasoning quote over the
+                ground). Both polaroids share the same seed/inputs
+                except for the `mode`-suffixed positionId, so they
+                differ only in their resolution state. */}
+            <div
+              data-betflow-polaroid-pair
+              style={{
+                display: 'flex',
+                flexDirection: 'row',
+                gap: POLAROID_PAIR_GAP,
+                width: '100%',
+                justifyContent: 'center',
+                alignItems: 'flex-start',
+                flexShrink: 0,
+              }}
+            >
+              <div data-betflow-polaroid="before" style={{ width: previewVisualWidth }}>
+                {renderPreviewPolaroid('before')}
+              </div>
+              <div data-betflow-polaroid="after" style={{ width: previewVisualWidth }}>
+                {renderPreviewPolaroid('after')}
+              </div>
             </div>
-            {/* Chart wrapper has the SAME outer height as the polaroid
-                (previewVisualHeight) so the polaroid + gap + chart
-                stack equals exactly chrome + 2 * previewVisualHeight,
-                which equals the form column height. That symmetry is
-                what makes the chart bottom edge land at the same y as
-                the form's CTA button bottom. flex-grow is intentionally
-                NOT used here: with both columns sized off the same
-                previewVisualHeight, no growing is needed and any flex
-                growth would actually break the symmetry. */}
+            {/* Chart wrapper carries the same outer height as a single
+                polaroid (previewVisualHeight), so chrome + polaroid row
+                + chart = chrome + 2 * previewVisualHeight, matching the
+                form column height. */}
             <div
               data-betflow-chart
               style={{

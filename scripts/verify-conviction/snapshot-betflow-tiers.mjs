@@ -56,11 +56,10 @@ async function main() {
   await page.goto(`${BASE_URL}${href}`, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1200);
 
-  // Switch to "After Resolution" so the preview is fully developed and
-  // reveals the reasoning quote over the ground.
-  await page.getByRole('button', { name: /After resolution/i }).click();
-  await page.waitForTimeout(400);
-
+  // The right aside now renders BOTH a before-resolution and an
+  // after-resolution polaroid side-by-side, so no toggle click is
+  // needed. We snapshot the "after" polaroid because it carries the
+  // rarity-colored, fully developed visuals we want to verify.
   for (const t of TIERS) {
     // Find the Prediction slider (first slider with label starting with
     // "Prediction" or "Center of range"). The value is controlled via
@@ -79,11 +78,11 @@ async function main() {
       setter?.call(predictionSlider, String(value));
       predictionSlider.dispatchEvent(new Event('input', { bubbles: true }));
     }, t.prediction);
-    await page.waitForTimeout(600);
-    const polaroid = page.locator('svg[role="img"][aria-label^="Polaroid receipt"]').first();
-    await polaroid.waitFor({ state: 'visible', timeout: 5000 });
-    await polaroid.screenshot({ path: join(OUT_DIR, `preview-tier-${t.name}.png`) });
-    console.log(`✓ preview-tier-${t.name}.png (prediction=${t.prediction})`);
+    await page.waitForTimeout(800);
+    const afterCard = page.locator('[data-betflow-polaroid="after"]');
+    await afterCard.waitFor({ state: 'visible', timeout: 5000 });
+    await afterCard.screenshot({ path: join(OUT_DIR, `preview-tier-${t.name}.png`) });
+    console.log(`OK preview-tier-${t.name}.png (prediction=${t.prediction})`);
   }
 
   await browser.close();

@@ -1,6 +1,6 @@
 # Session handoff: Conviction (FS Trading SDK competition entry)
 
-> Last updated: 2026-05-12 (after the hierarchical star-system topology pass: 1/2/4/5/6/7 stars per tier, 3 skipped for the three-body problem)
+> Last updated: 2026-05-12 (after the dual-polaroid BetFlow redesign: before-resolution and after-resolution polaroids side-by-side, toggle removed, label centered)
 > Parent transcript: `[Where we are right now](b5263758-f700-4040-9a30-693a3a1cf730)`
 
 ## TL;DR for the next session
@@ -40,7 +40,9 @@ Architectural rules: this repo is a strict 3-layer monorepo (`core` -> `react` -
 
 | SHA       | Title                                                                                                       |
 |-----------|-------------------------------------------------------------------------------------------------------------|
-| _pending_ | feat(conviction): hierarchical multi-star topology per rarity (1/2/4/5/6/7, no 3-body problem)             |
+| _pending_ | feat(conviction): side-by-side before/after polaroids in BetFlow preview, toggle removed, centered label    |
+| `f1dd726` | feat(polaroid): auto-fit reasoning font + 240-char input cap so quotes always fit inside the photo          |
+| `d94341c` | feat(conviction): hierarchical multi-star topology per rarity (1/2/4/5/6/7, no 3-body problem)             |
 | `0b9c4bc` | feat(conviction): pixel-perfect BetFlow column alignment, locale-stable scale strip, 6-tier landing grid    |
 | `35140eb` | feat(conviction): Bricolage + Sora + Space Mono font stack, theme-aware photo vignette, three-layer drop shadow |
 | `03d6e5a` | feat(conviction): pastel purple + pastel orange palette, distinctive font stack, chart fills aside, uniform rarity border |
@@ -58,13 +60,14 @@ Architectural rules: this repo is a strict 3-layer monorepo (`core` -> `react` -
 
 The BetFlow page must satisfy ALL of these. The snapshot script `scripts/verify-conviction/snapshot-betflow.mjs` asserts the dimensions; do not break the assertions.
 
-1. **50:50 grid** at desktop: `gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)'`. Left column = form. Right column = polaroid stacked above chart.
-2. **Polaroid keeps its 1.5 portrait ratio at `previewVisualWidth`. Chart is wider** - the chart wrapper is `width: 100%` so it fills the entire aside (`asideW`), which is wider than the polaroid by design. The user explicitly asked for this: forcing them to identical width compressed the consensus curves. The snapshot script asserts `polaroidH ~ polaroidW * 1.5`, `chartW > polaroidW`, and `chartW >= asideW * 0.95`.
-3. **Both columns end at the same vertical position - PIXEL-PERFECT**. The snapshot asserts `Math.abs(dims.formH - dims.asideH) <= 4` and the audit dims confirm `formInner.h = aside.h = 1048` and `cta.bottom = chart.bottom = 1180` at 1440 wide. The mechanism is a four-piece contract; do not break any of them:
+1. **50:50 grid** at desktop: `gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)'`. Left column = form. Right column = polaroid PAIR row stacked above chart.
+2. **Polaroid pair keeps 1.5 portrait ratio per polaroid. Chart fills the aside**. The right aside renders TWO polaroids side-by-side (`data-betflow-polaroid="before"` and `data-betflow-polaroid="after"`) separated by `POLAROID_PAIR_GAP` (12 px). Each polaroid width = `(asideW - POLAROID_PAIR_GAP) / 2`, capped at 450 px and also constrained by `heightDerivedVisualWidth = heightDerivedVisualHeight / 1.5`. The chart wrapper is `width: 100%` so it fills the entire aside. The snapshot script asserts `polaroidH ~ polaroidW * 1.5` for BOTH polaroids, `beforeW === afterW`, `chartW > polaroidW`, and `chartW >= asideW * 0.95`.
+3. **Both columns end at the same vertical position - PIXEL-PERFECT**. The snapshot asserts `Math.abs(dims.formH - dims.asideH) <= 4` and the audit dims confirm `formInner.h = aside.h = 1048` at 1440 wide. The mechanism is a four-piece contract; do not break any of them:
    - The form column has TWO nested divs. The OUTER wrapper is a flex column (no min-height). The INNER div carries the `ResizeObserver` callback ref AND `min-height: MIN_VISUAL_TOTAL = RIGHT_COL_CHROME + 2 * MIN_VISUAL_HEIGHT` so the form column never shrinks below the visuals' floor. The inner is also `display: flex; flex-direction: column` because (next bullet).
    - The auth + CTA group inside the inner form column has `marginTop: 'auto'`. When the form's natural content is shorter than `MIN_VISUAL_TOTAL` (narrow viewports, before the user types reasoning), the CTA gets pushed to the bottom of the inflated column instead of leaving an empty band below the CTA. When the form's natural content is taller, marginTop:auto is a no-op.
-   - The polaroid + chart stack is symmetrical: the polaroid is `previewVisualHeight` tall, and the chart wrapper is `height: previewVisualHeight` (NOT `flex: 1 1 auto`). With both at the same height the aside total = `chrome + 2 * previewVisualHeight = formColumnHeight`.
-   - The header row above the polaroid (LIVE PREVIEW · YOUR RECEIPT + BEFORE/AFTER toggle) has `width: 100%` and `flexWrap: 'nowrap'` and a fixed `height: 36`. Previously it was constrained to `previewVisualWidth` and wrapped to two lines on every desktop size, silently inflating the chrome from ~36 to ~72 and putting the columns out of sync by ~40 px. **If you ever change this row, re-snapshot the betflow page and verify `aside.h === formInner.h` in `dims.json`.**
+   - The polaroid-pair row + chart stack is symmetrical: each polaroid in the row is `previewVisualHeight` tall, and the chart wrapper is `height: previewVisualHeight`. With both at the same height the aside total = `chrome + 2 * previewVisualHeight = formColumnHeight`.
+   - The header row above the polaroid pair contains ONLY the centered `LIVE PREVIEW * YOUR RECEIPT` label (no toggle - the user explicitly removed it because the label and toggle were competing for horizontal space and the label was getting cropped). The header is `width: 100%` with `justifyContent: 'center'` and a fixed `height: 36` so `RIGHT_COL_CHROME` stays accurate. **If you ever change this row, re-snapshot the betflow page and verify `aside.h === formInner.h`.**
+   - There is NO before/after preview toggle. Both states are rendered simultaneously: the LEFT polaroid is `resolutionState: 'open'` (developing, no reasoning visible), the RIGHT polaroid is `resolutionState: 'resolved'` with `resolvedOutcome: prediction` (fully developed, sharp, colored, reasoning over the ground). Both share the same seed/inputs; only the `mode`-suffixed `positionId` differentiates them.
 
 4. **Live preview polaroid is invariant under resize/zoom**. The `createdAt` prop on the preview Polaroid is pinned via `useMemo(() => new Date().toISOString(), [])`. Every parent re-render (resize, zoom, slider drag for unrelated state) used to fire the inline `new Date().toISOString()` JSX expression, which fed the polaroid seed via `seedFromInputs(...createdAt)` and reshuffled the suns and stars. The verify script `scripts/verify-conviction/verify-resize-stable.mjs` asserts the SVG signature is byte-identical across 1440 -> 1200 -> 1024 -> 1440 resizes.
 5. **No inner scrollbars** anywhere on the page (no `overflow: scroll/auto` inside the columns).

@@ -52,11 +52,11 @@ async function main() {
   await page.goto(`${BASE_URL}${href}`, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1200);
 
-  await page.getByRole('button', { name: /After resolution/i }).click();
-  await page.waitForTimeout(300);
-
+  // The right aside renders both polaroids at once; we snapshot the
+  // after-resolution one which is the only state that shows the
+  // reasoning quote over the ground.
   const reasoning = page.locator('textarea').first();
-  const polaroid = page.locator('[data-betflow-polaroid]');
+  const polaroid = page.locator('[data-betflow-polaroid="after"]');
 
   for (const s of SAMPLES) {
     await reasoning.fill('');
