@@ -568,6 +568,82 @@ export function Polaroid(props: PolaroidProps) {
       {/* Photo */}
       <g clipPath={`url(#${photoClipId})`}>
         <rect x={photoX} y={photoY} width={photoSize} height={photoSize} fill={`url(#${skyGradientId})`} filter={photoFilter} />
+
+        {/* Aurora (legendary + mythic).
+            Drawn AFTER the sky gradient and BEFORE the stars so the
+            curtain washes the upper sky as ambient atmosphere; the
+            stars then twinkle on top. Mythic stacks multiple curtains
+            in different hues for a multi-color shimmer. Each band is
+            a smoothed sine wave with vertical gradient fading to
+            transparent. */}
+        {photo.aurora && (
+          <g opacity={photo.aurora.intensity * (0.4 + progress * 0.6)} filter={photoFilter}>
+            {photo.aurora.bandYs.map((by, i) => {
+              const color = photo.aurora!.colors[i % photo.aurora!.colors.length];
+              const phase = photo.aurora!.phases[i];
+              const gradId = `aurora-${seed}-${i}`;
+              // Build a smooth sine-wave path that spans the full photo
+              // width, then close to form a vertical band ~ photoSize *
+              // 0.16 tall, so the curtain has body to fill with the
+              // vertical gradient.
+              const steps = 32;
+              const cy = photoY + by * photoSize;
+              const amp = photoSize * 0.025;
+              const bandH = photoSize * 0.16;
+              let topPath = `M ${photoX} ${cy}`;
+              for (let k = 1; k <= steps; k++) {
+                const t = k / steps;
+                const x = photoX + t * photoSize;
+                const y = cy + Math.sin(t * Math.PI * 2 + phase) * amp;
+                topPath += ` L ${x} ${y}`;
+              }
+              let botPath = '';
+              for (let k = steps; k >= 0; k--) {
+                const t = k / steps;
+                const x = photoX + t * photoSize;
+                const y = cy + bandH + Math.sin(t * Math.PI * 2 + phase + 0.6) * amp * 0.6;
+                botPath += ` L ${x} ${y}`;
+              }
+              const d = `${topPath} ${botPath} Z`;
+              return (
+                <g key={`aurora-${i}`}>
+                  <defs>
+                    <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={color} stopOpacity="0" />
+                      <stop offset="35%" stopColor={color} stopOpacity="0.65" />
+                      <stop offset="100%" stopColor={color} stopOpacity="0" />
+                    </linearGradient>
+                  </defs>
+                  <path d={d} fill={`url(#${gradId})`} />
+                </g>
+              );
+            })}
+          </g>
+        )}
+
+        {/* Nebula (epic + legendary + mythic).
+            A blurred radial glow patch in the upper sky. The accent
+            color shines through the rarity palette, giving the deep
+            sky a colored "cloud" feel without competing with the
+            stars or suns. */}
+        {photo.nebula && (
+          <g opacity={photo.nebula.intensity * (0.5 + progress * 0.5)} filter={photoFilter}>
+            <defs>
+              <radialGradient id={`nebula-${seed}`}>
+                <stop offset="0%" stopColor={photo.nebula.innerColor} stopOpacity="0.55" />
+                <stop offset="55%" stopColor={photo.nebula.outerColor} stopOpacity="0.30" />
+                <stop offset="100%" stopColor={photo.nebula.outerColor} stopOpacity="0" />
+              </radialGradient>
+            </defs>
+            <circle
+              cx={photoX + photo.nebula.x * photoSize}
+              cy={photoY + photo.nebula.y * photoSize}
+              r={photo.nebula.radius * photoSize}
+              fill={`url(#nebula-${seed})`}
+            />
+          </g>
+        )}
+
         {photo.stars.map((s, i) => (
           <circle
             key={`star-${i}`}
@@ -582,7 +658,47 @@ export function Polaroid(props: PolaroidProps) {
             filter={photoFilter}
           />
         ))}
-        {/* Stellar bodies. Count is rarity-driven (1/2/4/5/6/7 for
+
+        {/* Comets (uncommon+ probabilistic, epic+ guaranteed).
+            Drawn between the background stars and the suns so they
+            read as crossing the sky in front of the static stars but
+            behind any sun glow. Each comet is a bright head + a tail
+            that fades along a linear gradient. */}
+        {photo.comets.map((c, i) => {
+          const headX = photoX + c.x * photoSize;
+          const headY = photoY + c.y * photoSize;
+          const dx = Math.cos(c.angle) * c.length * photoSize;
+          const dy = Math.sin(c.angle) * c.length * photoSize;
+          const tailX = headX + dx;
+          const tailY = headY + dy;
+          const gradId = `comet-${seed}-${i}`;
+          // Tail color: bright moonlight white at the head transitioning
+          // to a faint accent-tinted blue at the end.
+          return (
+            <g key={`comet-${i}`} opacity={c.intensity * (0.4 + progress * 0.6)} filter={photoFilter}>
+              <defs>
+                <linearGradient id={gradId} x1={headX} y1={headY} x2={tailX} y2={tailY} gradientUnits="userSpaceOnUse">
+                  <stop offset="0%" stopColor="rgba(255,255,250,0.95)" />
+                  <stop offset="40%" stopColor={photo.accentColor} stopOpacity="0.55" />
+                  <stop offset="100%" stopColor={photo.accentColor} stopOpacity="0" />
+                </linearGradient>
+              </defs>
+              <line
+                x1={headX}
+                y1={headY}
+                x2={tailX}
+                y2={tailY}
+                stroke={`url(#${gradId})`}
+                strokeWidth={1.6}
+                strokeLinecap="round"
+              />
+              <circle cx={headX} cy={headY} r={2.2} fill="rgba(255,255,250,0.98)" />
+              <circle cx={headX} cy={headY} r={4.6} fill="rgba(255,255,250,0.35)" />
+            </g>
+          );
+        })}
+
+        {/* Stellar bodies. Count is rarity-driven (1/2/3/4/5/6 for
             common/uncommon/rare/epic/legendary/mythic) and laid out
             hierarchically as binary pairs plus optional singles. Glow
             uses a shared radial gradient; each star draws its own
@@ -1016,24 +1132,82 @@ interface SunSpec {
   weight: number;
 }
 
+interface CometSpec {
+  /** Head position in normalised photo coords [0, 1]. */
+  x: number;
+  y: number;
+  /** Length of the tail as a fraction of photo width. */
+  length: number;
+  /** Direction the tail trails away in (radians). Tails point opposite the head's travel direction. */
+  angle: number;
+  /** 0..1 brightness scalar. Higher tiers get brighter, longer comets. */
+  intensity: number;
+}
+
+interface AuroraSpec {
+  /** 0..1 overall opacity / intensity. */
+  intensity: number;
+  /** Number of overlapping curtains. Legendary = 1 (single soft band). Mythic = 2 or 3 (multi-band). */
+  bands: number;
+  /** Vertical anchor of the curtain centers in normalised photo Y. */
+  bandYs: number[];
+  /** Hex color per band. Mythic mixes accent + jade + magenta; legendary uses a single jade-ember blend. */
+  colors: string[];
+  /** Seed-derived phase offsets per band so each curtain waves differently. */
+  phases: number[];
+}
+
+interface NebulaSpec {
+  /** Center in normalised photo coords [0, 1]. */
+  x: number;
+  y: number;
+  /** Radius in normalised photo width. */
+  radius: number;
+  /** 0..1 opacity scalar. */
+  intensity: number;
+  /** Inner glow hue (accent-tinted). */
+  innerColor: string;
+  /** Outer fade hue (matches accent at low alpha). */
+  outerColor: string;
+}
+
 interface PhotoSpec {
   sky: { top: string; mid: string; bottom: string };
   ground: { top: string; bottom: string; line: string };
   /**
    * Stellar bodies in the sky. Count and arrangement come from
-   * `rarityTopology()` — 1 / 2 / 4 / 5 / 6 / 7 stars for
-   * common / uncommon / rare / epic / legendary / mythic. The list is
-   * laid out as a HIERARCHICAL multiple-star system (tight binary pairs
-   * spaced far apart from each other and from any singletons) so every
-   * receipt depicts a gravitationally stable configuration. Three close,
-   * similar-mass stars (the chaotic three-body problem) are deliberately
-   * never emitted. The configuration intentionally does NOT track the
-   * user's prediction or belief peaks (the silhouette/hills already show
-   * those); the system is the receipt's decorative signature, free to
-   * land wherever the seed picks.
+   * `rarityTopology()` — 1 / 2 / 3 / 4 / 5 / 6 stars for
+   * common / uncommon / rare / epic / legendary / mythic, strictly
+   * incrementing by one per tier so the rarity ladder reads at a glance.
+   * The list is laid out hierarchically (tight binary pairs spaced far
+   * apart from each other and from any singletons) so the composition
+   * reads as an ordered system rather than a crowded cluster. The
+   * configuration intentionally does NOT track the user's prediction or
+   * belief peaks (the silhouette/hills already show those); the system
+   * is the receipt's decorative signature, free to land wherever the
+   * seed picks.
    */
   suns: SunSpec[];
   stars: Array<{ x: number; y: number; r: number; o: number; accent: boolean }>;
+  /**
+   * Comets / shooting stars. Empty for common, scaling up to 2-3 for
+   * mythic. Each comet is a bright head with a fading tail. Placement
+   * avoids the sun glow halos so the streak reads as foreground motion
+   * against the static stars.
+   */
+  comets: CometSpec[];
+  /**
+   * Aurora curtain. Null below legendary. Legendary gets a single soft
+   * jade band; mythic gets multiple overlapping bands in jade + magenta
+   * + the rarity accent for an out-of-this-world feel.
+   */
+  aurora: AuroraSpec | null;
+  /**
+   * Deep-sky nebula glow patch. Null below epic. Intensity rises from
+   * epic -> legendary -> mythic. The hue matches the rarity accent so
+   * the nebula reads as an extension of the tier's signature colour.
+   */
+  nebula: NebulaSpec | null;
   silhouettePath: (px: number, py: number, ps: number) => string;
   /** Horizon Y in normalised photo coords [0, 1]. Used to anchor the reasoning quote. */
   horizonY: number;
@@ -1090,28 +1264,21 @@ function buildPhoto(opts: {
   // ornament tick density, and the ornament tick length further down.
   const stakeBoost = clamp01(Math.log10(Math.max(1, opts.collateral)) / 3); // 0…1 over $1…$1000
 
-  // STAR SYSTEM - driven purely by rarity, laid out as a HIERARCHICAL
-  // multiple-star system so every receipt depicts a gravitationally
-  // stable configuration:
+  // STAR SYSTEM - driven purely by rarity. Star count strictly increments
+  // by one per tier so the rarity ladder reads at a glance:
   //
-  //   common 1, uncommon 2, rare 4, epic 5, legendary 6, mythic 7.
+  //   common 1, uncommon 2, rare 3, epic 4, legendary 5, mythic 6.
   //
-  // Three stars is intentionally absent. A 3-body system of similar-mass
-  // stars in close proximity is chaotic (the classical three-body problem)
-  // and would resolve, in real life, by ejecting one body or settling
-  // into a binary plus a distant single. We jump straight from 2 -> 4 to
-  // honor that physics. Every count >= 4 is built from binary pairs
-  // (each pair is a tightly-bound 2-body system, naturally stable) plus
-  // optional singletons placed far enough away to be hierarchical.
-  //
-  // Hierarchical stability condition: a2 / a1 >> 2, where a1 is the
-  // intra-group (pair) separation and a2 is the closest distance between
-  // group centers. With pairSep ~ 0.08-0.18 (in normalised photo coords)
-  // and group separation ~ 0.30-0.45, a2/a1 lands in the 2.5-5x range,
-  // comfortably hierarchical.
+  // Layouts decompose each count into binary pairs + optional singletons
+  // (see `rarityTopology` for the table), so the existing pair-placement
+  // code below handles every tier with no special-casing per count. Pairs
+  // sit tight (a1 ~ 0.10-0.18 in normalised photo coords); group centers
+  // are far apart (~ 0.30-0.45), giving a 3-5x distance ratio so the
+  // composition reads as hierarchical rather than crowded.
   const topology = rarityTopology(opts.rarity);
   const totalBodies = topology.reduce((s, n) => s + n, 0);
   const numGroups = topology.length;
+  const rLevel = rarityLevel(opts.rarity);
 
   // Deterministic RNG for layout: derived from the prediction seed so the
   // composition is stable across re-renders / resizes / zooms.
@@ -1127,17 +1294,17 @@ function buildPhoto(opts: {
   const skyXSpan = skyXMax - skyXMin;
   const skyYSpan = Math.max(0.05, skyYMax - skyYMin);
 
-  // As body count rises, each star has to shrink so 4-7 disks fit in the
-  // sky band without overlapping. The single-star case keeps the original
-  // dramatic-sun size; multi-star configurations drop to "moon-sized"
-  // companions.
+  // As body count rises, each star has to shrink so up to 6 disks fit in
+  // the sky band without overlapping. The single-star case keeps the
+  // original dramatic-sun size; multi-star configurations drop to
+  // "moon-sized" companions. Falloff is gentle and monotonic.
   const radiusScale =
     totalBodies === 1 ? 1.0 :
     totalBodies === 2 ? 0.58 :
+    totalBodies === 3 ? 0.42 :
     totalBodies === 4 ? 0.34 :
     totalBodies === 5 ? 0.30 :
     totalBodies === 6 ? 0.27 :
-    totalBodies === 7 ? 0.25 :
     1.0;
   const baseSunR =
     opts.photoWidth *
@@ -1146,10 +1313,10 @@ function buildPhoto(opts: {
 
   // Pair-internal separation a1 (normalised, center-to-center). Loose
   // enough for count=2 (whole sky to itself) but tightens for 4+ star
-  // configs so multiple groups fit and the a2/a1 ratio stays > 2.5.
+  // configs so multiple groups fit comfortably.
   const pairSep =
     totalBodies === 2 ? 0.20 :
-    totalBodies <= 5 ? 0.12 :
+    totalBodies <= 4 ? 0.14 :
     0.10;
 
   // Group center placement templates. Each layout is a deterministic
@@ -1225,15 +1392,15 @@ function buildPhoto(opts: {
       const weight = (gIdx === 0 ? 1.0 : 0.68) * groupScale;
       const r = Math.max(7, Math.round(baseSunR * weight));
       const coreR = r * (0.42 + r3 * 0.1);
-      suns.push({
+    suns.push({
         x: center.x,
         y: center.y,
-        r,
-        coreR,
+      r,
+      coreR,
         core: sunCores[bodyIndex % sunCores.length],
-        glow: palettes.sunGlow,
-        weight,
-      });
+      glow: palettes.sunGlow,
+      weight,
+    });
       bodyIndex++;
     } else {
       // Binary pair. Orient at a seed-driven angle and offset each member
@@ -1348,11 +1515,136 @@ function buildPhoto(opts: {
     return d;
   };
 
+  // ────────────────────────────────────────────────────────────────────
+  // CELESTIAL EVENTS - tier-gated, monotonically richer with rarity.
+  //
+  // Each layer is deterministic via a dedicated RNG stream forked from
+  // the same seed, so the events are stable across re-renders (the user
+  // explicitly asked: zooming / resizing must never re-randomize). The
+  // *count* and *intensity* of each event scale with `rLevel`; only the
+  // *positions* and *colors* vary within a tier. That gives a continuous
+  // gradient of richness from common (bare sky) to mythic (aurora +
+  // multiple comets + nebula) without high-frequency randomization.
+  // ────────────────────────────────────────────────────────────────────
+  const eventRng = mulberry32(opts.seed ^ 0xc0_de_fe_ed);
+
+  // -- Comets / shooting stars --
+  //   common    -> 0
+  //   uncommon  -> 35% chance of 1
+  //   rare      -> 65% chance of 1
+  //   epic      -> 1 always
+  //   legendary -> 1 always, 50% chance of 2
+  //   mythic    -> 2 always, 35% chance of 3
+  // Tail length and brightness also rise with tier so the highest tier
+  // reads as the most spectacular.
+  let cometCount: number;
+  if (rLevel === 0) cometCount = 0;
+  else if (rLevel === 1) cometCount = eventRng() < 0.35 ? 1 : 0;
+  else if (rLevel === 2) cometCount = eventRng() < 0.65 ? 1 : 0;
+  else if (rLevel === 3) cometCount = 1;
+  else if (rLevel === 4) cometCount = eventRng() < 0.5 ? 2 : 1;
+  else cometCount = eventRng() < 0.35 ? 3 : 2;
+
+  const comets: CometSpec[] = [];
+  for (let i = 0; i < cometCount; i++) {
+    // Place the comet head somewhere in the upper-mid sky, avoiding the
+    // sun halos. Up to 6 placement attempts per comet so cometless
+    // areas of the sky get used.
+    let cx = 0.5;
+    let cy = 0.3;
+    for (let attempt = 0; attempt < 6; attempt++) {
+      cx = 0.15 + eventRng() * 0.70;
+      cy = 0.05 + eventRng() * Math.max(0.10, skyYMax - 0.05);
+      let nearSun = false;
+      for (const s of suns) {
+        if (Math.hypot(cx - s.x, cy - s.y) < 0.16 * (0.5 + s.weight * 0.5)) {
+          nearSun = true;
+          break;
+        }
+      }
+      if (!nearSun) break;
+    }
+    // Tail length grows with tier: 0.10 .. 0.20 of photo width.
+    const tailLen = 0.10 + 0.02 * rLevel + eventRng() * 0.05;
+    // Tail angle biased downward-left or downward-right - reads as a
+    // falling streak. Random sign keeps things varied.
+    const angleBase = (Math.PI / 4) + eventRng() * (Math.PI / 4);
+    const angle = eventRng() < 0.5 ? Math.PI - angleBase : angleBase;
+    const intensity = 0.55 + 0.08 * rLevel + eventRng() * 0.08;
+    comets.push({ x: cx, y: cy, length: tailLen, angle, intensity: clamp01(intensity) });
+  }
+
+  // -- Nebula (deep-sky glow) -- epic+ only.
+  let nebula: NebulaSpec | null = null;
+  if (rLevel >= 3) {
+    // Place in upper-half sky, away from suns. We try a couple of
+    // candidate positions and pick the one furthest from any sun.
+    let bestX = 0.5;
+    let bestY = 0.18;
+    let bestMinDist = -1;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const nx = 0.15 + eventRng() * 0.70;
+      const ny = 0.05 + eventRng() * Math.max(0.12, skyYMax - 0.10);
+      let minDist = Infinity;
+      for (const s of suns) {
+        minDist = Math.min(minDist, Math.hypot(nx - s.x, ny - s.y));
+      }
+      if (minDist > bestMinDist) {
+        bestMinDist = minDist;
+        bestX = nx;
+        bestY = ny;
+      }
+    }
+    const nebulaIntensity =
+      rLevel === 3 ? 0.35 + eventRng() * 0.08 :
+      rLevel === 4 ? 0.55 + eventRng() * 0.10 :
+      0.78 + eventRng() * 0.10;
+    nebula = {
+      x: bestX,
+      y: bestY,
+      radius: 0.20 + 0.025 * (rLevel - 2) + eventRng() * 0.04,
+      intensity: clamp01(nebulaIntensity),
+      // Inner core uses the rarity accent at a brighter mid-tone; outer
+      // fade uses the same hue at a faint cool blue-violet wash. This
+      // makes the nebula feel like a colored cloud, not a flat blob.
+      innerColor: palettes.accent,
+      outerColor: palettes.sunGlow,
+    };
+  }
+
+  // -- Aurora curtain -- legendary+ only.
+  let aurora: AuroraSpec | null = null;
+  if (rLevel >= 4) {
+    const isMythic = rLevel === 5;
+    const bands = isMythic ? 3 : 1;
+    const bandYs: number[] = [];
+    const phases: number[] = [];
+    for (let i = 0; i < bands; i++) {
+      bandYs.push(0.06 + i * 0.04 + (eventRng() - 0.5) * 0.02);
+      phases.push(eventRng() * Math.PI * 2);
+    }
+    // Legendary: single soft jade-green band.
+    // Mythic: jade + magenta + accent for that "out-of-this-world" wash.
+    const colors = isMythic
+      ? ['#6DE3B5', '#D77AD3', palettes.accent]
+      : ['#6DE3B5'];
+    aurora = {
+      intensity: isMythic ? 0.65 + eventRng() * 0.10 : 0.42 + eventRng() * 0.08,
+      bands,
+      bandYs,
+      colors,
+      phases,
+    };
+  }
+
   return {
     sky: palettes.sky,
     ground: palettes.ground,
     suns,
     stars,
+    comets,
+    aurora,
+    nebula,
     silhouettePath,
     horizonY,
     accentColor: palettes.accent,
@@ -1364,38 +1656,61 @@ function buildPhoto(opts: {
 }
 
 /**
- * Hierarchical stellar topology, by rarity tier.
+ * Stellar topology, by rarity tier. Star count increments by exactly one
+ * per tier so the receipt visually advertises the rarity ladder:
  *
- * Each entry is a list of GROUP SIZES. A group is a tightly-bound cluster
- * (single star or close binary). Groups are placed far apart so that the
- * full system is gravitationally stable in the hierarchical sense:
+ *     common    -> 1
+ *     uncommon  -> 2
+ *     rare      -> 3
+ *     epic      -> 4
+ *     legendary -> 5
+ *     mythic    -> 6
  *
- *     1 star  -> single (naturally stable)
- *     2 stars -> binary pair (naturally stable)
- *     3 stars -> FORBIDDEN. Three close, similar-mass stars are the
- *                three-body problem and resolve chaotically. We skip
- *                this count entirely.
- *     4 stars -> 2 + 2  (two distant binary pairs; hierarchical quadruple)
- *     5 stars -> 2 + 2 + 1  (two binaries plus one distant single)
- *     6 stars -> 2 + 2 + 2  (three distant binaries; "Castor-like")
- *     7 stars -> 2 + 2 + 2 + 1  (three binaries plus one distant single)
+ * Each entry is a list of GROUP sizes. A group is a tightly-bound cluster
+ * (single star or close binary). Groups are placed far apart from each
+ * other, so even 3-, 5-, and 6-star systems read as a hierarchy of close
+ * pairs plus distant singletons rather than a chaotic close cluster. The
+ * binary-pair placement code in `buildPhoto` handles group sizes 1 and 2
+ * directly; we therefore decompose every star count into pairs + singles
+ * so the existing layout templates light up the right number of slots.
  *
- * Counts: common 1, uncommon 2, rare 4, epic 5, legendary 6, mythic 7.
+ *   1 -> [1]              single
+ *   2 -> [2]              binary
+ *   3 -> [2, 1]           binary + single
+ *   4 -> [2, 2]           two distant binaries (Castor-style)
+ *   5 -> [2, 2, 1]        two binaries + a distant single
+ *   6 -> [2, 2, 1, 1]     two binaries + two distant singletons
  *
- * The placement code below enforces the hierarchical condition a2/a1 >> 2
- * by drawing pair members tightly around a group center while spacing the
- * group centers at least ~5x further apart, so every emitted system would
- * survive the n-body stability test.
+ * Strictly more stars per tier means the rarity ladder reads at a glance
+ * even before the user notices the comet count, aurora, or nebula.
  */
 function rarityTopology(rarity: Rarity | null): number[] {
   switch (rarity) {
-    case 'mythic':    return [2, 2, 2, 1];
-    case 'legendary': return [2, 2, 2];
-    case 'epic':      return [2, 2, 1];
-    case 'rare':      return [2, 2];
+    case 'mythic':    return [2, 2, 1, 1];
+    case 'legendary': return [2, 2, 1];
+    case 'epic':      return [2, 2];
+    case 'rare':      return [2, 1];
     case 'uncommon':  return [2];
     case 'common':    return [1];
     default:          return [1];
+  }
+}
+
+/**
+ * Numeric rarity index, 0 (common) -> 5 (mythic). Used to drive every
+ * tier-scaled visual feature monotonically so the rarity gradient reads
+ * continuously: more stars, more comets, brighter nebula, stronger
+ * aurora, more accent stars - never less.
+ */
+function rarityLevel(rarity: Rarity | null): number {
+  switch (rarity) {
+    case 'mythic':    return 5;
+    case 'legendary': return 4;
+    case 'epic':      return 3;
+    case 'rare':      return 2;
+    case 'uncommon':  return 1;
+    case 'common':    return 0;
+    default:          return 0;
   }
 }
 

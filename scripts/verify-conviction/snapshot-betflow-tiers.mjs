@@ -5,14 +5,20 @@
  * but tied to a real market so it actually exercises the full
  * effectiveRarity + rarityPalette pipeline (preview → potentialRarity).
  *
- * Expectations after the rewrite:
+ * Expectations after the celestial-events overhaul:
  *   - Each preview's sky is the tier's signature colour (cream -> jade ->
  *     azure -> violet -> gold -> ember), never randomized.
- *   - Star count: 1 / 2 / 4 / 5 / 6 / 7 for common / uncommon / rare /
- *     epic / legendary / mythic. Three is intentionally skipped (3-body
- *     problem); counts >= 4 are laid out as hierarchical pairs of
- *     binaries plus optional singletons.
- *   - Stars sit RANDOMLY in the upper-half sky (NOT pinned to prediction).
+ *   - Star count strictly increments by one per tier:
+ *       common 1, uncommon 2, rare 3, epic 4, legendary 5, mythic 6.
+ *   - Celestial events scale monotonically with rarity:
+ *       comet  : uncommon 35% chance, rare 65%, epic 1 always,
+ *                legendary 1-2, mythic 2-3.
+ *       nebula : appears at epic, intensifies through mythic.
+ *       aurora : appears at legendary (single soft jade band) and
+ *                mythic (multi-band jade + magenta + accent).
+ *   - Stars sit DETERMINISTICALLY but randomly-looking in the upper-half
+ *     sky (NOT pinned to prediction); the same seed always produces the
+ *     same composition.
  *   - Reasoning quote, when visible (After Resolution preview), sits
  *     over the ground silhouette only — never over sky/sun/hills.
  */

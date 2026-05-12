@@ -1,6 +1,6 @@
 # Session handoff: Conviction (FS Trading SDK competition entry)
 
-> Last updated: 2026-05-12 (after the responsive-polish pass: thin global scrollbars, mobile polaroid stacks no longer clip the rarity top-stripe on hover/rotation, and NavBar "Sign in to bet" is now a real ember-pill button that opens an AuthGate modal portal)
+> Last updated: 2026-05-12 (after the celestial-events overhaul: star count is now strictly incremental 1-6 across tiers, plus seed-driven comets, an epic+ nebula glow, and a legendary/mythic aurora curtain so the rarity ladder reads as a continuous visual gradient)
 > Parent transcript: `[Where we are right now](b5263758-f700-4040-9a30-693a3a1cf730)`
 
 ## TL;DR for the next session
@@ -40,7 +40,10 @@ Architectural rules: this repo is a strict 3-layer monorepo (`core` -> `react` -
 
 | SHA       | Title                                                                                                       |
 |-----------|-------------------------------------------------------------------------------------------------------------|
-| _pending_ | feat(conviction): thin global scrollbars, NavBar sign-in modal, mobile polaroid stacks no longer clip top   |
+| _pending_ | feat(polaroid): celestial events overhaul (1-6 stars + comets + nebula + aurora, continuous rarity gradient) |
+| `01bc862` | fix(conviction): hide SDK auth widget admin-mode pivot links so users see only the passwordless flow         |
+| `647802c` | fix(conviction): remove modal-in-modal nesting in NavBar sign-in, use SDK widget directly                    |
+| `dc4f0b0` | feat(conviction): thin global scrollbars, NavBar sign-in modal, mobile polaroid stacks no longer clip top   |
 | `cf07d2c` | feat(conviction): side-by-side before/after polaroids in BetFlow preview, toggle removed, centered label    |
 | `f1dd726` | feat(polaroid): auto-fit reasoning font + 240-char input cap so quotes always fit inside the photo          |
 | `d94341c` | feat(conviction): hierarchical multi-star topology per rarity (1/2/4/5/6/7, no 3-body problem)             |
@@ -110,18 +113,33 @@ const setRef = useCallback((el: HTMLElement | null) => {
 
 **Polaroid frame thickness is UNIFORM at 5 px for every tier above common.** Common keeps a thin theme-aware 1 px neutral edge (using `palette.rule`, NOT a hardcoded grey, so it adapts to dark mode). Per user request: "make the border thickness the same and make the border slightly thicker so we can see the color in both dark mode and light mode." The COLOR is what changes between rarities, not the thickness. `RARITY_BORDER_WIDTH = 5` constant is defined at the top of `TIER_META` to enforce this.
 
-**Stellar topology per tier (hierarchical multi-star physics).** `rarityTopology()` in `Polaroid.tsx` returns group sizes:
+**Stellar topology per tier (strictly incremental, +1 star per tier).** `rarityTopology()` in `Polaroid.tsx` returns group sizes:
 
-| Tier      | Total stars | Topology (group sizes) | Why                                  |
-|-----------|-------------|------------------------|--------------------------------------|
-| common    | 1           | `[1]`                  | Single star, naturally stable        |
-| uncommon  | 2           | `[2]`                  | Binary pair, naturally stable        |
-| rare      | 4           | `[2, 2]`               | Hierarchical quadruple (2 binaries)  |
-| epic      | 5           | `[2, 2, 1]`            | Two binaries + distant single        |
-| legendary | 6           | `[2, 2, 2]`            | Three binaries (Castor-like)         |
-| mythic    | 7           | `[2, 2, 2, 1]`         | Three binaries + distant single      |
+| Tier      | Total stars | Topology (group sizes) |
+|-----------|-------------|------------------------|
+| common    | 1           | `[1]`                  |
+| uncommon  | 2           | `[2]`                  |
+| rare      | 3           | `[2, 1]`               |
+| epic      | 4           | `[2, 2]`               |
+| legendary | 5           | `[2, 2, 1]`            |
+| mythic    | 6           | `[2, 2, 1, 1]`         |
 
-Three is INTENTIONALLY skipped. Three similar-mass close stars are the classic three-body problem and would be chaotic, so we never emit such a configuration. Every system we emit is hierarchical: pair-internal separation a1 (~0.08-0.20 normalised photo units) is small, group-to-group separation a2 (~0.30-0.45) is large, and a2/a1 stays in the 2.5-5x range. Group centres for 2+ groups are placed on a deterministic 2D template (line, triangle, or quad) with small seed-driven jitter; star radius scales DOWN as total body count rises so 7-star systems do not turn into a single blob. If you change the topology, also update the snapshot expectations in `scripts/verify-conviction/snapshot-betflow-tiers.mjs` and re-run that script to verify each tier still reads visually.
+Star count strictly increments by one per tier so the rarity ladder reads at a glance. Each count decomposes into binary pairs + singletons so the existing pair-placement code lights up the right number of slots, and the composition reads as a hierarchy of close pairs at distance rather than a crowded cluster. Group centres for 2+ groups are placed on a deterministic 2D template (line, triangle, or quad) with small seed-driven jitter; star radius scales DOWN as total body count rises so 6-star systems do not turn into a single blob.
+
+**Celestial events per tier (`buildPhoto` in `Polaroid.tsx`).** Each event scales monotonically with `rarityLevel(rarity)` (0-5 from common to mythic) so richness increases with the tier. All deterministic via a dedicated `eventRng = mulberry32(seed ^ 0xc0_de_fe_ed)`:
+
+| Tier      | Comets                  | Nebula             | Aurora                          |
+|-----------|-------------------------|--------------------|---------------------------------|
+| common    | 0                       | none               | none                            |
+| uncommon  | 35% chance of 1         | none               | none                            |
+| rare      | 65% chance of 1         | none               | none                            |
+| epic      | 1 always                | light (0.35)       | none                            |
+| legendary | 1 always (50% of 2)     | medium (0.55)      | single soft jade band           |
+| mythic    | 2 always (35% of 3)     | strong (0.85)      | 3 bands: jade + magenta + accent |
+
+Render order inside the photo clip group is: sky gradient -> aurora curtain(s) -> nebula glow patch -> background stars -> comets -> suns -> silhouette fill -> silhouette outline. New layers always go between the sky and the suns so they read as atmospheric depth without occluding the foreground.
+
+If you change topology or event probabilities, also update the snapshot expectations in `scripts/verify-conviction/snapshot-betflow-tiers.mjs` and re-run that script to verify each tier still reads visually.
 
 The develop filter in `Polaroid.tsx` (`photoSat`, `sepia`, `photoBlur` around line 384) must remain GENTLE (sat cut `* 0.25`, sepia `* 0.18`, blur `* 1.8`). The previous values (sat `* 0.75`, sepia `* 0.70`) washed every tier brown in the live preview and the user explicitly demanded the rarity hue stay visible during the "developing" animation.
 
