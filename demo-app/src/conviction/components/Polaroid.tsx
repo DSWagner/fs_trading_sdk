@@ -2328,7 +2328,27 @@ function ReasoningQuote({
 }
 
 function wrapText(text: string, charsPerLine: number, maxLines: number): string[] {
-  const words = text.split(/\s+/);
+  // First, hard-break any single token longer than `charsPerLine` into
+  // `charsPerLine`-sized chunks. Without this step, a token longer
+  // than the visible line width (e.g. a pasted URL, password, or just
+  // long gibberish with no spaces) would land on its own line at full
+  // width and overflow the polaroid frame, since the wrap logic only
+  // breaks at whitespace and we only ellipsize the final line.
+  function splitLongToken(token: string): string[] {
+    if (token.length <= charsPerLine) return [token];
+    const out: string[] = [];
+    let i = 0;
+    while (i < token.length) {
+      out.push(token.slice(i, i + charsPerLine));
+      i += charsPerLine;
+    }
+    return out;
+  }
+  const rawWords = text.split(/\s+/).filter(Boolean);
+  const words: string[] = [];
+  for (const w of rawWords) {
+    for (const piece of splitLongToken(w)) words.push(piece);
+  }
   const lines: string[] = [];
   let line = '';
   for (const w of words) {
@@ -2348,7 +2368,9 @@ function wrapText(text: string, charsPerLine: number, maxLines: number): string[
   }
   if (line) lines.push(line);
   if (lines.length > maxLines) lines.length = maxLines;
-  // Ellipsize the final line if it overflows the visible width.
+  // Ellipsize the final line if it overflows the visible width. After
+  // the splitLongToken pass above this only ever fires when maxLines
+  // clamped us mid-content and the appended remainder is too wide.
   const last = lines[lines.length - 1] ?? '';
   if (last.length > charsPerLine) {
     lines[lines.length - 1] = last.slice(0, Math.max(1, charsPerLine - 1)) + '…';
