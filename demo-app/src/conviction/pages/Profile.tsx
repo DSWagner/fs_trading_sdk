@@ -5,6 +5,7 @@ import { palette, fonts } from '../theme';
 import { Polaroid } from '../components/Polaroid';
 import { LivePortfolioSection } from '../components/LivePortfolioSection';
 import { getBetsByUser, type BetRecord } from '../storage';
+import { getDemoGallery } from '../demoGalleries';
 import { useIsMobile } from '../useMediaQuery';
 import { EditorialEmpty } from '../components/EditorialState';
 import {
@@ -35,11 +36,35 @@ export function ProfilePage() {
   const { username = '' } = useParams<{ username: string }>();
   const cleanUsername = decodeURIComponent(username);
   const { user } = useAuth();
-  const bets = useMemo(() => getBetsByUser(cleanUsername), [cleanUsername]);
   const isMobile = useIsMobile();
   const { markets } = useMarkets();
 
   const isOwn = user?.username === cleanUsername;
+
+  // We hydrate the archive from two sources, in order:
+  //   1. localStorage via `getBetsByUser` — every receipt the visitor's
+  //      browser has actually signed (or imported through a share link
+  //      that wrote into the cache).
+  //   2. The curated DEMO_GALLERIES — only used when (1) returns
+  //      nothing AND the URL handle matches one of the demo authors.
+  //      This stops the "@critic_at_large hasn't gone on the record
+  //      yet" dead-end when a visitor clicks through from the Galleries
+  //      page's Studio Picks.
+  //
+  // We deliberately don't merge demo + real; once a real user has
+  // signed any conviction, only their real receipts show.
+  const isDemoFallback = useMemo(() => {
+    const owned = getBetsByUser(cleanUsername);
+    if (owned.length > 0) return false;
+    return getDemoGallery(cleanUsername) != null;
+  }, [cleanUsername]);
+
+  const bets = useMemo(() => {
+    const owned = getBetsByUser(cleanUsername);
+    if (owned.length > 0) return owned;
+    const demo = getDemoGallery(cleanUsername);
+    return demo ? (demo.bets as BetRecord[]) : [];
+  }, [cleanUsername]);
 
   const marketMap = useMemo(() => {
     const m = new Map<string, { resolutionState: 'open' | 'resolved' | 'voided'; resolvedOutcome: number | null }>();
@@ -55,8 +80,13 @@ export function ProfilePage() {
   const enriched: EnrichedBet[] = useMemo(() => {
     return bets.map((bet) => {
       const m = marketMap.get(String(bet.marketId));
-      const resolutionState = m?.resolutionState ?? null;
-      const resolvedOutcome = m?.resolvedOutcome ?? null;
+      // Demo bets aren't in the engine's market map. We synthesize a
+      // "resolved" state for them using the pre-baked `__demoOutcome`
+      // so the rarity ledger, calibration card and archive tiles
+      // populate exactly the way they would for a real settled bet.
+      const demoOutcome = (bet as BetRecord & { __demoOutcome?: number }).__demoOutcome;
+      const resolutionState = m?.resolutionState ?? (demoOutcome != null ? 'resolved' : null);
+      const resolvedOutcome = m?.resolvedOutcome ?? demoOutcome ?? null;
       let rarity: Rarity | null = null;
       let rarityScore = 0;
       let accuracy: number | null = null;
@@ -165,6 +195,7 @@ export function ProfilePage() {
         <EmptyState isOwn={isOwn} username={cleanUsername} />
       ) : (
         <>
+          {isDemoFallback && <DemoFallbackNotice isMobile={isMobile} />}
           <RarityLedger tierCounts={tierCounts} bestBet={bestBet} isMobile={isMobile} />
           <CalibrationCard enriched={enriched} isMobile={isMobile} />
           {isOwn && <LivePortfolioBlock enriched={enriched} isMobile={isMobile} />}
@@ -571,11 +602,65 @@ function EmptyState({ isOwn, username }: { isOwn: boolean; username: string }) {
   return (
     <EditorialEmpty
       eyebrow={isOwn ? 'Empty archive' : `@${username}`}
-      headline={isOwn ? 'No record yet.' : `@${username} hasn\u2019t gone on the record yet.`}
+      headline={isOwn ? 'No record yet.' : `No receipts on this device for @${username}.`}
       body={isOwn
         ? 'Your first conviction is the hardest. Pick a market \u2014 even a small stake creates a permanent receipt that future-you can stand by.'
-        : 'Once they sign their first conviction, it shows up here \u2014 reasoning intact, claim timestamped.'}
-      action={isOwn ? { label: 'Browse markets \u2192', href: '/discover' } : undefined}
+        : `Conviction stores every receipt in the browser that signed it, so a friend\u2019s convictions only appear here once they\u2019ve been opened on this device \u2014 usually by opening one of their share links. Ask @${username} for a receipt link, paste it in the address bar, and their archive will start to populate.`}
+      action={isOwn ? { label: 'Browse markets \u2192', href: '/discover' } : { label: 'Browse galleries \u2192', href: '/explore' }}
     />
+  );
+}
+
+/**
+ * Notice rendered above a Studio Pick profile to set expectations:
+ * the receipts on screen are curated demos that ship with the app,
+ * not real engine-signed convictions. Keeps the rarity ledger feeling
+ * honest rather than misleading.
+ */
+function DemoFallbackNotice({ isMobile }: { isMobile: boolean }) {
+  return (
+    <section
+      data-testid="profile-demo-notice"
+      style={{
+        marginBottom: 24,
+        padding: isMobile ? '14px 16px' : '14px 18px',
+        background: palette.card,
+        border: `1px dashed ${palette.rule}`,
+        borderRadius: 10,
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: 12,
+        flexWrap: 'wrap',
+      }}
+    >
+      <span
+        style={{
+          fontFamily: fonts.mono,
+          fontSize: 10,
+          letterSpacing: 1.4,
+          color: palette.ember,
+          padding: '4px 8px',
+          background: palette.paper,
+          border: `1px solid ${palette.rule}`,
+          borderRadius: 999,
+        }}
+      >
+        STUDIO PICK
+      </span>
+      <span
+        style={{
+          fontFamily: fonts.body,
+          fontSize: 13,
+          color: palette.inkSoft,
+          lineHeight: 1.5,
+          flex: 1,
+          minWidth: 240,
+        }}
+      >
+        These are curated demo receipts that ship with Conviction so the
+        Galleries rail is never empty. They were not signed against the live
+        engine, so cash-out and live drift are skipped.
+      </span>
+    </section>
   );
 }

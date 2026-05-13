@@ -6,7 +6,8 @@ import { Polaroid } from '../components/Polaroid';
 import { LiveConsensusCard } from '../components/LiveConsensusCard';
 import { CashOutPanel } from '../components/CashOutPanel';
 import { CashedOutStamp } from '../components/CashedOutStamp';
-import { getBet, getCashOut, type CashOutRecord } from '../storage';
+import { getBet, getCashOut, type CashOutRecord, type BetRecord } from '../storage';
+import { getDemoBet } from '../demoGalleries';
 import { buildEmbedUrl, buildShareUrl, readShareFromHash } from '../hash';
 import { useIsMobile } from '../useMediaQuery';
 import { downloadPolaroidPng } from '../components/downloadPolaroid';
@@ -35,12 +36,25 @@ export function ReceiptPage() {
   // real time. Resolved markets stop drifting and just hold their final
   // value, so the cost of polling them is minor; the SDK also bails on
   // background tabs so this won't burn battery while the user's away.
-  const { market, loading: marketLoading } = useMarket(marketId, {
+  //
+  // We also surface the `error` field. The previous implementation
+  // gated the entire page on `!market`, which meant any engine-side
+  // 404 (e.g. a stale marketId in localStorage whose market was later
+  // archived) left the user stuck on the loading screen forever. Now
+  // the local ledger snapshot is enough to render — the live drift
+  // card and cash-out panel quietly degrade when the engine has
+  // nothing fresh to add.
+  const { market, loading: marketLoading, error: marketError } = useMarket(marketId, {
     pollInterval: 5_000,
   });
 
   const local = useMemo(() => getBet(marketId, positionId), [marketId, positionId]);
   const fromHash = useMemo(() => readShareFromHash(), []);
+  // Fall back to a curated demo bet if neither the local ledger nor
+  // the share-hash has a record. This is what lets a visitor click
+  // through from a Studio Pick gallery to a fully rendered receipt
+  // even though the demo bets were never written into localStorage.
+  const demo = useMemo(() => getDemoBet(marketId, positionId), [marketId, positionId]);
 
   const merged = useMemo(() => {
     const base = local ?? null;
@@ -52,30 +66,46 @@ export function ReceiptPage() {
       }
       return base;
     }
-    if (fromHash && market) {
+    if (demo) {
+      // Demo bets ship with everything they need to render — bounds,
+      // consensus snapshot, even a pre-baked outcome — so we surface
+      // them as-is, casting to the BetRecord shape the rest of the
+      // page consumes.
+      return demo as BetRecord;
+    }
+    if (fromHash) {
+      // We can render from the share-hash payload alone — the live
+      // market only enriches title/bounds when it eventually arrives.
+      const lowerBound = fromHash.lowerBound ?? market?.config.lowerBound ?? 0;
+      const upperBound = fromHash.upperBound ?? market?.config.upperBound ?? 1;
       return {
         marketId,
         positionId,
         username: fromHash.username ?? 'someone',
         reasoning: fromHash.reasoning ?? '',
         conviction: fromHash.conviction ?? 0.5,
-        prediction: fromHash.prediction ?? (market.consensusMean ?? 0),
-        spread: fromHash.spread ?? Math.max(1, (market.config.upperBound - market.config.lowerBound) * 0.1),
+        prediction: fromHash.prediction ?? (market?.consensusMean ?? (lowerBound + upperBound) / 2),
+        spread: fromHash.spread ?? Math.max(1, (upperBound - lowerBound) * 0.1),
         collateral: fromHash.collateral ?? 0,
         shape: (fromHash.shape ?? 'gaussian') as 'gaussian' | 'range' | 'bimodal',
         createdAt: fromHash.createdAt ?? new Date().toISOString(),
-        marketTitle: market.title,
-        marketUnits: market.xAxisUnits,
-        lowerBound: market.config.lowerBound,
-        upperBound: market.config.upperBound,
+        marketTitle: fromHash.marketTitle ?? market?.title ?? 'Market',
+        marketUnits: market?.xAxisUnits,
+        lowerBound,
+        upperBound,
         consensusAtBet: fromHash.consensusAtBet ?? null,
-        expiresAt: fromHash.expiresAt ?? (market as any).expiresAt ?? null,
+        expiresAt: fromHash.expiresAt ?? (market as any)?.expiresAt ?? null,
       };
     }
     return null;
-  }, [local, fromHash, market, marketId, positionId]);
+  }, [local, fromHash, demo, market, marketId, positionId]);
 
-  if (marketLoading || !market) {
+  // Render the loading screen only when we have nothing to draw yet —
+  // no local ledger entry, no share-hash payload, and the market is
+  // still in flight without an error. Once any one of those resolves
+  // (or errors), we fall through and either render the receipt or
+  // show the empty state.
+  if (!merged && marketLoading) {
     return (
       <div style={{ maxWidth: 1120, margin: '0 auto', padding: '40px 24px' }}>
         <EditorialLoading
@@ -95,14 +125,32 @@ export function ReceiptPage() {
         <EditorialEmpty
           eyebrow="No receipt found"
           headline="This receipt is not in the archive."
-          body="Either the share link is incomplete, the bet was placed on a different device, or the original receipt was deleted. The market itself is still live."
+          body={
+            marketError
+              ? 'The engine could not return this market right now, and we have no local copy of this receipt. Try opening the original share link, or browse the discover page.'
+              : 'Either the share link is incomplete, the bet was placed on a different device, or the original receipt was deleted. The market itself is still live.'
+          }
           action={{ label: `View market →`, href: `/m/${encodeURIComponent(String(marketId))}` }}
         />
       </div>
     );
   }
 
-  return <ReceiptView merged={merged} marketResolutionState={market.resolutionState} resolvedOutcome={(market as any).resolvedOutcome ?? null} fresh={isFresh} />;
+  // If this is a demo bet, synthesize a "resolved" market state from
+  // the pre-baked __demoOutcome so the polaroid renders with its
+  // outcome marker and rarity stamp — exactly like a real settled bet.
+  const demoOutcome = (merged as BetRecord & { __demoOutcome?: number }).__demoOutcome;
+  const effectiveResolutionState = market?.resolutionState ?? (demoOutcome != null ? 'resolved' : undefined);
+  const effectiveResolvedOutcome = (market as any)?.resolvedOutcome ?? demoOutcome ?? null;
+
+  return (
+    <ReceiptView
+      merged={merged}
+      marketResolutionState={effectiveResolutionState}
+      resolvedOutcome={effectiveResolvedOutcome}
+      fresh={isFresh}
+    />
+  );
 }
 
 function ReceiptView({

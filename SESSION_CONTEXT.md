@@ -1,6 +1,6 @@
 # Session handoff: Conviction (FS Trading SDK competition entry)
 
-> Last updated: 2026-05-13 (live develop on Receipt via useMarket polling, live portfolio P&L on Profile via usePreviewSell, cash-out flow via useSell with CASHED OUT stamp overlay, slider-drag crash fixed via React.memo + useDeferredValue + rAF-coalesced setPreviewBelief)
+> Last updated: 2026-05-13 (aurora palette overhaul to layered pink/violet/blue with weak sage green, stake ornament now beads not ticks to stop reading as a second axis, Receipt page renders the polaroid from the local ledger when the engine 404s on the market, demo galleries extracted to a shared module so /u/critic_at_large and /r/demo-* render from the Studio Picks)
 > Parent transcript: `[Where we are right now](b5263758-f700-4040-9a30-693a3a1cf730)`
 
 ## TL;DR for the next session
@@ -40,7 +40,8 @@ Architectural rules: this repo is a strict 3-layer monorepo (`core` -> `react` -
 
 | SHA       | Title                                                                                                       |
 |-----------|-------------------------------------------------------------------------------------------------------------|
-| _pending_ | feat(conviction): live develop on Receipt + live portfolio P&L on Profile + cash-out flow + slider crash fix |
+| _pending_ | fix(conviction): aurora palette + bead ornament + Receipt local-fallback + shared demo galleries module     |
+| `0b0fd8e` | feat(conviction): live develop on Receipt + live portfolio P&L on Profile + cash-out flow + slider crash fix |
 | `11fbb08` | fix(polaroid): reasoning quote can no longer overflow the photo frame (local commit, push pending)          |
 | _pending_ | feat(polaroid): celestial events overhaul (1-6 stars + comets + nebula + aurora, continuous rarity gradient) |
 | `01bc862` | fix(conviction): hide SDK auth widget admin-mode pivot links so users see only the passwordless flow         |

@@ -6,6 +6,7 @@ import { getAllBets, type BetRecord } from '../storage';
 import { useIsMobile } from '../useMediaQuery';
 import { Polaroid } from '../components/Polaroid';
 import { EditorialEmpty } from '../components/EditorialState';
+import { DEMO_GALLERIES } from '../demoGalleries';
 import {
   calculateRarity,
   RARITY_ORDER,
@@ -374,76 +375,3 @@ function enrichEntry(
   };
 }
 
-const DEMO_GALLERIES: Array<{ username: string; bets: BetRecord[] }> = [
-  {
-    username: 'critic_at_large',
-    bets: [
-      {
-        marketId: 'demo-best-picture',
-        positionId: 'critic-1',
-        username: 'critic_at_large',
-        reasoning:
-          'Anora has the indie distributor energy nobody saw coming. Voters reward audacity in odd years.',
-        prediction: 78,
-        spread: 4,
-        conviction: 0.85,
-        collateral: 25,
-        shape: 'gaussian',
-        createdAt: new Date(Date.now() - 1000 * 60 * 60 * 22).toISOString(),
-        marketTitle: 'Best Picture at the Oscars',
-        marketUnits: 'votes',
-        lowerBound: 0,
-        upperBound: 100,
-        consensusAtBet: 28,
-        __demoOutcome: 78,
-      } as BetRecord & { __demoOutcome?: number },
-    ],
-  },
-  {
-    username: 'lab_lurker',
-    bets: [
-      {
-        marketId: 'demo-gpt-release',
-        positionId: 'lab-1',
-        username: 'lab_lurker',
-        reasoning:
-          "If they wanted to reset the narrative they would ship before WWDC. Otherwise it is a fall thing.",
-        prediction: 180,
-        spread: 30,
-        conviction: 0.55,
-        collateral: 12,
-        shape: 'gaussian',
-        createdAt: new Date(Date.now() - 1000 * 60 * 60 * 96).toISOString(),
-        marketTitle: 'GPT-5 release date',
-        marketUnits: 'days',
-        lowerBound: 0,
-        upperBound: 365,
-        consensusAtBet: 70,
-        __demoOutcome: 180,
-      } as BetRecord & { __demoOutcome?: number },
-    ],
-  },
-  {
-    username: 'swiftie_prime',
-    bets: [
-      {
-        marketId: 'demo-taylor-tour',
-        positionId: 'swiftie-1',
-        username: 'swiftie_prime',
-        reasoning: 'Ticket re-sale supply collapse means a refresh is coming. Late spring announcement.',
-        prediction: 8,
-        spread: 1.4,
-        conviction: 0.92,
-        collateral: 40,
-        shape: 'gaussian',
-        createdAt: new Date(Date.now() - 1000 * 60 * 60 * 6).toISOString(),
-        marketTitle: 'Taylor Swift announces tour leg 4',
-        marketUnits: 'weeks',
-        lowerBound: 0,
-        upperBound: 24,
-        consensusAtBet: 5,
-        __demoOutcome: 8,
-      } as BetRecord & { __demoOutcome?: number },
-    ],
-  },
-];

@@ -390,21 +390,23 @@ function PolaroidImpl(props: PolaroidProps) {
     ? 'filter 900ms cubic-bezier(0.22, 0.61, 0.36, 1)'
     : 'none';
 
-  // Stake-driven frame ornament — small marks along the bottom of the
-  // photo border that read as a "weight gauge." Stake feeds three
-  // visible channels here:
-  //   - more dollars → more ticks (3 at $1, 18 at $1000+)
-  //   - more dollars → longer ticks (4px at $1, ~11px at $1000+)
-  //   - more dollars → bolder ticks (opacity ramps from 0.55 to 0.95)
-  // The previous tuning made the ticks effectively invisible, so the
-  // stake slider felt like it only randomized the colour. With these
-  // multipliers the ornament strip is the obvious "more skin in the
-  // game" indicator at every stake level.
+  // Stake-driven matte ornament — a row of small BEADS sitting between
+  // the photo and the scale strip. They visualise the stake weight
+  // ("more dollars → more, bolder beads") and intentionally use a
+  // circular bead glyph so they read as decorative jewelry on the
+  // matte, NOT as a second set of axis ticks. (Users were previously
+  // mistaking the vertical-tick variant for x-axis ticks on the
+  // prediction range.) Stake feeds three visible channels here:
+  //   - more dollars → more beads (5 at $1, 11 at $1000+)
+  //   - more dollars → larger beads (radius 1.2..2.4 px)
+  //   - more dollars → bolder beads (opacity ramps from 0.55 to 0.95)
+  // The bead colour is the RARITY ACCENT (when known) so the tier
+  // signature continues through the matte — mythic gets ember-red
+  // beads, legendary gets gold beads, etc. Common falls back to ink.
   const stakeUnit = clamp01(Math.log10(Math.max(1, collateral)) / 3);
-  const ornamentCount = Math.max(3, Math.min(18, Math.round(stakeUnit * 15 + 3)));
-  const ornamentLen = 4 + Math.round(stakeUnit * 7); // 4..11 px
+  const ornamentCount = Math.max(5, Math.min(11, Math.round(stakeUnit * 6 + 5)));
+  const ornamentRadius = 1.2 + stakeUnit * 1.2; // 1.2..2.4 px
   const ornamentOpacity = 0.55 + stakeUnit * 0.4; // 0.55..0.95
-  const ornamentStroke = 0.9 + stakeUnit * 0.6; // 0.9..1.5
 
   // Conviction also drives a halo behind the sun: scaled radius and opacity.
   // High conviction = brighter, larger halo. Picked up automatically by
@@ -581,27 +583,31 @@ function PolaroidImpl(props: PolaroidProps) {
             curtain washes the upper sky as ambient atmosphere; the
             stars then twinkle on top.
             Each curtain is a tall wavy band running the full width of
-            the photo, with a vertical color stack that mimics a real
-            aurora photograph:
-              - 0% (very top)      fully transparent
-              - 20%                accent (rarity tint) at low alpha,
-                                   reproducing the faint red/pink
-                                   upper-altitude oxygen emission
-              - 55%                bright auroral green (peak body)
-              - 90%                green fading
-              - 100% (bottom)      fully transparent
-            Mythic stacks two curtains at offset phases for depth. */}
+            the photo, with a vertical color stack that mimics what a
+            real aurora photograph actually shows. Real auroras are
+            layered, not monochrome — the bright green band is just
+            ONE layer. We render five stops to capture that:
+              - 0%  (top)     transparent
+              - 12%           pink/magenta (high-altitude O 630 nm)
+              - 30%           soft purple (rarity-coherent violet)
+              - 52%           cornflower blue (mid-altitude N2)
+              - 72%           muted sage green (the famous green band,
+                              kept quiet so it doesn't overwhelm)
+              - 92-100%       green fading to transparent
+            Mythic stacks two curtains at offset phases for depth.
+            A separate accent kiss is layered on top of the pink so
+            legendary picks up a gold-warm cast and mythic a
+            crimson-magenta cast — both palette-coherent. */}
         {photo.aurora && (
           <g opacity={photo.aurora.intensity * (0.4 + progress * 0.6)} filter={photoFilter}>
             {photo.aurora.curtains.map((c, i) => {
               const gradId = `aurora-${seed}-${i}`;
+              const accentId = `aurora-accent-${seed}-${i}`;
               const steps = 48;
               const yTop = photoY + c.yTop * photoSize;
               const yBot = photoY + c.yBot * photoSize;
               const ampTop = c.ampTop * photoSize;
               const ampBot = c.ampBot * photoSize;
-              // Top edge: gentle wave (the upper aurora boundary, more
-              // diffuse in real life so smaller amplitude is fine).
               let topPath = `M ${photoX} ${yTop}`;
               for (let k = 1; k <= steps; k++) {
                 const t = k / steps;
@@ -609,10 +615,6 @@ function PolaroidImpl(props: PolaroidProps) {
                 const y = yTop + Math.sin(t * Math.PI * 2.2 + c.phase) * ampTop;
                 topPath += ` L ${x} ${y}`;
               }
-              // Bottom edge: slightly different frequency + phase so
-              // the curtain drapes rather than reading as a parallel
-              // ribbon. Lower amplitude keeps the brightest band along
-              // a smoother lower boundary.
               let botPath = '';
               for (let k = steps; k >= 0; k--) {
                 const t = k / steps;
@@ -627,14 +629,26 @@ function PolaroidImpl(props: PolaroidProps) {
                 <g key={`aurora-${i}`} opacity={c.opacity}>
                   <defs>
                     <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={c.topColor} stopOpacity="0" />
+                      <stop offset="12%" stopColor={c.topColor} stopOpacity="0.50" />
+                      <stop offset="30%" stopColor={c.midColor} stopOpacity="0.55" />
+                      <stop offset="52%" stopColor={c.blueColor} stopOpacity="0.50" />
+                      <stop offset="72%" stopColor={c.bodyColor} stopOpacity="0.40" />
+                      <stop offset="92%" stopColor={c.bodyColor} stopOpacity="0.15" />
+                      <stop offset="100%" stopColor={c.bodyColor} stopOpacity="0" />
+                    </linearGradient>
+                    {/* Faint rarity-accent kiss painted across the upper
+                        pink band so legendary/mythic still telegraph
+                        their tier through the curtain palette. */}
+                    <linearGradient id={accentId} x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor={c.accentColor} stopOpacity="0" />
-                      <stop offset="18%" stopColor={c.accentColor} stopOpacity="0.30" />
-                      <stop offset="55%" stopColor={c.greenColor} stopOpacity="0.75" />
-                      <stop offset="90%" stopColor={c.greenColor} stopOpacity="0.30" />
-                      <stop offset="100%" stopColor={c.greenColor} stopOpacity="0" />
+                      <stop offset="8%" stopColor={c.accentColor} stopOpacity="0.22" />
+                      <stop offset="22%" stopColor={c.accentColor} stopOpacity="0.10" />
+                      <stop offset="40%" stopColor={c.accentColor} stopOpacity="0" />
                     </linearGradient>
                   </defs>
                   <path d={d} fill={`url(#${gradId})`} />
+                  <path d={d} fill={`url(#${accentId})`} />
                 </g>
               );
             })}
@@ -917,33 +931,28 @@ function PolaroidImpl(props: PolaroidProps) {
         rx="2"
       />
 
-      {/* Stake-driven ornament strip in the matte area between the photo
-          and the scale strip. Inside the photo the strip was hidden
-          behind the dark ground silhouette of most palettes; out here on
-          the cream/paper matte it reads as a clear "weight gauge":
-            - more dollars → more ticks (3 at $1, 18 at $1000+)
-            - more dollars → longer ticks (4..11 px)
-            - more dollars → bolder ticks (opacity 0.55..0.95)
-          The stroke colour is the RARITY ACCENT (when known) so the
-          tier signature continues through the matte — a mythic receipt
-          gets ember-red ticks, a legendary one gets gold ticks, etc.
-          Common falls back to ink so the receipt stays muted. */}
+      {/* Stake-driven bead strip in the matte area between the photo
+          and the scale strip. Filled circles are deliberately used in
+          place of vertical ticks so this row reads as jewelry/matte
+          decoration, NOT a second set of axis ticks (the scale strip
+          below has its OWN range axis). The bead count, size and
+          opacity all scale with stake. The colour is the RARITY ACCENT
+          when known so the tier signature continues through the matte
+          — a mythic receipt gets ember-red beads, legendary gets gold,
+          etc. Common falls back to ink so the receipt stays muted. */}
       <g aria-hidden="true">
         {Array.from({ length: ornamentCount }).map((_, i) => {
           const tt = (i + 0.5) / ornamentCount;
-          const tickX = photoX + 4 + tt * (photoSize - 8);
+          const beadX = photoX + 6 + tt * (photoSize - 12);
           const midY = photoY + photoSize + (scaleStripY - (photoY + photoSize)) / 2;
           return (
-            <line
-              key={`tick-${i}`}
-              x1={tickX}
-              y1={midY - ornamentLen / 2}
-              x2={tickX}
-              y2={midY + ornamentLen / 2}
-              stroke={effectiveRarity && effectiveRarity !== 'common' ? photo.accentColor : palette.inkSoft}
-              strokeOpacity={ornamentOpacity}
-              strokeWidth={ornamentStroke}
-              strokeLinecap="round"
+            <circle
+              key={`bead-${i}`}
+              cx={beadX}
+              cy={midY}
+              r={ornamentRadius}
+              fill={effectiveRarity && effectiveRarity !== 'common' ? photo.accentColor : palette.inkSoft}
+              fillOpacity={ornamentOpacity}
             />
           );
         })}
@@ -1222,9 +1231,28 @@ interface AuroraCurtainSpec {
   ampBot: number;
   /** Per-curtain opacity scalar; mythic's second band is slightly fainter for depth. */
   opacity: number;
-  /** Realistic auroral green for the body (peaks in the middle of the curtain). */
-  greenColor: string;
-  /** Accent tint for the bottom fringe (rarity-tied so the palette stays coherent). */
+  /**
+   * Layered color stack used to paint the curtain. Real auroras are
+   * layered, not monochrome: pink/red wisps sit at the top from
+   * high-altitude oxygen emission, blue/purple bands fill the mid
+   * altitudes from nitrogen, and a quieter green band carpets the
+   * bottom. We keep the green deliberately weak so the dominant
+   * impression is the blue/purple/pink stack rather than a neon
+   * turquoise wash.
+   */
+  /** Pink/magenta hue at the highest altitude (top of the curtain). */
+  topColor: string;
+  /** Soft purple/violet for the upper-mid transition. */
+  midColor: string;
+  /** Cornflower/periwinkle blue for the mid-body of the curtain. */
+  blueColor: string;
+  /** Muted sage green for the lower body — present but quiet. */
+  bodyColor: string;
+  /**
+   * Rarity accent (gold for legendary, ember for mythic). Retained
+   * for reference and used as a faint additional kiss in the upper
+   * pink band so the curtain still nods to the tier palette.
+   */
   accentColor: string;
 }
 
@@ -1697,17 +1725,33 @@ function buildPhoto(opts: {
 
   // -- Aurora curtain -- legendary+ only.
   //
-  // Real aurorae are wide green sheets that fade upward into faint
-  // red/pink at higher altitude. We model that by drawing each curtain
-  // with a realistic auroral green at the body and the rarity ACCENT
-  // tint at the bottom fringe (so legendary -> gold-warm fringe,
-  // mythic -> ember/crimson fringe; both palette-coherent). Mythic
-  // stacks a second fainter curtain at an offset phase so the result
-  // reads as layered draping, not multi-color chaos.
-  const auroralGreen = '#4DD9A0';
+  // Real auroras are layered, not monochrome. The famous green band is
+  // just the lowest layer of oxygen emission at 557.7 nm; above it sit
+  // pink/red wisps from high-altitude oxygen (630 nm) and blue/purple
+  // bands from nitrogen. We paint that whole vertical stack rather
+  // than a flat green wash so the result actually looks like an
+  // aurora photograph instead of a neon ribbon.
+  //
+  // Legendary uses a rose-gold pink top, soft purple mid, cornflower
+  // blue body, and a muted sage green base. Mythic deepens the pink
+  // into crimson-magenta and the purple into a darker violet so the
+  // tier still telegraphs through the curtain colour. Both keep the
+  // green deliberately weak — the user noted that the previous bright
+  // turquoise didn't feel auroral and dominated the photo, so green
+  // is now a quiet supporting layer, not the lead.
+  //
+  // The rarity accent (gold for legendary, ember/crimson for mythic)
+  // is then layered as a faint upper-band kiss in the render path so
+  // the palette stays coherent with the rest of the receipt.
   let aurora: AuroraSpec | null = null;
   if (rLevel >= 4) {
     const isMythic = rLevel === 5;
+
+    const topColor = isMythic ? '#F08099' : '#E8A8B8'; // crimson-pink vs rose-pink
+    const midColor = isMythic ? '#9F6FCF' : '#A883D9'; // deeper violet vs soft lavender
+    const blueColor = isMythic ? '#5C7AD8' : '#7090E0'; // periwinkle vs cornflower
+    const bodyColor = '#6DB892'; // muted sage green — present but not loud
+
     // Curtain 1: the dominant one. Top of curtain sits high in the sky;
     // bottom is roughly 25-30% of photo height lower.
     const curtain1: AuroraCurtainSpec = {
@@ -1717,7 +1761,10 @@ function buildPhoto(opts: {
       ampTop: 0.018 + eventRng() * 0.008,
       ampBot: 0.010 + eventRng() * 0.006,
       opacity: isMythic ? 0.95 : 0.80,
-      greenColor: auroralGreen,
+      topColor,
+      midColor,
+      blueColor,
+      bodyColor,
       accentColor: palettes.accent,
     };
     const curtains: AuroraCurtainSpec[] = [curtain1];
@@ -1731,7 +1778,10 @@ function buildPhoto(opts: {
         ampTop: 0.022 + eventRng() * 0.008,
         ampBot: 0.012 + eventRng() * 0.006,
         opacity: 0.55,
-        greenColor: auroralGreen,
+        topColor,
+        midColor,
+        blueColor,
+        bodyColor,
         accentColor: palettes.accent,
       });
     }
