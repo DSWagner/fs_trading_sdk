@@ -35,14 +35,14 @@ import type { FSThemeInput } from '@functionspace/react';
 export const convictionTheme: FSThemeInput = {
   preset: 'fs-light',
   primary: '#E68A4F',
-  accent: '#9B7EC8',
+  accent: '#8467BB',
   positive: '#7BAA76',
   negative: '#C45A6E',
-  background: '#FAF6FB',
-  surface: '#FFFFFF',
+  background: '#F0E7F5',
+  surface: '#FBF6FE',
   text: '#2A1B3D',
   textSecondary: '#7B6E8E',
-  border: '#E5DCEE',
+  border: '#D8C3E5',
 };
 
 /**
@@ -78,22 +78,22 @@ export const palette = {
  * of truth.
  */
 export const LIGHT_RAW = {
-  paper: '#FAF6FB',
-  paperDeep: '#F0EAF4',
-  card: '#FFFFFF',
+  paper: '#F0E7F5',
+  paperDeep: '#E5D6EE',
+  card: '#FBF6FE',
   ink: '#2A1B3D',
   inkSoft: '#4D3D63',
   inkMute: '#7B6E8E',
   inkFade: '#B0A4C0',
-  rule: '#E5DCEE',
-  rulesoft: '#F0E9F5',
+  rule: '#D8C3E5',
+  rulesoft: '#E5D6EE',
   ember: '#E68A4F',
-  emberDeep: '#C26B30',
-  teal: '#9B7EC8',
+  emberDeep: '#B5571A',
+  teal: '#8467BB',
   jade: '#7BAA76',
   rose: '#C45A6E',
   shadow: 'rgba(45, 25, 70, 0.10)',
-  shadowDeep: 'rgba(45, 25, 70, 0.18)',
+  shadowDeep: 'rgba(45, 25, 70, 0.20)',
 } as const;
 
 /**

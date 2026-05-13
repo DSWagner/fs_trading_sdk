@@ -4,6 +4,7 @@ import { useMarket, useAuth } from '@functionspace/react';
 import { palette, fonts } from '../theme';
 import { Polaroid } from '../components/Polaroid';
 import { LiveConsensusCard } from '../components/LiveConsensusCard';
+import { ConsensusDriftSparkline } from '../components/ConsensusDriftSparkline';
 import { CashOutPanel } from '../components/CashOutPanel';
 import { CashedOutStamp } from '../components/CashedOutStamp';
 import { getBet, getCashOut, type CashOutRecord, type BetRecord } from '../storage';
@@ -447,6 +448,24 @@ function ReceiptView({
               marketUnits={merged.marketUnits ?? ''}
             />
           </div>
+
+          {/* Macro-historical consensus drift sparkline. Pulls the
+              full snapshot history for this market (useMarketHistory)
+              every 60s and renders a compact path of the consensus
+              mean over time, overlaid with the user's prediction line
+              and a "you signed here" caret. This turns the receipt
+              from "your single moment in time" into "your moment in
+              the wider arc of crowd opinion." */}
+          <ConsensusDriftSparkline
+            marketId={String(merged.marketId)}
+            prediction={merged.prediction}
+            consensusAtBet={merged.consensusAtBet ?? null}
+            lowerBound={merged.lowerBound ?? 0}
+            upperBound={merged.upperBound ?? 1}
+            marketUnits={merged.marketUnits ?? ''}
+            createdAt={merged.createdAt}
+            compact={isMobile}
+          />
 
           {/* Cash-out panel. Visible only to the bet author while the
               market is still open AND the position hasn't been cashed

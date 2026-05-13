@@ -5,6 +5,7 @@ import type { MarketState } from '@functionspace/core';
 import { palette, fonts } from '../theme';
 import { useIsMobile } from '../useMediaQuery';
 import { EditorialEmpty, EditorialError, EditorialLoading } from '../components/EditorialState';
+import { TheWire } from '../components/TheWire';
 
 /**
  * Discover — an editorial feed of markets worth a take. Curated toward weird,
@@ -133,6 +134,13 @@ export function DiscoverPage() {
           hint="Check your connection or try again in a few seconds. The engine occasionally takes a breath."
         />
       )}
+
+      {/* The Wire — public real-time activity ticker.
+          Renders above the featured market so the first thing the
+          visitor sees on Discover is "other people are placing bets
+          right now." Driven by useTradeHistory polled across the top
+          markets and merged on the client. */}
+      {!loading && !error && <TheWire rowLimit={8} marketLimit={3} compact={isMobile} />}
 
       {!loading && featured && (
         <FeaturedMarket market={featured} isMobile={isMobile} />

@@ -17,26 +17,45 @@
  *   - The whole UI swaps in a single style recalc, ~1 paint
  */
 :root {
-  --c-paper: #FAF6FB;
-  --c-paper-deep: #F0EAF4;
-  --c-card: #FFFFFF;
+  /* Light mode tuning notes (2026-05-13):
+   *
+   * The previous palette read as "white page with a few orange buttons"
+   * because the paper was 99% white (#FAF6FB) and the cards were pure
+   * white. The pastel purple lived only in borders and one decorative
+   * span. The user explicitly asked to see the purple/orange family in
+   * BOTH modes, so light mode is now noticeably lavender-tinted at the
+   * paper + card + rule layers:
+   *   - paper deepens from #FAF6FB -> #F0E7F5 (clear lavender wash)
+   *   - paper-deep deepens from #F0EAF4 -> #E5D6EE (hero sections)
+   *   - card from pure white -> #FBF6FE (faint lavender, not pure white)
+   *   - rule from #E5DCEE -> #D8C3E5 (saturated purple borders)
+   *   - ember kept at #E68A4F but ember-deep darkened to land hover
+   *     states clearly on lavender paper
+   *   - teal nudged to #8467BB so the pastel purple still reads
+   *     distinctly on the deeper lavender paper without disappearing
+   * The deep aubergine ink (#2A1B3D) is unchanged so contrast for body
+   * text stays AAA against the new paper.
+   */
+  --c-paper: #F0E7F5;
+  --c-paper-deep: #E5D6EE;
+  --c-card: #FBF6FE;
   --c-ink: #2A1B3D;
   --c-ink-soft: #4D3D63;
   --c-ink-mute: #7B6E8E;
   --c-ink-fade: #B0A4C0;
-  --c-rule: #E5DCEE;
-  --c-rule-soft: #F0E9F5;
+  --c-rule: #D8C3E5;
+  --c-rule-soft: #E5D6EE;
   --c-ember: #E68A4F;
-  --c-ember-deep: #C26B30;
-  --c-teal: #9B7EC8;
+  --c-ember-deep: #B5571A;
+  --c-teal: #8467BB;
   --c-jade: #7BAA76;
   --c-rose: #C45A6E;
   --c-shadow: rgba(45, 25, 70, 0.10);
-  --c-shadow-deep: rgba(45, 25, 70, 0.18);
-  /* Slider thumb track that does not need to change between modes
-   * because it always sits on a card (which already flips). */
-  --c-slider-thumb-bg: #FFFFFF;
-  --c-slider-track: #E5DCEE;
+  --c-shadow-deep: rgba(45, 25, 70, 0.20);
+  /* Slider thumb track. Card-coloured so the thumb visibly rests
+   * against the deeper lavender paper. */
+  --c-slider-thumb-bg: #FBF6FE;
+  --c-slider-track: #D8C3E5;
   color-scheme: light;
 }
 
@@ -72,6 +91,36 @@ html, body, #root {
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
   transition: background-color 220ms ease, color 220ms ease;
+}
+
+/* Ambient identity wash on every page background.
+ *
+ * Two faint radial gradients (pastel orange in the top-right, pastel
+ * purple in the bottom-left) anchor the editorial palette into the
+ * page even before any content paints. They sit BEHIND the body
+ * background, fixed to the viewport, and are tuned to be visible but
+ * not distracting:
+ *   - light mode: ~5-7% alpha so they read as a faint colour wash
+ *   - dark mode:  ~8-12% alpha so the colours show through the
+ *                 aubergine paper without competing with content
+ * The gradients are deliberately broad (60% radius) so they read as
+ * AMBIENT not as a feature, and the gap between them creates the
+ * "purple-and-orange together" identity the user asked for. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(60% 60% at 92% 8%, color-mix(in srgb, var(--c-ember) 14%, transparent), transparent 70%),
+    radial-gradient(55% 55% at 5% 95%, color-mix(in srgb, var(--c-teal) 16%, transparent), transparent 70%);
+  transition: opacity 220ms ease;
+}
+:root[data-theme="dark"] body::before {
+  background:
+    radial-gradient(60% 60% at 92% 8%, color-mix(in srgb, var(--c-ember) 18%, transparent), transparent 70%),
+    radial-gradient(55% 55% at 5% 95%, color-mix(in srgb, var(--c-teal) 22%, transparent), transparent 70%);
 }
 
 /* Modern, near-invisible scrollbars.

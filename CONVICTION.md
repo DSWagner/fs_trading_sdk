@@ -618,11 +618,15 @@ This is the entire surface area of the FunctionSpace SDK that Conviction touches
 | `usePreviewPayout(id)` | `BetFlow` | Returns `{execute}` for getting a payout curve without trading. |
 | `usePreviewSell(id)` | `CashOutPanel`, `LivePortfolioSection` | Returns `{execute}` for getting the current sell-side payout for an open position without trading. Drives the live "Unrealized P&L" on the Receipt page and the live portfolio P&L badges on the profile. |
 | `useSell(id)` | `CashOutPanel` | Returns `{execute}` for closing a position. Powers the Receipt page's cash-out flow; on success the SDK auto-invalidates the market cache so the live drift card and the archive reflect the closed state. |
+| `useTradeHistory(id, {limit, pollInterval})` | `TheWire` | Returns the recent trade ledger for a single market `{trades, loading, error, refetch}`. The Wire on the Discover page subscribes to the top three highest-volume markets and merges their feeds on the client so the visitor sees other users' BUYs and SELLs ticking through in real time, each row coloured by the potential rarity the trade could earn against current consensus. This is the social-proof loop the engine made possible. |
+| `useMarketHistory(id, {limit, pollInterval})` | `ConsensusDriftSparkline` | Returns historical snapshots of one market `{history, loading, error}`. The Receipt page renders a compact SVG sparkline of the consensus mean over time (built via the pure `transformHistoryToFanChart` helper from `@functionspace/core`), overlaid with the user's prediction reference line and a "you signed here" caret. Turns the receipt from "your single moment in time" into "your moment in the wider arc of crowd opinion." |
 | `FunctionSpaceContext` | `BetFlow` | Direct context access for `setPreviewBelief` and `setPreviewPayout`. These let us paint the user's draft belief on the SDK's `ConsensusChart` before they submit. |
 | `ConsensusChart` (from `@functionspace/ui`) | `BetFlow` | Prebuilt chart of the current market consensus. We pass it the `marketId` and the SDK takes care of the rest. |
+| `PasswordlessAuthWidget` (from `@functionspace/ui`) | `NavBar`, `AuthGate` | The competition-required auth surface. Visually reconciled via CSS-only overrides (no React-tree changes) to match the editorial palette. |
 | `generateGaussian`, `generateRange`, `generateBelief` (from `@functionspace/core`) | `BetFlow` | Pure functions that turn shape parameters into the discrete bucket vector the SDK requires for trades. |
+| `transformHistoryToFanChart` (from `@functionspace/core`) | `ConsensusDriftSparkline` | Pure helper that normalises raw `MarketSnapshot[]` (with their alpha vectors) into a time series of `{timestamp, mean, mode, stdDev, percentiles}` points. Down-samples to a target point count for performance. |
 
-That is it. Everything else is our own code.
+That is the full SDK surface area Conviction touches — 11 hooks plus the two UI widgets and three core helpers. Everything else is our own code.
 
 ### How polling stays cheap
 

@@ -46,12 +46,18 @@ const useMarketMock = vi.fn();
 const useAuthMock = vi.fn();
 const usePreviewSellMock = vi.fn();
 const useSellMock = vi.fn();
+const useMarketHistoryMock = vi.fn();
 
 vi.mock('@functionspace/react', () => ({
   useMarket: (...args: any[]) => useMarketMock(...args),
   useAuth: (...args: any[]) => useAuthMock(...args),
   usePreviewSell: (...args: any[]) => usePreviewSellMock(...args),
   useSell: (...args: any[]) => useSellMock(...args),
+  // ConsensusDriftSparkline reads market history. Default to "no
+  // history yet" so the sparkline renders its single-snapshot
+  // explainer rather than crashing — but expose the mock so any
+  // test that wants to inject a real time series can override it.
+  useMarketHistory: (...args: any[]) => useMarketHistoryMock(...args),
 }));
 
 import { ReceiptPage } from '../../demo-app/src/conviction/pages/Receipt';
@@ -90,6 +96,7 @@ beforeEach(() => {
   useAuthMock.mockReset();
   usePreviewSellMock.mockReset();
   useSellMock.mockReset();
+  useMarketHistoryMock.mockReset();
   window.localStorage.clear();
   // Defaults the page is allowed to call but doesn't require for this
   // test surface.
@@ -107,6 +114,17 @@ beforeEach(() => {
     error: null,
     data: null,
     reset: () => {},
+  });
+  // The drift sparkline silently degrades when history is empty —
+  // exactly the shape we want for the fallback-only assertions in
+  // this file. Tests that want to exercise the sparkline live in
+  // tests/conviction/drift-sparkline.test.tsx.
+  useMarketHistoryMock.mockReturnValue({
+    history: null,
+    loading: false,
+    isFetching: false,
+    error: null,
+    refetch: () => {},
   });
   cleanup();
 });

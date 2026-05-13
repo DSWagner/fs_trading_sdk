@@ -123,7 +123,7 @@ Record it once, in one take, no narration anxiety. The interface does the talkin
 The competition rubric is **50% Usefulness, 40% Creativity, 10% Market Selection, 0% Technical Complexity**.
 
 - **Usefulness (50%).** Conviction has a sharp, named audience: public commentators (podcasters, Substack writers, X analysts) who already make their living being right in public. Their alternative today is screenshotting tweets to claim accuracy after the fact. Conviction gives them a one-click signed, dated, embeddable receipt with the reasoning attached. The "useful to 50 people every week" bar is met by every individual podcast or newsletter that runs an episode about a future event.
-- **Creativity (40%).** Two mechanics that have not been seen on a prediction market before. (1) The user's belief curve becomes the *horizon silhouette* of a generative landscape — same params, same picture, deterministic. (2) The receipt *develops automatically* when the market resolves, in every embed, with no maintenance from the author. A third creative move is hash-portable reasoning: the entire bet payload is base64-encoded into the URL fragment so receipts work on devices that have never visited the site, with no server.
+- **Creativity (40%).** Four mechanics that have not been seen on a prediction market before. (1) The user's belief curve becomes the *horizon silhouette* of a generative landscape — same params, same picture, deterministic. (2) The receipt *develops automatically* when the market resolves, in every embed, with no maintenance from the author. (3) Hash-portable reasoning: the entire bet payload is base64-encoded into the URL fragment so receipts work on devices that have never visited the site, with no server. (4) **The Wire** — a public real-time trade feed (built on `useTradeHistory` across the top-volume markets) that finally surfaces other users' activity in a zero-backend app, with rows coloured by the potential rarity each call could earn. The Receipt page also carries a **macro-historical consensus drift sparkline** (built on `useMarketHistory` + `transformHistoryToFanChart`) that plots how the crowd has changed its mind since the user signed, overlaid with their prediction reference line and a "you signed here" caret — the receipt becomes a living artefact instead of a static screenshot.
 - **Market Selection (10%).** Discover and the editorial samples are tilted toward markets a publication audience would naturally write about — pop culture, sports, AI, politics — rather than the default high-volume crypto markets the rubric warns against. The sample receipts on the landing page reference Best Picture, GPT-5, and Taylor Swift on purpose.
 
 ---
@@ -136,7 +136,7 @@ The setup guide lists hard guardrails. Conviction satisfies all of them:
 | --- | --- |
 | Use `PasswordlessAuthWidget` from `@functionspace/ui` | ✓ Used directly inside an editorial wrapper at `demo-app/src/conviction/components/AuthGate.tsx`. No custom auth flow. |
 | Math goes through `@functionspace/core` only | ✓ `generateGaussian`, `generateRange`, `generateBelief`, `evaluateDensityCurve` all consumed from core. The Polaroid generates its own decorative landscape but never replaces the engine math. |
-| React hooks for everything that touches the engine | ✓ `useMarket`, `useMarkets`, `useAuth`, `useBuy`, `usePreviewPayout`, `useConsensus`, `usePreviewSell`, `useSell` are the only paths used. |
+| React hooks for everything that touches the engine | ✓ Eleven SDK hooks consumed: `useMarket`, `useMarkets`, `useAuth`, `useBuy`, `usePreviewPayout`, `useConsensus`, `usePositions`, `usePreviewSell`, `useSell`, `useTradeHistory`, `useMarketHistory`. No raw fetches. |
 | `useBuy` for trade submission | ✓ See `pages/BetFlow.tsx`. No raw fetch anywhere. |
 | `useSell` for cash-out flow | ✓ See `components/CashOutPanel.tsx`. The user can close any open position from the Receipt page via the SDK; the SDK's automatic cache invalidation propagates to the live drift card and the portfolio. |
 | Live polling via `useMarket(id, { pollInterval })` | ✓ Receipt page polls every 5 s for the live drift card; the Profile page polls every 15 s for the live portfolio P&L. |
@@ -153,7 +153,7 @@ The setup guide lists hard guardrails. Conviction satisfies all of them:
 
 Run from the repo root with `npx vitest run tests/conviction` (free, no money spent; the live tests hit the dev engine):
 
-- **277 Conviction-specific tests** across 12 files:
+- **312 Conviction-specific tests** across 21 files:
   - `hash.test.ts` (21 tests): URL-hash codec round-trip with empty / 4 KB / unicode / emoji / CJK / control chars; URL-safe alphabet; graceful failure; window-hash hydration.
   - `storage.test.ts` (19 tests): localStorage ledger record/read/replace, newest-first ordering, getBetsByUser filter, corrupt-store tolerance, username persistence.
   - `cashout-storage.test.ts` (9 tests): cash-out record persistence; round-trip, replace-existing, numeric/string id parity, corrupt-store tolerance, clearCashOuts wipe.
@@ -166,6 +166,12 @@ Run from the repo root with `npx vitest run tests/conviction` (free, no money sp
   - `cashout-panel.test.tsx` (4 tests): full cash-out flow with mocked SDK hooks; preview-sell mark-to-market, two-stage confirm, sell execution, CASHED OUT summary, localStorage persistence, cancel path.
   - `cashed-out-stamp.test.tsx` (7 tests): "CASHED OUT" overlay headline + signed P&L subline + break-even path + landing-animation conditional + polaroid-width scaling.
   - `live-portfolio-section.test.tsx` (5 tests): per-market live portfolio section; LIVE / SETTLED eyebrow, multi-position aggregation of STAKED / VALUE / UNREALIZED P&L, signed tile badges.
+  - `the-wire.test.tsx` (7 tests): public activity feed; source-selection honours `marketLimit`, poll cadence forwarded to every subscription, merge + sort across multiple market feeds (newest first), trade rendering (handle, BOUGHT/SOLD verb, prediction + units, market title), empty-feed editorial state.
+  - `drift-sparkline.test.tsx` (5 tests): consensus drift sparkline; loading shell while history fetches, single-snapshot explainer, error fallback, full timeline rendering with at least one path segment, signed drift caption when consensus moves between snapshots.
+  - `receipt-fallback.test.tsx` (4 tests): graceful market-fallback rendering (local ledger, demo galleries, share hash) for the Receipt page when `useMarket` returns nothing.
+  - `polaroid-aurora.test.tsx` (7 tests): aurora-palette regression suite; asserts the new layered pink/violet/blue gradient with weak sage green for legendary + mythic polaroids.
+  - `demo-galleries.test.ts` (9 tests): demo-gallery lookup helpers (`getDemoGallery`, `getDemoBet`, `isDemoMarketId`).
+  - `develop-demo-calibration.test.ts` (3 tests): landing-page demo rarity is "epic" in both before/after states.
   - `live-engine.test.ts` (5 tests): real network calls; market discovery, single-market parity, passwordless signup with throwaway handle, empty-username rejection.
 - **787 SDK tests** still pass, unchanged.
 
