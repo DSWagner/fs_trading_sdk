@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { palette, fonts, LIGHT_RAW } from '../theme';
 import { calculateRarity, potentialRarity, TIER_META, type Rarity } from '../rarity';
 import {
@@ -85,7 +85,14 @@ export interface PolaroidProps {
   consensusAtBet?: number | null;
 }
 
-export function Polaroid(props: PolaroidProps) {
+// Internal implementation; the exported `Polaroid` below wraps this in
+// `React.memo` so parents that re-render without changing the polaroid's
+// props (e.g. the BetFlow page on a slider tick that only affects the
+// chart's payout preview) don't trigger the expensive `buildPhoto` /
+// SVG regen. Combined with `useDeferredValue` on the seed inputs in
+// BetFlow.tsx, this caps the polaroid's redraw cadence at the browser's
+// natural paint rate even while the user drags a slider at 60+ Hz.
+function PolaroidImpl(props: PolaroidProps) {
   const {
     marketTitle,
     marketUnits = '',
@@ -992,6 +999,27 @@ export function Polaroid(props: PolaroidProps) {
     </svg>
   );
 }
+
+/**
+ * Public Polaroid export — `React.memo` wrapper around `PolaroidImpl`.
+ *
+ * Performance: `PolaroidImpl` does heavy procedural work on every render
+ * (seed hashing, `buildPhoto` star/sun/comet/aurora/nebula generation,
+ * ~50-150 SVG node emission). When a parent re-renders the polaroid
+ * with byte-identical props (e.g. the BetFlow page re-rendering on a
+ * slider tick that only mutated chart inputs), `memo` short-circuits
+ * the work and returns the cached output.
+ *
+ * Combined with `useDeferredValue` on the seed inputs at the BetFlow
+ * call sites, this caps the polaroid's redraw cadence at the browser's
+ * paint rate even when the user drags a slider at 60+ Hz, eliminating
+ * the slider-drag "the page slows down and eventually crashes" bug.
+ *
+ * Default shallow prop equality is exactly what we want here: every
+ * prop is either a primitive or a stable object reference passed by
+ * the caller. We do not need a custom comparator.
+ */
+export const Polaroid = memo(PolaroidImpl);
 
 /**
  * Render the polaroid caption strip using only native SVG <text> nodes.

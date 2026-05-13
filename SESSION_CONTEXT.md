@@ -1,6 +1,6 @@
 # Session handoff: Conviction (FS Trading SDK competition entry)
 
-> Last updated: 2026-05-12 (after the celestial-events overhaul: star count is now strictly incremental 1-6 across tiers, plus seed-driven comets, an epic+ nebula glow, and a legendary/mythic aurora curtain so the rarity ladder reads as a continuous visual gradient)
+> Last updated: 2026-05-13 (live develop on Receipt via useMarket polling, live portfolio P&L on Profile via usePreviewSell, cash-out flow via useSell with CASHED OUT stamp overlay, slider-drag crash fixed via React.memo + useDeferredValue + rAF-coalesced setPreviewBelief)
 > Parent transcript: `[Where we are right now](b5263758-f700-4040-9a30-693a3a1cf730)`
 
 ## TL;DR for the next session
@@ -40,6 +40,8 @@ Architectural rules: this repo is a strict 3-layer monorepo (`core` -> `react` -
 
 | SHA       | Title                                                                                                       |
 |-----------|-------------------------------------------------------------------------------------------------------------|
+| _pending_ | feat(conviction): live develop on Receipt + live portfolio P&L on Profile + cash-out flow + slider crash fix |
+| `11fbb08` | fix(polaroid): reasoning quote can no longer overflow the photo frame (local commit, push pending)          |
 | _pending_ | feat(polaroid): celestial events overhaul (1-6 stars + comets + nebula + aurora, continuous rarity gradient) |
 | `01bc862` | fix(conviction): hide SDK auth widget admin-mode pivot links so users see only the passwordless flow         |
 | `647802c` | fix(conviction): remove modal-in-modal nesting in NavBar sign-in, use SDK widget directly                    |
@@ -189,6 +191,50 @@ Photo vignette overlay (in `Polaroid.tsx`, search for `photoVignetteId`): a radi
 Polaroid drop shadow stack: three-layer Material-style elevation (`baseShadow` in `Polaroid.tsx` around line 354). Tight 0/1/2 + mid 0/6/14 + far 0/24/48 with `palette.shadowDeep` on the far layer. This makes the polaroid card visibly lift off the page in dark mode where a single soft shadow is invisible against `palette.paper = #161122`. Do NOT collapse back to a single shadow.
 
 Recharts dark-mode contrast: the SDK chart paints SVG `<text>` with a `fill` attribute set ONCE at provider construction (does not honor CSS variables natively). To keep legend / axis text / tick lines / tooltip readable on the dark aubergine card we override via CSS in `index.css` (search for ".conviction-chart-shell .recharts-text" and surrounding rules). Necessary because the chart provider is constructed in light mode and Recharts inlines `style="fill:..."` on text elements; only an `!important` rule wins.
+
+## Live data integrations (Receipt + Profile, 2026-05-13)
+
+Three SDK hooks Conviction did not previously use are wired up to turn static receipt snapshots into living objects:
+
+### `useMarket(id, { pollInterval })` for live drift on Receipt
+
+`pages/Receipt.tsx` now passes `{ pollInterval: 5_000 }` to `useMarket`. The new `components/LiveConsensusCard.tsx` consumes the polled market state and renders one of three shells:
+
+1. **Open + drift detectable**: shows live consensus μ vs the pinned `consensusAtBet`, signed Δ as % of range, and a verdict colour (jade if the crowd is moving toward the user's prediction, ember if drifting away, muted if no drift yet).
+2. **Open + no drift yet**: muted "No drift yet" label.
+3. **Resolved**: pivots to a SETTLED outcome block with the final outcome, the user's call, and the absolute error band.
+
+Rarity is **NOT** recomputed against the live consensus — the polaroid keeps using `consensusAtBet` so rarity is stable across reloads.
+
+### `usePreviewSell` + `useSell` for cash-out on Receipt
+
+`components/CashOutPanel.tsx` is rendered only when the viewer is the bet author AND the market is still open AND the position has not been cashed out. It polls `previewSell(positionId)` every 10 s to display the current sell value and unrealized P&L (signed via `formatSignedDollars` so we never render `$-7.00`). A two-stage confirm guards `useSell(marketId).execute(positionId)`. On success:
+
+- The realized record is written to `localStorage` via the new `recordCashOut` helper in `storage.ts` (key `conviction.v1.cashouts`).
+- `onCashedOut(record)` fires; the Receipt page sets `landingPending: true` and renders the new `components/CashedOutStamp.tsx` overlay over the polaroid. The stamp's landing animation runs once via the `animateLanding` prop.
+- The CashOut panel collapses into a static realized summary.
+
+The SDK's `useSell` already calls `invalidate(marketId)` internally, so the live drift card and any nearby `usePositions` subscribers refresh automatically.
+
+### `usePreviewSell` for live portfolio P&L on Profile
+
+`components/LivePortfolioSection.tsx` is rendered once per market the user has open positions in. It uses `useMarket(marketId, { pollInterval: 15_000 })` for market metadata and polls `previewSell(positionId)` for every position in that market on the same cadence. Each thumbnail polaroid gets a corner P&L badge (jade gain, rose loss, muted flat). The section header aggregates STAKED / VALUE / UNREALIZED P&L.
+
+`pages/Profile.tsx` partitions enriched bets into open + resolved buckets when `isOwn === true`. Open bets go through the live portfolio block; resolved bets stay in the static "settled archive" grid below it. Non-owner profiles continue to use the full static grid (the preview-sell endpoint requires the caller to own the position).
+
+### Slider-drag crash fix (Polaroid memo + useDeferredValue + rAF-coalesced setPreviewBelief)
+
+User-reported: "when I play a lot with the sliders the website can crash". Root cause was a client-side render storm, NOT a Vercel issue:
+
+1. Each slider tick regenerated the polaroid seed (which feeds `buildPhoto`'s star / sun / comet / aurora / nebula procedural generation), redrew TWO polaroid SVGs (before + after), and synchronously broadcast a new preview belief to the `ConsensusChart` subscriber. At 60+ Hz drag rate the main thread saturated and the page eventually OOM'd.
+
+Three independent fixes, all in BetFlow + Polaroid:
+
+- `components/Polaroid.tsx`: the function component is now `export const Polaroid = memo(PolaroidImpl)`. Default shallow prop equality is the right comparator because every prop is either a primitive or a stable object reference. This eliminates wasted re-renders triggered by parent state changes that don't actually affect the polaroid.
+- `pages/BetFlow.tsx`: the slider state values that feed the polaroid seed (`prediction`, `spread`, `conviction`, `collateral`, `shape`, `reasoning`) are now wrapped in `useDeferredValue` for the polaroid call sites only. The chart, payout preview, badges, and CTA still consume the live values so they feel instant; the polaroid renders at low priority and React skips intermediate frames during a fast drag.
+- `pages/BetFlow.tsx`: the `setPreviewBelief(belief)` broadcast in the slider effect is now coalesced through `requestAnimationFrame` so the chart subscriber gets at most one redraw per paint frame regardless of how fast the slider changes.
+
+Together these cap the heaviest-render path to roughly the browser's paint rate and eliminate the crash. Snapshot scripts and the 277-test unit suite all stay green.
 
 ## Open user-facing items (none blocking)
 

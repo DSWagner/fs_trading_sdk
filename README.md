@@ -9,9 +9,9 @@ Every prediction is signed, dated, and turned into a Polaroid receipt the user c
 | --- | --- |
 | `/` (Landing) | Publication front page with three sample receipts and a develop demo. |
 | `/discover` | Browse the 239 live markets the engine exposes, filter by category, search by keyword. |
-| `/m/:marketId` (BetFlow) | Place a bet using the SDK's `useBuy` + shape generators; live consensus chart + disagreement badge + 7 art presets. |
-| `/r/:marketId/:positionId` (Receipt) | Polaroid receipt with numeric scale, share, embed, and PNG download. |
-| `/u/:username` (Profile) | A user's signed conviction record. |
+| `/m/:marketId` (BetFlow) | Place a bet using the SDK's `useBuy` + shape generators; live consensus chart + disagreement badge + side-by-side before / after receipts. |
+| `/r/:marketId/:positionId` (Receipt) | Polaroid receipt with a live consensus drift card (polls `useMarket` every 5 s), a cash-out flow (`usePreviewSell` + `useSell` with a "CASHED OUT" rubber-stamp overlay), share, embed, and PNG download. |
+| `/u/:username` (Profile) | A user's signed conviction record. On the owner's profile, an additional "Live portfolio" block marks every open position to market via `usePreviewSell` and shows live unrealized P&L badges on each polaroid. |
 | `/embed/r/...` | Bare iframe-friendly receipt for blog and Substack embeds. |
 | `/about` | Editorial framing of the project. |
 
@@ -32,7 +32,7 @@ cd demo-app && npm run dev
 
 ## The SDK that powers Conviction
 
-The rest of this README documents the upstream FunctionSpace Trading SDK that this fork is built on. Conviction lives under `demo-app/src/conviction/` and consumes the SDK's hooks (`useMarket`, `useMarkets`, `useBuy`, `usePreviewPayout`, `useAuth`), widgets (`ConsensusChart`, `PasswordlessAuthWidget`), and core math (`generateGaussian`, `generateRange`, `generateBelief`) without modification.
+The rest of this README documents the upstream FunctionSpace Trading SDK that this fork is built on. Conviction lives under `demo-app/src/conviction/` and consumes the SDK's hooks (`useMarket`, `useMarkets`, `useBuy`, `usePreviewPayout`, `usePreviewSell`, `useSell`, `useAuth`), widgets (`ConsensusChart`, `PasswordlessAuthWidget`), and core math (`generateGaussian`, `generateRange`, `generateBelief`) without modification.
 
 ---
 

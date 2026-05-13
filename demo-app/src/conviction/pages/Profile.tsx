@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { useAuth, useMarkets } from '@functionspace/react';
 import { palette, fonts } from '../theme';
 import { Polaroid } from '../components/Polaroid';
+import { LivePortfolioSection } from '../components/LivePortfolioSection';
 import { getBetsByUser, type BetRecord } from '../storage';
 import { useIsMobile } from '../useMediaQuery';
 import { EditorialEmpty } from '../components/EditorialState';
@@ -166,6 +167,7 @@ export function ProfilePage() {
         <>
           <RarityLedger tierCounts={tierCounts} bestBet={bestBet} isMobile={isMobile} />
           <CalibrationCard enriched={enriched} isMobile={isMobile} />
+          {isOwn && <LivePortfolioBlock enriched={enriched} isMobile={isMobile} />}
           <h2
             style={{
               fontFamily: fonts.display,
@@ -176,16 +178,131 @@ export function ProfilePage() {
               margin: '40px 0 16px',
             }}
           >
-            The archive
+            {isOwn ? 'The settled archive' : 'The archive'}
           </h2>
           <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill, minmax(${isMobile ? 220 : 260}px, 1fr))`, gap: isMobile ? 18 : 28 }}>
-            {enriched.map((e) => (
+            {(isOwn
+              ? enriched.filter((e) => e.resolutionState === 'resolved' || e.resolutionState === 'voided')
+              : enriched
+            ).map((e) => (
               <BetTile key={`${e.record.marketId}:${e.record.positionId}`} bet={e} />
             ))}
           </div>
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * Live portfolio block: groups the user's OPEN bets by market and
+ * renders one LivePortfolioSection per market. Each section polls the
+ * engine for current sell-side mark-to-market via usePreviewSell and
+ * overlays a P&L badge on each polaroid thumbnail.
+ *
+ * Only shown on the owner's profile (isOwn === true), because the
+ * preview-sell call hits an authenticated endpoint scoped to the
+ * caller's positions; non-owners would get nothing useful back.
+ */
+function LivePortfolioBlock({
+  enriched,
+  isMobile,
+}: {
+  enriched: EnrichedBet[];
+  isMobile: boolean;
+}) {
+  const openBets = useMemo(
+    () =>
+      enriched.filter(
+        (e) =>
+          e.resolutionState !== 'resolved' && e.resolutionState !== 'voided',
+      ),
+    [enriched],
+  );
+  const groups = useMemo(() => {
+    const m = new Map<string, BetRecord[]>();
+    for (const e of openBets) {
+      const key = String(e.record.marketId);
+      if (!m.has(key)) m.set(key, []);
+      m.get(key)!.push(e.record);
+    }
+    return Array.from(m.entries()).map(([marketId, records]) => ({
+      marketId,
+      records,
+    }));
+  }, [openBets]);
+  if (groups.length === 0) {
+    return (
+      <section
+        data-testid="live-portfolio-empty"
+        style={{
+          marginTop: 32,
+          marginBottom: 8,
+          padding: isMobile ? '16px' : '20px 24px',
+          background: palette.card,
+          border: `1px dashed ${palette.rule}`,
+          borderRadius: 10,
+        }}
+      >
+        <div
+          style={{
+            fontFamily: fonts.mono,
+            fontSize: 11,
+            color: palette.inkMute,
+            letterSpacing: 1.4,
+            marginBottom: 4,
+          }}
+        >
+          LIVE PORTFOLIO
+        </div>
+        <div
+          style={{
+            fontFamily: fonts.display,
+            fontSize: isMobile ? 15 : 17,
+            fontWeight: 600,
+            color: palette.ink,
+          }}
+        >
+          No open positions. Settle in or stake a new conviction.
+        </div>
+      </section>
+    );
+  }
+  return (
+    <section data-testid="live-portfolio-block" style={{ marginTop: 32 }}>
+      <h2
+        style={{
+          fontFamily: fonts.display,
+          fontSize: isMobile ? 20 : 24,
+          fontWeight: 700,
+          color: palette.ink,
+          letterSpacing: -0.3,
+          margin: '0 0 14px',
+        }}
+      >
+        Live portfolio
+      </h2>
+      <p
+        style={{
+          fontFamily: fonts.body,
+          fontSize: 12.5,
+          color: palette.inkMute,
+          margin: '0 0 18px',
+          lineHeight: 1.45,
+          maxWidth: 600,
+        }}
+      >
+        Every open position, marked to market against the latest engine
+        consensus. Refreshes every 15s while this tab is visible.
+      </p>
+      {groups.map((g) => (
+        <LivePortfolioSection
+          key={g.marketId}
+          marketId={g.marketId}
+          positions={g.records}
+        />
+      ))}
+    </section>
   );
 }
 

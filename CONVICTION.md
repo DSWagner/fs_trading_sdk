@@ -550,17 +550,49 @@ On submit, it calls `useBuy(marketId).execute(belief, collateral)`, captures the
 
 **Read first:** the `buildBelief()` callback. That is where `shape`, `prediction`, `spread`, `secondPeak` get turned into a SDK belief vector by calling `generateGaussian`, `generateRange`, or `generateBelief` from `@functionspace/core`.
 
-### `pages/Receipt.tsx` (about 290 lines)
+### `pages/Receipt.tsx` (about 380 lines)
 
-The shareable single-receipt page. Renders the Polaroid at large size, the reasoning as a pull quote, stats, and the share/embed copy buttons.
+The shareable single-receipt page. Renders the Polaroid at large size, the reasoning as a pull quote, stats, the live consensus drift card, the cash-out panel, and the share/embed copy buttons.
 
 The hydration logic is the interesting part: `merged` is computed from `local ?? hydrate(fromHash, market) ?? null`. Local takes priority because it is the freshest. Hash payload is only used when the visitor does not have the bet in their own ledger. This way the page works for the original author *and* for every recipient of a shared link.
 
-### `pages/Profile.tsx` (about 165 lines)
+`useMarket(marketId, { pollInterval: 5_000 })` keeps the live consensus drift card and the eventual resolution stamp fresh while the receipt is open. The rarity-determining `consensusAtBet` snapshot is **NOT** mutated by the poll — it stays pinned to the value at bet time so rarity is stable across reloads.
 
-A grid of every Polaroid the visitor (or someone else) has ever signed, pulled from `getBetsByUser()`. Header has aggregate stats: total signed, total staked, average conviction.
+### `components/LiveConsensusCard.tsx` (about 230 lines)
 
-This is currently the only page that does not use FunctionSpace data. It is purely a render of localStorage. That means **profiles are device-local**. If you bet on your laptop and check your profile on your phone, your phone shows zero bets. (See [What is not done yet](#what-is-not-done-yet).)
+A small card rendered next to the polaroid stats on the Receipt page. Subscribes to `useMarket` on a 5 s poll. While the market is open, shows three rows:
+
+- Consensus now (live μ)
+- At bet time (pinned `consensusAtBet`)
+- Drift (signed Δ as % of range, color-coded jade if the crowd is moving toward your prediction, ember if drifting away)
+
+When the market resolves, the card pivots to a SETTLED outcome panel showing the final outcome, the user's call, and the absolute error band.
+
+### `components/CashOutPanel.tsx` (about 270 lines)
+
+The cash-out flow. Rendered on the Receipt page only when the viewer is the bet author AND the market is still open AND the position has not already been cashed out. Exercises two SDK hooks Conviction did not previously use:
+
+- `usePreviewSell(marketId).execute(positionId)` for mark-to-market, polled every 10 s, used to display "Current sell value" and "Unrealized P&L".
+- `useSell(marketId).execute(positionId)` to actually close the position.
+
+The confirm flow is two-stage so accidental clicks do not close a position. On success the panel writes a `CashOutRecord` to `localStorage` via `recordCashOut()`, fires `onCashedOut` upstream so the parent stamps a "CASHED OUT" rubber-stamp overlay on the polaroid, then collapses to a static "received / staked / realized P&L" summary.
+
+### `components/CashedOutStamp.tsx` (about 100 lines)
+
+Pure presentational overlay: an angled, red-ink "CASHED OUT" rubber stamp drawn over the polaroid once a position has been sold. Sized as a fraction of `polaroidWidth` so the stamp scales cleanly across the receipt, profile, and embed views. The secondary line shows the realized P&L (or "BREAK EVEN").
+
+### `components/LivePortfolioSection.tsx` (about 260 lines)
+
+One section per market on the owner's profile page. Subscribes to `useMarket(marketId, { pollInterval: 15_000 })` and uses `usePreviewSell(marketId)` to mark every open position in that market to the engine's current sell-side payout. Polls every 15 s while the tab is visible. Each polaroid thumbnail gets a corner P&L badge (jade for gain, rose for loss). The section header aggregates STAKED, VALUE, and UNREALIZED P&L across the positions.
+
+### `pages/Profile.tsx` (about 280 lines)
+
+Two distinct surfaces:
+
+1. **Live portfolio** (own profile only): groups the user's OPEN bets by market and renders one `LivePortfolioSection` per market for live mark-to-market.
+2. **The archive**: every settled receipt (and, for non-owner views, every receipt), rendered as a grid of static `BetTile`s.
+
+Pulls bets from `getBetsByUser()`. The owner-only live block reads the latest position values from the engine; the archive is purely a localStorage render. That means **profiles are still device-local** for the static archive piece. If you bet on your laptop and check your profile on your phone, your phone shows zero bets. (See [What is not done yet](#what-is-not-done-yet).)
 
 ### `pages/Embed.tsx` (about 110 lines)
 
@@ -579,16 +611,27 @@ This is the entire surface area of the FunctionSpace SDK that Conviction touches
 | Hook / function | Where used | What it does |
 | --- | --- | --- |
 | `FunctionSpaceProvider` | `App.tsx` | Provides config and theme to all child hooks. Required wrapper. |
-| `useAuth()` | `NavBar`, `AuthGate`, `BetFlow`, `Profile` | Returns `{user, isAuthenticated, passwordlessLogin, logout, loading, error}`. |
-| `useMarkets(opts)` | `Discover` | Returns the live list of markets, with polling. |
-| `useMarket(id)` | `BetFlow`, `Receipt`, `Embed` | Returns one market's full state. |
+| `useAuth()` | `NavBar`, `AuthGate`, `BetFlow`, `Profile`, `Receipt` | Returns `{user, isAuthenticated, passwordlessLogin, logout, loading, error}`. |
+| `useMarkets(opts)` | `Discover`, `Profile` | Returns the live list of markets, with polling. |
+| `useMarket(id, {pollInterval})` | `BetFlow`, `Receipt`, `Embed`, `LiveConsensusCard`, `LivePortfolioSection` | Returns one market's full state. The Receipt page polls every 5 s for the live drift card; the portfolio polls every 15 s; the rest fetch once. |
 | `useBuy(id)` | `BetFlow` | Returns `{execute, loading, error}` for placing a buy. |
 | `usePreviewPayout(id)` | `BetFlow` | Returns `{execute}` for getting a payout curve without trading. |
+| `usePreviewSell(id)` | `CashOutPanel`, `LivePortfolioSection` | Returns `{execute}` for getting the current sell-side payout for an open position without trading. Drives the live "Unrealized P&L" on the Receipt page and the live portfolio P&L badges on the profile. |
+| `useSell(id)` | `CashOutPanel` | Returns `{execute}` for closing a position. Powers the Receipt page's cash-out flow; on success the SDK auto-invalidates the market cache so the live drift card and the archive reflect the closed state. |
 | `FunctionSpaceContext` | `BetFlow` | Direct context access for `setPreviewBelief` and `setPreviewPayout`. These let us paint the user's draft belief on the SDK's `ConsensusChart` before they submit. |
 | `ConsensusChart` (from `@functionspace/ui`) | `BetFlow` | Prebuilt chart of the current market consensus. We pass it the `marketId` and the SDK takes care of the rest. |
 | `generateGaussian`, `generateRange`, `generateBelief` (from `@functionspace/core`) | `BetFlow` | Pure functions that turn shape parameters into the discrete bucket vector the SDK requires for trades. |
 
 That is it. Everything else is our own code.
+
+### How polling stays cheap
+
+`useMarket` and `usePreviewSell` are both built on the SDK's cache+subscription model:
+
+- The cache key for `useMarket` is `['marketState', marketId]`. Any number of subscribers on the same market share one in-flight request.
+- The cache key is also used by `useConsensus`, which means turning on a poll interval anywhere (e.g. the Receipt page's `LiveConsensusCard`) keeps **every** subscriber on that market fresh, including the `ConsensusChart` on a nearby BetFlow tab.
+- The SDK pauses polling for backgrounded tabs via `subscriberActivity`, so a forgotten tab does not keep banging the engine.
+- `useBuy` / `useSell` call `invalidate(marketId)` on success, which fans out to every active subscriber so the UI reflects the new state immediately.
 
 ---
 

@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { useMarket } from '@functionspace/react';
+import { useMarket, useAuth } from '@functionspace/react';
 import { palette, fonts } from '../theme';
 import { Polaroid } from '../components/Polaroid';
-import { getBet } from '../storage';
+import { LiveConsensusCard } from '../components/LiveConsensusCard';
+import { CashOutPanel } from '../components/CashOutPanel';
+import { CashedOutStamp } from '../components/CashedOutStamp';
+import { getBet, getCashOut, type CashOutRecord } from '../storage';
 import { buildEmbedUrl, buildShareUrl, readShareFromHash } from '../hash';
 import { useIsMobile } from '../useMediaQuery';
 import { downloadPolaroidPng } from '../components/downloadPolaroid';
@@ -24,7 +27,17 @@ export function ReceiptPage() {
   const marketId = decodeURIComponent(rawMarket);
   const positionId = decodeURIComponent(rawPos);
 
-  const { market, loading: marketLoading } = useMarket(marketId);
+  // Poll the market every 5 seconds while the receipt is open. This is
+  // the magic that turns the polaroid from a frozen snapshot into a
+  // living object: the SDK cache (`useMarket` -> `useCacheSubscription`)
+  // broadcasts updates to every subscriber on this market when the
+  // poll lands, and the LiveConsensusCard below reflects the drift in
+  // real time. Resolved markets stop drifting and just hold their final
+  // value, so the cost of polling them is minor; the SDK also bails on
+  // background tabs so this won't burn battery while the user's away.
+  const { market, loading: marketLoading } = useMarket(marketId, {
+    pollInterval: 5_000,
+  });
 
   const local = useMemo(() => getBet(marketId, positionId), [marketId, positionId]);
   const fromHash = useMemo(() => readShareFromHash(), []);
@@ -108,6 +121,18 @@ function ReceiptView({
   const [downloadState, setDownloadState] = useState<'idle' | 'busy' | 'done' | 'error'>('idle');
   const polaroidRef = useRef<HTMLDivElement | null>(null);
   const isMobile = useIsMobile();
+  const { user } = useAuth();
+
+  // Cash-out state: starts from localStorage so the stamp survives a
+  // page reload before the SDK cache surfaces the position as sold.
+  // The CashOutPanel's `onCashedOut` callback hands us the freshly
+  // sold record on success, which we use to play the stamp landing
+  // animation exactly once (`landingPending` flag).
+  const [cashedOut, setCashedOut] = useState<CashOutRecord | null>(() => {
+    if (!merged) return null;
+    return getCashOut(merged.marketId, merged.positionId);
+  });
+  const [landingPending, setLandingPending] = useState(false);
 
   useEffect(() => {
     if (fresh) {
@@ -198,9 +223,19 @@ function ReceiptView({
     }
   };
 
+  const polaroidWidth = isMobile ? 300 : 420;
+  const isOwner = user?.username === merged.username;
+  const isOpen = marketResolutionState !== 'resolved' && marketResolutionState !== 'voided';
+  const showCashOutPanel = isOwner && isOpen && cashedOut == null;
+  const showCashedStamp = cashedOut != null;
+
   const polaroidNode = (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
-      <div ref={polaroidRef}>
+      <div
+        ref={polaroidRef}
+        style={{ position: 'relative', display: 'inline-block' }}
+        data-testid="receipt-polaroid-frame"
+      >
         <Polaroid
           marketId={merged.marketId}
           positionId={merged.positionId}
@@ -218,11 +253,18 @@ function ReceiptView({
           upperBound={merged.upperBound ?? 1}
           resolutionState={marketResolutionState}
           resolvedOutcome={resolvedOutcome}
-          width={isMobile ? 300 : 420}
+          width={polaroidWidth}
           animateDevelop
           consensusAtBet={merged.consensusAtBet ?? null}
           expiresAt={(merged as any).expiresAt ?? null}
         />
+        {showCashedStamp && cashedOut && (
+          <CashedOutStamp
+            polaroidWidth={polaroidWidth}
+            realizedPnl={cashedOut.realizedPnl}
+            animateLanding={landingPending}
+          />
+        )}
       </div>
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
         <button
@@ -338,6 +380,93 @@ function ReceiptView({
             <Stat k="CONVICTION" v={`${Math.round(merged.conviction * 10)}/10`} />
             <Stat k="SHAPE" v={merged.shape.toUpperCase()} />
           </div>
+
+          {/* Live consensus drift card. Drives the "this receipt is a
+              living object" feel by polling the market every 5 seconds
+              and showing where the crowd has moved since the user
+              placed the bet. For resolved markets it pivots to a
+              settled-outcome stamp instead. The rarity calculation
+              still uses the pinned consensus-at-bet snapshot, so
+              rarity stays stable - this card is purely an additive
+              live overlay. */}
+          <div style={{ marginBottom: 16 }} data-testid="receipt-live-drift">
+            <LiveConsensusCard
+              marketId={merged.marketId}
+              consensusAtBet={merged.consensusAtBet ?? null}
+              prediction={merged.prediction}
+              lowerBound={merged.lowerBound ?? 0}
+              upperBound={merged.upperBound ?? 1}
+              marketUnits={merged.marketUnits ?? ''}
+            />
+          </div>
+
+          {/* Cash-out panel. Visible only to the bet author while the
+              market is still open AND the position hasn't been cashed
+              out already. Pulls a live preview-sell from the engine on
+              a 10 s poll, then on confirm executes useSell and writes
+              a CashOutRecord to localStorage so the polaroid receives
+              a "CASHED OUT" stamp overlay immediately - no waiting
+              for the SDK cache to surface position.status === 'sold'. */}
+          {showCashOutPanel && (
+            <div style={{ marginBottom: 16 }} data-testid="receipt-cashout">
+              <CashOutPanel
+                marketId={merged.marketId}
+                positionId={merged.positionId}
+                originalCollateral={merged.collateral}
+                onCashedOut={(record) => {
+                  setCashedOut(record);
+                  setLandingPending(true);
+                  // Drop the landing flag after the stamp animation
+                  // completes so subsequent re-renders don't replay it.
+                  window.setTimeout(() => setLandingPending(false), 500);
+                }}
+              />
+            </div>
+          )}
+
+          {/* Realized cash-out summary - shown to everyone (not just the
+              author) so a shared receipt link communicates that the
+              position has been closed. The stamp on the polaroid carries
+              the visual; this is the human-readable detail row. */}
+          {cashedOut && (
+            <div
+              style={{
+                marginBottom: 16,
+                padding: '12px 14px',
+                background: palette.card,
+                border: `1px solid ${palette.rule}`,
+                borderRadius: 8,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 4,
+              }}
+              data-testid="receipt-cashout-summary"
+            >
+              <span
+                style={{
+                  fontFamily: fonts.mono,
+                  fontSize: 10.5,
+                  letterSpacing: 1.4,
+                  color: palette.rose,
+                  fontWeight: 600,
+                }}
+              >
+                POSITION CLOSED
+              </span>
+              <span
+                style={{
+                  fontFamily: fonts.body,
+                  fontSize: 13,
+                  color: palette.inkSoft,
+                  marginTop: 2,
+                }}
+              >
+                {cashedOut.realizedPnl >= 0
+                  ? `Cashed out for $${cashedOut.collateralReturned.toFixed(2)} (+$${cashedOut.realizedPnl.toFixed(2)} from a $${cashedOut.originalCollateral.toFixed(2)} stake).`
+                  : `Cashed out for $${cashedOut.collateralReturned.toFixed(2)} (loss of $${Math.abs(cashedOut.realizedPnl).toFixed(2)} from a $${cashedOut.originalCollateral.toFixed(2)} stake).`}
+              </span>
+            </div>
+          )}
 
           <div
             style={{

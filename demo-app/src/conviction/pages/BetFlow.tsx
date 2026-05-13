@@ -1,4 +1,4 @@
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useContext, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   FunctionSpaceContext as _FunctionSpaceContext,
@@ -238,14 +238,31 @@ export function BetFlowPage() {
     [shape, prediction, spread, secondPeak],
   );
 
-  // Phase 1 + 2: preview belief (instant) + payout (debounced).
+  // Phase 1 + 2: preview belief (rAF-coalesced) + payout (debounced).
+  //
+  // The previous implementation called `liveCtx.setPreviewBelief(belief)`
+  // synchronously on every slider tick, which forced the SDK
+  // ConsensusChart subscriber to redraw at the slider's full input
+  // cadence (60+ Hz). Recharts cannot keep up with that and the main
+  // thread fell behind, contributing to the slider-drag crash.
+  //
+  // We now coalesce the broadcast through requestAnimationFrame so it
+  // fires at most once per paint frame regardless of how fast the
+  // slider changes. The belief is rebuilt on every effect run (cheap
+  // pure math), but the EXPENSIVE broadcast to the chart subscriber
+  // happens at most ~60 Hz - and any intermediate frames are merged
+  // into the next-painted belief, never queued up.
   useEffect(() => {
     const liveCtx = ctxRef.current;
     if (!market || !liveCtx) return;
     let cancelled = false;
+    let rafHandle: number | null = null;
     try {
       const belief = buildBelief(market);
-      liveCtx.setPreviewBelief(belief);
+      if (rafHandle != null) cancelAnimationFrame(rafHandle);
+      rafHandle = requestAnimationFrame(() => {
+        if (!cancelled) ctxRef.current?.setPreviewBelief(belief);
+      });
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(async () => {
         try {
@@ -267,6 +284,7 @@ export function BetFlowPage() {
     }
     return () => {
       cancelled = true;
+      if (rafHandle != null) cancelAnimationFrame(rafHandle);
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, [market, buildBelief, collateral]);
@@ -354,15 +372,49 @@ export function BetFlowPage() {
 
   const charsRemaining = Math.max(0, MAX_REASONING_CHARS - reasoning.length);
 
-  // Outcome used for the "After" preview: equal to the user's prediction
-  // exactly, so the post-resolution preview always shows the fully
-  // developed, sharp, colored polaroid (i.e. "what your receipt looks
-  // like if you nail it"). The real Receipt page is what shows the
-  // ruined / undeveloped state for an actual miss — the preview never
-  // demoralizes the user mid-bet by guessing they will be wrong.
-  const previewOutcome = prediction;
+  // The "after" preview always shows the user nailing their prediction
+  // (resolvedOutcome === prediction), so the post-resolution polaroid is
+  // a fully-developed sharp coloured receipt. The real Receipt page is
+  // what shows the ruined / undeveloped state for an actual miss - the
+  // preview never demoralizes the user mid-bet by guessing they will be
+  // wrong. We derive this from the DEFERRED prediction below so it stays
+  // consistent with the rest of the deferred polaroid snapshot.
 
   const expiresAt = (market as any).expiresAt ?? null;
+
+  // --- Performance: defer the slider inputs that feed the polaroid seed.
+  //
+  // Each slider tick previously did three expensive things in series:
+  //   1. Recompute the polaroid seed from prediction/spread/conviction
+  //      /collateral/shape, regenerating the full SVG (stars, suns,
+  //      comets, aurora, nebula, ground silhouette, caption).
+  //   2. Recompute the belief vector and broadcast it via
+  //      ctx.setPreviewBelief, which forced the SDK ConsensusChart to
+  //      redraw.
+  //   3. Re-run the debounced payout preview HTTP call.
+  // At 60+ Hz drag rate with TWO polaroids (before + after) and a
+  // Recharts SVG, the main thread saturated and the page eventually
+  // hit an OOM / unresponsive-tab state. The crash was strictly a
+  // client-side render storm, NOT a Vercel issue.
+  //
+  // Fix: wrap the polaroid-seed inputs in `useDeferredValue`. React
+  // keeps the slider input itself, the disagreement badge, the rarity
+  // hint, the chart, and the payout preview running at full priority
+  // (so they all feel instant), and renders the polaroid at LOW
+  // priority. During a fast drag React skips intermediate polaroid
+  // renders and only paints the polaroid when there's idle time. The
+  // result: the slider stays buttery, the polaroid trails by ~50-100 ms,
+  // and the main thread no longer falls behind.
+  //
+  // Combined with `React.memo` on the `Polaroid` component itself
+  // (Polaroid.tsx), parents that re-render the polaroid with byte-
+  // identical deferred props no-op cleanly.
+  const deferredPrediction = useDeferredValue(prediction);
+  const deferredSpread = useDeferredValue(spread);
+  const deferredConviction = useDeferredValue(conviction);
+  const deferredCollateral = useDeferredValue(collateral);
+  const deferredShape = useDeferredValue(shape);
+  const deferredReasoning = useDeferredValue(reasoning);
 
   // Factory so the same live preview can render at multiple sizes:
   // big sticky right-aside on desktop, regular top-of-form on mobile.
@@ -377,6 +429,12 @@ export function BetFlowPage() {
   // the ground silhouette). The right aside renders BOTH side-by-side
   // so the user can see what their receipt looks like in flight and
   // what it will look like once the market resolves in their favor.
+  // Outcome the deferred "after" polaroid commits to. We derive it from
+  // the DEFERRED prediction so it stays consistent with the rest of the
+  // deferred snapshot - otherwise mid-drag the after-polaroid's seed and
+  // its resolvedOutcome could disagree by one frame, causing visible
+  // flicker between develop accuracy bands.
+  const deferredPreviewOutcome = deferredPrediction;
   const renderPreviewPolaroid = (
     mode: 'before' | 'after',
     overrideWidth?: number,
@@ -387,24 +445,26 @@ export function BetFlowPage() {
       // to slider drags. We use a deterministic suffix from the slider
       // tuple so identical slider configs always look identical, but any
       // drag re-seeds. The mode is included so the two polaroids do not
-      // collide on caches keyed by positionId.
-      positionId={`preview-${mode}-${prediction.toFixed(3)}-${spread.toFixed(3)}-${conviction.toFixed(3)}-${collateral.toFixed(0)}-${shape}`}
+      // collide on caches keyed by positionId. NOTE: this is built from
+      // the *deferred* slider values so the polaroid only reseeds when
+      // React picks up the deferred batch, not on every input event.
+      positionId={`preview-${mode}-${deferredPrediction.toFixed(3)}-${deferredSpread.toFixed(3)}-${deferredConviction.toFixed(3)}-${deferredCollateral.toFixed(0)}-${deferredShape}`}
       marketTitle={market.title}
       marketUnits={market.xAxisUnits}
       username={user?.username ?? 'you'}
-      reasoning={reasoning || 'Your reasoning will appear here.'}
+      reasoning={deferredReasoning || 'Your reasoning will appear here.'}
       createdAt={previewCreatedAt}
-      prediction={prediction}
-      spread={spread}
-      conviction={conviction}
-      collateral={collateral}
-      shape={shape}
+      prediction={deferredPrediction}
+      spread={deferredSpread}
+      conviction={deferredConviction}
+      collateral={deferredCollateral}
+      shape={deferredShape}
       lowerBound={lowerBound}
       upperBound={upperBound}
       width={overrideWidth ?? (isMobile ? 260 : previewVisualWidth)}
       expiresAt={expiresAt}
       resolutionState={mode === 'after' ? 'resolved' : 'open'}
-      resolvedOutcome={mode === 'after' ? previewOutcome : null}
+      resolvedOutcome={mode === 'after' ? deferredPreviewOutcome : null}
       consensusAtBet={market.consensusMean ?? null}
       animateDevelop={mode === 'after'}
     />

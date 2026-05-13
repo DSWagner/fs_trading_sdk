@@ -136,8 +136,10 @@ The setup guide lists hard guardrails. Conviction satisfies all of them:
 | --- | --- |
 | Use `PasswordlessAuthWidget` from `@functionspace/ui` | ✓ Used directly inside an editorial wrapper at `demo-app/src/conviction/components/AuthGate.tsx`. No custom auth flow. |
 | Math goes through `@functionspace/core` only | ✓ `generateGaussian`, `generateRange`, `generateBelief`, `evaluateDensityCurve` all consumed from core. The Polaroid generates its own decorative landscape but never replaces the engine math. |
-| React hooks for everything that touches the engine | ✓ `useMarket`, `useMarkets`, `useAuth`, `useBuy`, `usePreviewPayout`, `useConsensus` are the only paths used. |
+| React hooks for everything that touches the engine | ✓ `useMarket`, `useMarkets`, `useAuth`, `useBuy`, `usePreviewPayout`, `useConsensus`, `usePreviewSell`, `useSell` are the only paths used. |
 | `useBuy` for trade submission | ✓ See `pages/BetFlow.tsx`. No raw fetch anywhere. |
+| `useSell` for cash-out flow | ✓ See `components/CashOutPanel.tsx`. The user can close any open position from the Receipt page via the SDK; the SDK's automatic cache invalidation propagates to the live drift card and the portfolio. |
+| Live polling via `useMarket(id, { pollInterval })` | ✓ Receipt page polls every 5 s for the live drift card; the Profile page polls every 15 s for the live portfolio P&L. |
 | Engine error convention via hooks | ✓ All success/error states surface through hook return values. |
 | API endpoint = `https://fs-engine-api-dev.onrender.com` | ✓ Hard-pinned in `demo-app/.env`, `vercel.json`, and `netlify.toml`. |
 | Local default port 3000 | ✓ Pinned in `demo-app/vite.config.ts` with `strictPort: true`. |
@@ -151,13 +153,19 @@ The setup guide lists hard guardrails. Conviction satisfies all of them:
 
 Run from the repo root with `npx vitest run tests/conviction` (free, no money spent; the live tests hit the dev engine):
 
-- **164 Conviction-specific tests** across 7 files:
+- **277 Conviction-specific tests** across 12 files:
   - `hash.test.ts` (21 tests): URL-hash codec round-trip with empty / 4 KB / unicode / emoji / CJK / control chars; URL-safe alphabet; graceful failure; window-hash hydration.
   - `storage.test.ts` (19 tests): localStorage ledger record/read/replace, newest-first ordering, getBetsByUser filter, corrupt-store tolerance, username persistence.
-  - `polaroid-render.test.tsx` (71 tests): SVG render under empty reasoning, 1 KB reasoning, 200-char title, prediction at and outside bounds, every preset, every shape, every resolution state, six widths, deterministic rendering, scale strip with bounds + prediction + outcome values, sentence-style footer, regression test for the empty-filter bug, animation phase progression (pre to running to done) with fake timers, unmount cleanup, mid-animation tear-down, end-to-end resolved-bet content verification.
+  - `cashout-storage.test.ts` (9 tests): cash-out record persistence; round-trip, replace-existing, numeric/string id parity, corrupt-store tolerance, clearCashOuts wipe.
+  - `polaroid-render.test.tsx` (68 tests): SVG render under empty reasoning, 1 KB reasoning, 200-char title, prediction at and outside bounds, every shape, every resolution state, six widths, deterministic rendering, scale strip with bounds + prediction + outcome values, sentence-style footer, regression test for the empty-filter bug, animation phase progression (pre to running to done) with fake timers, unmount cleanup, mid-animation tear-down, end-to-end resolved-bet content verification.
+  - `polaroid-rarity.test.tsx` (15 tests): rarity calculation correctness across the 1-6 stellar topology, tier accuracy bands, palette assignment per tier.
   - `markdown-receipt.test.ts` (24 tests): Markdown export builder; structural shape, resolved outcome lines (called it / close / missed), edge cases (empty reasoning, newline collapse, missing units, bracket escape, conviction clamp, deterministic output).
   - `editorial-state.test.tsx` (14 tests): EditorialLoading rotation with fake timers, role/aria, eyebrow, inline variant, EditorialEmpty action click, EditorialError alert role.
   - `bet-journey.test.tsx` (10 tests): full user journey simulation; sign in, place bet, share URL hash round-trip, embed URL, resolved Polaroid render, animation playback through, resolved-bet markdown export, regression test for end-to-end data flow.
+  - `live-consensus-card.test.tsx` (7 tests): the live drift card; loading state, LIVE eyebrow during open markets, "Coming your way" / "Drifting away" / "No drift yet" classification, SETTLED stamp on resolved markets, degenerate input handling.
+  - `cashout-panel.test.tsx` (4 tests): full cash-out flow with mocked SDK hooks; preview-sell mark-to-market, two-stage confirm, sell execution, CASHED OUT summary, localStorage persistence, cancel path.
+  - `cashed-out-stamp.test.tsx` (7 tests): "CASHED OUT" overlay headline + signed P&L subline + break-even path + landing-animation conditional + polaroid-width scaling.
+  - `live-portfolio-section.test.tsx` (5 tests): per-market live portfolio section; LIVE / SETTLED eyebrow, multi-position aggregation of STAKED / VALUE / UNREALIZED P&L, signed tile badges.
   - `live-engine.test.ts` (5 tests): real network calls; market discovery, single-market parity, passwordless signup with throwaway handle, empty-username rejection.
 - **787 SDK tests** still pass, unchanged.
 
@@ -174,8 +182,9 @@ The full SDK test suite plus all Conviction tests can be run together with `npx 
 | Landing | Hero scrolls cleanly. `DevelopDemo` cycles between developing and developed. The numeric scale strip is visible on every Polaroid in the gallery. |
 | Discover | All 239 markets load. Filter chips toggle. Search narrows results. |
 | BetFlow | Pick a market, sign in via the SDK's auth widget, shape a belief, see the disagreement badge update with the slider, pick an art preset, see the live preview, submit a small bet. |
-| Receipt | Lands on the receipt page. Numeric scale strip shows `you · X` and (if the market is settled) `actual · Y`. Footer reads as a sentence. Copy share link. Open it in incognito. The Polaroid hydrates from the hash. Click "Download as PNG". A 2x DPR file downloads. |
-| Profile (`/u/<handle>`) | Your signed bets show up newest-first. |
+| Receipt | Lands on the receipt page. Numeric scale strip shows `you · X` and (if the market is settled) `actual · Y`. Footer reads as a sentence. Live consensus drift card shows the pulsing LIVE indicator and the current consensus vs the pinned consensus-at-bet; refreshes every 5 s. On the owner's own open receipt, the Cash Out panel is visible and shows live mark-to-market via usePreviewSell. Confirm the two-stage cash-out (click "Cash out now", then "Confirm"); the polaroid stamps CASHED OUT, the receipt persists across reloads. Copy share link. Open it in incognito. The Polaroid hydrates from the hash. Click "Download as PNG". A 2x DPR file downloads. |
+| Profile (`/u/<handle>`) own view | Live portfolio block renders above the settled archive; every open bet has a live P&L badge that refreshes every 15 s. STAKED / VALUE / UNREALIZED P&L aggregates match the per-tile values. |
+| Profile (`/u/<handle>`) other-user view | Static archive grid only. No live portfolio block. |
 | Embed (`/embed/r/<id>/<id>`) | Bare receipt, no nav, ready to drop in an iframe. |
 | Mobile (375 px viewport) | Every page is usable. No horizontal scroll except the style gallery. |
 | Share-card preview | Right-click → View page source. Verify `og:title`, `og:image`, `twitter:image`, `link rel="icon"` are all there. |

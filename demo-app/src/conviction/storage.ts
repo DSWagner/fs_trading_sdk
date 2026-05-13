@@ -51,6 +51,92 @@ export interface BetRecord {
   expiresAt?: string | null;
 }
 
+/**
+ * Cash-out record. Written when the user closes a position early via the
+ * SDK `useSell` hook on the Receipt page. Persisting it client-side means
+ * the receipt remembers the cashed-out state across reloads even before
+ * the live engine sync surfaces the position as `status: 'sold'`. The
+ * SDK is authoritative when both are available; this is just a fast-
+ * path overlay so the UI doesn't flicker between "cashed" and "open"
+ * during the post-sell cache invalidation window.
+ */
+export interface CashOutRecord {
+  marketId: string | number;
+  positionId: string | number;
+  /** ISO timestamp of the sell. */
+  cashedOutAt: string;
+  /** Original collateral the user staked. */
+  originalCollateral: number;
+  /** Amount returned by the sell call. */
+  collateralReturned: number;
+  /** Realized P&L (returned - collateral). Cached for quick display. */
+  realizedPnl: number;
+}
+
+const CASHOUT_KEY = 'conviction.v1.cashouts';
+
+interface CashOutStore {
+  cashouts: CashOutRecord[];
+}
+
+function loadCashOuts(): CashOutStore {
+  if (typeof window === 'undefined') return { cashouts: [] };
+  try {
+    const raw = window.localStorage.getItem(CASHOUT_KEY);
+    if (!raw) return { cashouts: [] };
+    const parsed = JSON.parse(raw);
+    return { cashouts: Array.isArray(parsed?.cashouts) ? parsed.cashouts : [] };
+  } catch {
+    return { cashouts: [] };
+  }
+}
+
+function saveCashOuts(store: CashOutStore): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(CASHOUT_KEY, JSON.stringify(store));
+  } catch {
+    // ignore - quota / private mode
+  }
+}
+
+export function recordCashOut(record: CashOutRecord): void {
+  const store = loadCashOuts();
+  const key = receiptKey(record.marketId, record.positionId);
+  const existing = store.cashouts.findIndex(
+    (c) => receiptKey(c.marketId, c.positionId) === key,
+  );
+  if (existing >= 0) {
+    store.cashouts[existing] = record;
+  } else {
+    store.cashouts.unshift(record);
+  }
+  saveCashOuts(store);
+}
+
+export function getCashOut(
+  marketId: string | number,
+  positionId: string | number,
+): CashOutRecord | null {
+  const key = receiptKey(marketId, positionId);
+  return (
+    loadCashOuts().cashouts.find(
+      (c) => receiptKey(c.marketId, c.positionId) === key,
+    ) ?? null
+  );
+}
+
+export function getCashOutsByUser(marketIdsByUser: Set<string>): CashOutRecord[] {
+  return loadCashOuts().cashouts.filter((c) =>
+    marketIdsByUser.has(String(c.marketId)),
+  );
+}
+
+export function clearCashOuts(): void {
+  if (typeof window === 'undefined') return;
+  window.localStorage.removeItem(CASHOUT_KEY);
+}
+
 interface Store {
   bets: BetRecord[];
 }
