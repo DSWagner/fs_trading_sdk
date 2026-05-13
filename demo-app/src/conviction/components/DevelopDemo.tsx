@@ -23,6 +23,21 @@ export function DevelopDemo() {
     return () => window.clearInterval(id);
   }, [auto]);
 
+  // Calibration note: the rarity tier of a polaroid is the product of
+  // contrarian-ness (disagreement with consensus) AND accuracy. The
+  // "open" palette uses `potentialRarity` (which assumes ~88% accuracy)
+  // and the "resolved" palette uses `calculateRarity` (which uses the
+  // actual outcome). For the marketing demo we deliberately keep the
+  // tier SAME in both states — otherwise the toggle reads as "the
+  // colour changed" instead of "the polaroid developed", which
+  // distracts from the message of this section.
+  //
+  // With these inputs the math lands cleanly in EPIC for both states:
+  //   range = 3.0
+  //   disagreement = |4.0 - 4.9| / 3.0 = 0.30
+  //   potential score = 0.30 * 0.88 = 0.264 -> epic (>= 0.18)
+  //   actual accuracy = 1 - (|4.0 - 4.25| / 3.0) * 4 = 0.667 -> "CLOSE"
+  //   actual score    = 0.30 * 0.667 = 0.200 -> epic (>= 0.18)
   const sample = {
     marketId: 'demo-develop',
     positionId: 'sample-final-fed',
@@ -39,7 +54,7 @@ export function DevelopDemo() {
     shape: 'gaussian' as const,
     lowerBound: 2.5,
     upperBound: 5.5,
-    consensusAtBet: 4.7,
+    consensusAtBet: 4.9,
   };
 
   const handleClick = () => {
