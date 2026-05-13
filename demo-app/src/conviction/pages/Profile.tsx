@@ -4,6 +4,8 @@ import { useAuth, useMarkets } from '@functionspace/react';
 import { palette, fonts } from '../theme';
 import { Polaroid } from '../components/Polaroid';
 import { LivePortfolioSection } from '../components/LivePortfolioSection';
+import { AchievementsStrip } from '../components/AchievementsStrip';
+import type { AchievementBet } from '../achievements';
 import { getBetsByUser, type BetRecord } from '../storage';
 import { getDemoGallery } from '../demoGalleries';
 import { useIsMobile } from '../useMediaQuery';
@@ -141,6 +143,31 @@ export function ProfilePage() {
     return { total, totalStaked, avgConviction, resolvedCount };
   }, [bets, enriched]);
 
+  // Project the enriched ledger down to the lean shape the achievements
+  // module wants. Disagreement is computed from each bet's pinned
+  // consensusAtBet vs prediction, normalised by the market range.
+  const achievementBets = useMemo<AchievementBet[]>(() => {
+    return enriched.map((e) => {
+      const b = e.record;
+      const range =
+        b.upperBound != null && b.lowerBound != null
+          ? Math.max(0.0001, b.upperBound - b.lowerBound)
+          : null;
+      const disagreement =
+        b.consensusAtBet != null && Number.isFinite(b.consensusAtBet) && range != null
+          ? Math.min(1, Math.abs(b.prediction - b.consensusAtBet) / range)
+          : null;
+      return {
+        rarity: e.rarity,
+        accuracy: e.accuracy,
+        createdAt: b.createdAt,
+        conviction: b.conviction,
+        resolutionState: e.resolutionState,
+        disagreement,
+      };
+    });
+  }, [enriched]);
+
   return (
     <div style={{ maxWidth: 1120, margin: '0 auto', padding: isMobile ? '24px 16px 56px' : '32px 24px 80px' }}>
       <div
@@ -197,6 +224,7 @@ export function ProfilePage() {
         <>
           {isDemoFallback && <DemoFallbackNotice isMobile={isMobile} />}
           <RarityLedger tierCounts={tierCounts} bestBet={bestBet} isMobile={isMobile} />
+          <AchievementsStrip bets={achievementBets} isMobile={isMobile} />
           <CalibrationCard enriched={enriched} isMobile={isMobile} />
           {isOwn && <LivePortfolioBlock enriched={enriched} isMobile={isMobile} />}
           <h2

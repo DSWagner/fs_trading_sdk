@@ -47,6 +47,7 @@ const useAuthMock = vi.fn();
 const usePreviewSellMock = vi.fn();
 const useSellMock = vi.fn();
 const useMarketHistoryMock = vi.fn();
+const useConsensusMock = vi.fn();
 
 vi.mock('@functionspace/react', () => ({
   useMarket: (...args: any[]) => useMarketMock(...args),
@@ -58,6 +59,13 @@ vi.mock('@functionspace/react', () => ({
   // explainer rather than crashing — but expose the mock so any
   // test that wants to inject a real time series can override it.
   useMarketHistory: (...args: any[]) => useMarketHistoryMock(...args),
+  // ComparisonPair reads the live consensus from this hook so it can
+  // synthesise the "crowd polaroid." Default to "still loading" so the
+  // pair renders a skeleton rather than the full pair — the receipt
+  // fallback test focuses on rendering the USER'S polaroid even when
+  // the engine is down, so we just want the comparison block to not
+  // crash. Tests that care about the crowd polaroid override this.
+  useConsensus: (...args: any[]) => useConsensusMock(...args),
 }));
 
 import { ReceiptPage } from '../../demo-app/src/conviction/pages/Receipt';
@@ -97,6 +105,7 @@ beforeEach(() => {
   usePreviewSellMock.mockReset();
   useSellMock.mockReset();
   useMarketHistoryMock.mockReset();
+  useConsensusMock.mockReset();
   window.localStorage.clear();
   // Defaults the page is allowed to call but doesn't require for this
   // test surface.
@@ -123,6 +132,17 @@ beforeEach(() => {
     history: null,
     loading: false,
     isFetching: false,
+    error: null,
+    refetch: () => {},
+  });
+  // Default to "still loading" so the ComparisonPair component renders
+  // its skeleton instead of evaluating consensus — the fallback tests
+  // here do not need to assert anything about the crowd polaroid, only
+  // that the user's polaroid renders.
+  useConsensusMock.mockReturnValue({
+    consensus: null,
+    loading: true,
+    isFetching: true,
     error: null,
     refetch: () => {},
   });

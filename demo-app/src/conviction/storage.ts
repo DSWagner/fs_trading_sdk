@@ -201,15 +201,30 @@ export function receiptKey(
 
 export function rememberUsername(username: string): void {
   if (typeof window === 'undefined') return;
-  window.localStorage.setItem(USERNAME_KEY, username);
+  try {
+    window.localStorage.setItem(USERNAME_KEY, username);
+  } catch {
+    // ignore — quota exhausted, storage disabled in private mode, or
+    // running inside a sandboxed iframe. Username persistence is a
+    // convenience, not a correctness requirement; we'd rather drop it
+    // silently than crash the auth flow.
+  }
 }
 
 export function recallUsername(): string | null {
   if (typeof window === 'undefined') return null;
-  return window.localStorage.getItem(USERNAME_KEY);
+  try {
+    return window.localStorage.getItem(USERNAME_KEY);
+  } catch {
+    return null;
+  }
 }
 
 export function forgetUsername(): void {
   if (typeof window === 'undefined') return;
-  window.localStorage.removeItem(USERNAME_KEY);
+  try {
+    window.localStorage.removeItem(USERNAME_KEY);
+  } catch {
+    // ignore — symmetric with rememberUsername above.
+  }
 }

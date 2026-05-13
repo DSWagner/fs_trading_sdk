@@ -619,14 +619,15 @@ This is the entire surface area of the FunctionSpace SDK that Conviction touches
 | `usePreviewSell(id)` | `CashOutPanel`, `LivePortfolioSection` | Returns `{execute}` for getting the current sell-side payout for an open position without trading. Drives the live "Unrealized P&L" on the Receipt page and the live portfolio P&L badges on the profile. |
 | `useSell(id)` | `CashOutPanel` | Returns `{execute}` for closing a position. Powers the Receipt page's cash-out flow; on success the SDK auto-invalidates the market cache so the live drift card and the archive reflect the closed state. |
 | `useTradeHistory(id, {limit, pollInterval})` | `TheWire` | Returns the recent trade ledger for a single market `{trades, loading, error, refetch}`. The Wire on the Discover page subscribes to the top three highest-volume markets and merges their feeds on the client so the visitor sees other users' BUYs and SELLs ticking through in real time, each row coloured by the potential rarity the trade could earn against current consensus. This is the social-proof loop the engine made possible. |
-| `useMarketHistory(id, {limit, pollInterval})` | `ConsensusDriftSparkline` | Returns historical snapshots of one market `{history, loading, error}`. The Receipt page renders a compact SVG sparkline of the consensus mean over time (built via the pure `transformHistoryToFanChart` helper from `@functionspace/core`), overlaid with the user's prediction reference line and a "you signed here" caret. Turns the receipt from "your single moment in time" into "your moment in the wider arc of crowd opinion." |
+| `useMarketHistory(id, {limit, pollInterval})` | `ConsensusDriftSparkline` | Returns historical snapshots of one market `{history, loading, error}`. The Receipt page renders a compact SVG sparkline of the consensus mean over time (built via the pure `transformHistoryToFanChart` helper from `@functionspace/core`), overlaid with the user's prediction reference line and a "you signed here" caret. The sparkline also exposes a Play/Pause replay control that animates the historical mean across 4.8 s — a "flip-book" of how the crowd's belief evolved between the user's signing and now. Turns the receipt from "your single moment in time" into "your moment in the wider arc of crowd opinion." |
+| `useConsensus(id)` | `LivePortfolioSection`, `ComparisonPair` | Returns the current consensus density `{consensus: {points, config}, loading, error}`. `ComparisonPair` reduces the density to mean + stdDev + conviction via `summariseConsensus` (trapezoidal integration) so the Receipt page can synthesise a "crowd polaroid" side-by-side with the user's — the editorial-payoff visual that asks "what would a polaroid look like if the CROWD signed a receipt today?" |
 | `FunctionSpaceContext` | `BetFlow` | Direct context access for `setPreviewBelief` and `setPreviewPayout`. These let us paint the user's draft belief on the SDK's `ConsensusChart` before they submit. |
 | `ConsensusChart` (from `@functionspace/ui`) | `BetFlow` | Prebuilt chart of the current market consensus. We pass it the `marketId` and the SDK takes care of the rest. |
 | `PasswordlessAuthWidget` (from `@functionspace/ui`) | `NavBar`, `AuthGate` | The competition-required auth surface. Visually reconciled via CSS-only overrides (no React-tree changes) to match the editorial palette. |
 | `generateGaussian`, `generateRange`, `generateBelief` (from `@functionspace/core`) | `BetFlow` | Pure functions that turn shape parameters into the discrete bucket vector the SDK requires for trades. |
 | `transformHistoryToFanChart` (from `@functionspace/core`) | `ConsensusDriftSparkline` | Pure helper that normalises raw `MarketSnapshot[]` (with their alpha vectors) into a time series of `{timestamp, mean, mode, stdDev, percentiles}` points. Down-samples to a target point count for performance. |
 
-That is the full SDK surface area Conviction touches — 11 hooks plus the two UI widgets and three core helpers. Everything else is our own code.
+That is the full SDK surface area Conviction touches — 12 hooks plus the two UI widgets and three core helpers. Everything else is our own code.
 
 ### How polling stays cheap
 
@@ -863,7 +864,7 @@ Honest backlog. Everything from the previous version, with status flags.
 - ✅ OG / Twitter meta tags, favicon, 1200x630 share card SVG.
 - ✅ Live consensus-disagreement indicator on the BetFlow page.
 - ✅ Download-as-PNG button on the Receipt page (pure client-side).
-- ✅ Real test suite (97 tests across pure functions, render, and live API smoke).
+- ✅ Real test suite (370 conviction-specific tests across 25 files: pure functions, render, achievement math, error-boundary class behaviour, share-kit fallbacks, replay animation, comparison-pair moments analysis, live data integrations, plus live API smoke).
 - ✅ Readable Polaroid: numeric scale strip with bounds, prediction value, outcome value; sentence-style footer (`X → Y · off by Z%`); regression test for the empty-filter bug that used to blank the developed state.
 - ✅ Submission readiness: `SUBMISSION.md` form package, `vercel.json` and `netlify.toml` one-click deploy configs, public README leads with Conviction, custom auth widget swapped for `PasswordlessAuthWidget` (compliance), dev port pinned to 3000 (compliance).
 

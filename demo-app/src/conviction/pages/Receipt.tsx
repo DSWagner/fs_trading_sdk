@@ -5,13 +5,17 @@ import { palette, fonts } from '../theme';
 import { Polaroid } from '../components/Polaroid';
 import { LiveConsensusCard } from '../components/LiveConsensusCard';
 import { ConsensusDriftSparkline } from '../components/ConsensusDriftSparkline';
+import { ComparisonPair } from '../components/ComparisonPair';
 import { CashOutPanel } from '../components/CashOutPanel';
 import { CashedOutStamp } from '../components/CashedOutStamp';
+import { ShareKit } from '../components/ShareKit';
 import { getBet, getCashOut, type CashOutRecord, type BetRecord } from '../storage';
 import { getDemoBet } from '../demoGalleries';
 import { buildEmbedUrl, buildShareUrl, readShareFromHash } from '../hash';
 import { useIsMobile } from '../useMediaQuery';
-import { downloadPolaroidPng } from '../components/downloadPolaroid';
+// downloadPolaroidPng is now invoked transitively through the ShareKit
+// component, which owns the receipt's PNG export flow. Importing it
+// directly here would be dead code, so the import has moved to ShareKit.
 import { EditorialEmpty, EditorialLoading } from '../components/EditorialState';
 import { buildMarkdownReceipt } from '../markdownReceipt';
 
@@ -167,7 +171,7 @@ function ReceiptView({
 }) {
   const [copyState, setCopyState] = useState<'idle' | 'shared' | 'embedded' | 'markdown' | 'markdown-error'>('idle');
   const [showCelebration, setShowCelebration] = useState(false);
-  const [downloadState, setDownloadState] = useState<'idle' | 'busy' | 'done' | 'error'>('idle');
+  // (Previous local `downloadState` removed; the ShareKit owns this state now.)
   const polaroidRef = useRef<HTMLDivElement | null>(null);
   const isMobile = useIsMobile();
   const { user } = useAuth();
@@ -257,21 +261,6 @@ function ReceiptView({
     setTimeout(() => setCopyState('idle'), 2000);
   };
 
-  const onDownload = async () => {
-    setDownloadState('busy');
-    try {
-      const safeName = `conviction-${String(merged.marketId)}-${String(merged.positionId)}.png`
-        .replace(/[^a-z0-9._-]/gi, '_');
-      await downloadPolaroidPng(polaroidRef.current, safeName);
-      setDownloadState('done');
-      setTimeout(() => setDownloadState('idle'), 1800);
-    } catch (err) {
-      console.error('[Polaroid download] failed:', err);
-      setDownloadState('error');
-      setTimeout(() => setDownloadState('idle'), 2400);
-    }
-  };
-
   const polaroidWidth = isMobile ? 300 : 420;
   const isOwner = user?.username === merged.username;
   const isOpen = marketResolutionState !== 'resolved' && marketResolutionState !== 'voided';
@@ -315,36 +304,25 @@ function ReceiptView({
           />
         )}
       </div>
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
-        <button
-          type="button"
-          onClick={onDownload}
-          disabled={downloadState === 'busy'}
-          style={{
-            padding: '8px 14px',
-            background: 'transparent',
-            color: palette.inkSoft,
-            border: `1px solid ${palette.rule}`,
-            borderRadius: 6,
-            fontFamily: fonts.body,
-            fontSize: 13,
-            fontWeight: 500,
-            cursor: downloadState === 'busy' ? 'wait' : 'pointer',
-            letterSpacing: 0.3,
-          }}
-        >
-          {downloadState === 'busy' && 'Rendering…'}
-          {downloadState === 'done' && 'Saved ✓'}
-          {downloadState === 'error' && 'Try again'}
-          {downloadState === 'idle' && 'Download as PNG'}
-        </button>
-        <Link
-          to={`/u/${encodeURIComponent(merged.username)}`}
-          style={{ fontFamily: fonts.body, fontSize: 13, color: palette.inkMute, textDecoration: 'none' }}
-        >
-          See @{merged.username}'s other convictions →
-        </Link>
-      </div>
+      {/* Unified share kit. Wraps Web Share API (file-bearing on
+          mobile / modern Chromium), Twitter intent fallback on
+          desktop, a copy-link button, and the existing 2x DPR
+          PNG download — all behind one editorial pill row. The
+          previous standalone "Download as PNG" button is now the
+          third action in this kit, so the receipt page no longer
+          has TWO separate share affordances. */}
+      <ShareKit
+        polaroidRef={polaroidRef}
+        shareUrl={typeof window !== 'undefined' ? window.location.href : ''}
+        username={merged.username}
+        marketTitle={merged.marketTitle ?? 'a market'}
+      />
+      <Link
+        to={`/u/${encodeURIComponent(merged.username)}`}
+        style={{ fontFamily: fonts.body, fontSize: 13, color: palette.inkMute, textDecoration: 'none', marginTop: 4 }}
+      >
+        See @{merged.username}'s other convictions →
+      </Link>
     </div>
   );
 
@@ -448,6 +426,36 @@ function ReceiptView({
               marketUnits={merged.marketUnits ?? ''}
             />
           </div>
+
+          {/* Comparison pair — your call vs the crowd, side by side.
+              Reads the live consensus density from useConsensus,
+              integrates it into a {mean, spread, conviction} triple,
+              and renders a "crowd polaroid" next to the user's. The
+              receipt becomes a two-up editorial spread: same world,
+              two convictions about it. */}
+          <ComparisonPair
+            marketId={merged.marketId}
+            positionId={merged.positionId}
+            marketTitle={merged.marketTitle ?? ''}
+            marketUnits={merged.marketUnits ?? ''}
+            lowerBound={merged.lowerBound ?? 0}
+            upperBound={merged.upperBound ?? 1}
+            userBet={{
+              username: merged.username,
+              reasoning: merged.reasoning,
+              createdAt: merged.createdAt,
+              prediction: merged.prediction,
+              spread: merged.spread,
+              conviction: merged.conviction,
+              collateral: merged.collateral,
+              shape: merged.shape,
+              consensusAtBet: merged.consensusAtBet ?? null,
+            }}
+            resolutionState={marketResolutionState}
+            resolvedOutcome={resolvedOutcome}
+            width={isMobile ? 260 : 320}
+            isMobile={isMobile}
+          />
 
           {/* Macro-historical consensus drift sparkline. Pulls the
               full snapshot history for this market (useMarketHistory)

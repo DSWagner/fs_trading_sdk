@@ -1,94 +1,171 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <!--
+    Conviction · Open Graph share card.
+
+    Refreshed to match the lavender + ember palette (see demo-app/src/index.css).
+    The earlier card used the sepia/cream palette from before the rare-purple
+    overhaul; on a tweet preview that read as "different app" alongside the
+    real product. This version paints the same pastel-orange + pastel-purple
+    identity the live UI now wears, with three editorial polaroids on the
+    right showing the rarity gradient (epic / legendary / mythic) the user
+    can earn on the platform.
+
+    Editorial intent: "Stop betting in private." (subject) "Sign your call,
+    attach your reasoning, share a polaroid that develops when reality
+    catches up." (subline). One mono eyebrow at top-left, one wordmark and
+    SDK credit at the bottom. Three rotated polaroid thumbnails on the
+    right anchor the visual.
+  -->
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#FBF6EE" />
-      <stop offset="100%" stop-color="#F3EADA" />
+      <stop offset="0%" stop-color="#F0E7F5" />
+      <stop offset="100%" stop-color="#E5D6EE" />
     </linearGradient>
-    <linearGradient id="sky1" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#1F1234" />
-      <stop offset="55%" stop-color="#5A2A3F" />
-      <stop offset="100%" stop-color="#E2865A" />
-    </linearGradient>
-    <linearGradient id="sky2" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#0B1830" />
-      <stop offset="55%" stop-color="#2D1F58" />
-      <stop offset="100%" stop-color="#5C2860" />
-    </linearGradient>
-    <linearGradient id="sky3" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#2B1424" />
-      <stop offset="55%" stop-color="#7A3450" />
-      <stop offset="100%" stop-color="#F2B8C0" />
-    </linearGradient>
-    <radialGradient id="sun1" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#FFD494" />
-      <stop offset="60%" stop-color="#FF8A3D" stop-opacity="0.55" />
-      <stop offset="100%" stop-color="#FF8A3D" stop-opacity="0" />
+    <radialGradient id="bgGlowOrange" cx="92%" cy="8%" r="55%">
+      <stop offset="0%" stop-color="#E68A4F" stop-opacity="0.22" />
+      <stop offset="70%" stop-color="#E68A4F" stop-opacity="0" />
     </radialGradient>
-    <radialGradient id="sun2" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#A8F0D8" />
-      <stop offset="60%" stop-color="#5DD3B5" stop-opacity="0.55" />
-      <stop offset="100%" stop-color="#5DD3B5" stop-opacity="0" />
+    <radialGradient id="bgGlowPurple" cx="6%" cy="94%" r="55%">
+      <stop offset="0%" stop-color="#8467BB" stop-opacity="0.28" />
+      <stop offset="70%" stop-color="#8467BB" stop-opacity="0" />
     </radialGradient>
-    <radialGradient id="sun3" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#FFE0B8" />
-      <stop offset="60%" stop-color="#E08A6A" stop-opacity="0.55" />
-      <stop offset="100%" stop-color="#E08A6A" stop-opacity="0" />
+    <!-- Three rarity-themed polaroid skies: epic (purple), legendary (gold),
+         mythic (deep ember + violet). -->
+    <linearGradient id="skyEpic" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1B0F2E" />
+      <stop offset="55%" stop-color="#4A2C70" />
+      <stop offset="100%" stop-color="#A284D6" />
+    </linearGradient>
+    <linearGradient id="skyLegendary" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1F1A0E" />
+      <stop offset="55%" stop-color="#7A5520" />
+      <stop offset="100%" stop-color="#F0C470" />
+    </linearGradient>
+    <linearGradient id="skyMythic" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2A0F1A" />
+      <stop offset="55%" stop-color="#7A2F40" />
+      <stop offset="100%" stop-color="#E68A4F" />
+    </linearGradient>
+    <radialGradient id="sunEpic" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#D9C0F5" />
+      <stop offset="60%" stop-color="#A284D6" stop-opacity="0.55" />
+      <stop offset="100%" stop-color="#A284D6" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="sunLegendary" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#FFE5A8" />
+      <stop offset="60%" stop-color="#F0C470" stop-opacity="0.55" />
+      <stop offset="100%" stop-color="#F0C470" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="sunMythic" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#FFC8A4" />
+      <stop offset="60%" stop-color="#E68A4F" stop-opacity="0.6" />
+      <stop offset="100%" stop-color="#E68A4F" stop-opacity="0" />
     </radialGradient>
   </defs>
 
+  <!-- Paper + ambient glows. -->
   <rect width="1200" height="630" fill="url(#bg)" />
+  <rect width="1200" height="630" fill="url(#bgGlowOrange)" />
+  <rect width="1200" height="630" fill="url(#bgGlowPurple)" />
 
-  <!-- Tiny issue tag -->
-  <text x="80" y="110" font-family="Courier, monospace" font-size="18" font-weight="500" letter-spacing="3" fill="#C2410C">VOL. I  ·  RECEIPTS FOR BELIEFS</text>
+  <!-- Mono eyebrow. -->
+  <text x="80" y="108" font-family="'Courier New', Courier, monospace" font-size="18"
+        font-weight="600" letter-spacing="3.6" fill="#E68A4F">VOL. I · RECEIPTS FOR BELIEFS</text>
 
-  <!-- Big serif headline -->
-  <text x="80" y="220" font-family="Georgia, 'Times New Roman', serif" font-size="92" font-weight="700" fill="#1A1814" letter-spacing="-2">Stop betting</text>
-  <text x="80" y="320" font-family="Georgia, 'Times New Roman', serif" font-size="92" font-weight="700" font-style="italic" fill="#C2410C" letter-spacing="-2">in private.</text>
+  <!-- Big display headline. Two lines: the first set in ink, the second
+       in ember-italic to break up the type and carry the brand colour. -->
+  <text x="80" y="226" font-family="Georgia, 'Times New Roman', serif" font-size="92"
+        font-weight="700" fill="#2A1B3D" letter-spacing="-2">Stop betting</text>
+  <text x="80" y="326" font-family="Georgia, 'Times New Roman', serif" font-size="92"
+        font-weight="700" font-style="italic" fill="#B5571A" letter-spacing="-2">in private.</text>
 
-  <!-- Subline -->
-  <text x="80" y="400" font-family="Helvetica, Arial, sans-serif" font-size="28" fill="#3F3A33">Sign your call. Attach your reasoning.</text>
-  <text x="80" y="438" font-family="Helvetica, Arial, sans-serif" font-size="28" fill="#3F3A33">Share a Polaroid that develops when reality catches up.</text>
+  <!-- Subline (two lines). -->
+  <text x="80" y="404" font-family="Helvetica, Arial, sans-serif" font-size="26"
+        fill="#4D3D63">Sign your call. Attach your reasoning.</text>
+  <text x="80" y="438" font-family="Helvetica, Arial, sans-serif" font-size="26"
+        fill="#4D3D63">Share a Polaroid that develops when reality catches up.</text>
 
-  <!-- Bottom row -->
-  <line x1="80" y1="510" x2="640" y2="510" stroke="#E5DCCB" stroke-width="1" />
-  <text x="80" y="555" font-family="Georgia, serif" font-size="22" font-weight="700" fill="#1A1814">Conviction</text>
-  <text x="200" y="555" font-family="Courier, monospace" font-size="14" letter-spacing="2" fill="#6B5E50">A PUBLICATION ON THE BELIEF MARKET PRIMITIVE</text>
+  <!-- Bottom row: wordmark + SDK credit. -->
+  <line x1="80" y1="510" x2="640" y2="510" stroke="#D8C3E5" stroke-width="1" />
+  <text x="80" y="555" font-family="Georgia, serif" font-size="24" font-weight="700"
+        fill="#2A1B3D">Conviction</text>
+  <text x="220" y="555" font-family="'Courier New', Courier, monospace" font-size="14"
+        letter-spacing="2" fill="#7B6E8E">A PUBLICATION ON THE BELIEF MARKET PRIMITIVE</text>
+  <text x="80" y="585" font-family="'Courier New', Courier, monospace" font-size="13"
+        letter-spacing="1.6" fill="#B0A4C0">BUILT ON THE FUNCTIONSPACE SDK</text>
 
-  <text x="80" y="585" font-family="Courier, monospace" font-size="14" letter-spacing="1.5" fill="#9C8E7E">BUILT ON THE FUNCTIONSPACE SDK</text>
-
-  <!-- Three Polaroids on the right -->
-  <g transform="translate(800 90) rotate(-6)">
-    <rect x="0" y="0" width="240" height="320" rx="6" fill="#FFFCF6" stroke="#E5DCCB" stroke-width="1" />
-    <rect x="16" y="16" width="208" height="208" rx="2" fill="url(#sky1)" />
-    <circle cx="166" cy="120" r="46" fill="url(#sun1)" />
-    <circle cx="166" cy="120" r="20" fill="#FFD494" />
-    <path d="M 16 192 L 36 178 L 60 188 L 88 170 L 116 184 L 148 168 L 184 178 L 224 174 L 224 224 L 16 224 Z" fill="#2C1517" />
-    <text x="120" y="252" text-anchor="middle" font-family="Georgia, serif" font-size="13" font-weight="600" font-style="italic" fill="#1A1814">"Best Picture · Anora"</text>
-    <text x="120" y="276" text-anchor="middle" font-family="Helvetica, sans-serif" font-size="10" font-style="italic" fill="#3F3A33">Indie distributor energy nobody saw coming.</text>
-    <text x="120" y="304" text-anchor="middle" font-family="Courier, monospace" font-size="9" fill="#6B5E50" letter-spacing="0.5">@critic_at_large · DEVELOPING</text>
+  <!-- Epic polaroid (left-most of the trio, biggest, tilted left). -->
+  <g transform="translate(770 70) rotate(-7)">
+    <rect x="0" y="0" width="252" height="332" rx="6" fill="#FBF6FE" stroke="#D8C3E5" stroke-width="1.5" />
+    <rect x="18" y="18" width="216" height="216" rx="2" fill="url(#skyEpic)" />
+    <!-- Sun + halo. -->
+    <circle cx="170" cy="120" r="50" fill="url(#sunEpic)" />
+    <circle cx="170" cy="120" r="22" fill="#D9C0F5" />
+    <!-- Mountain silhouette. -->
+    <path d="M 18 198 L 38 184 L 64 192 L 92 174 L 124 188 L 156 172 L 196 184 L 234 178 L 234 234 L 18 234 Z" fill="#1B0F2E" />
+    <!-- Stars (small specks for epic tier rarity hint). -->
+    <circle cx="56" cy="62" r="1.6" fill="#F0E8F5" />
+    <circle cx="98" cy="48" r="1.4" fill="#F0E8F5" />
+    <circle cx="122" cy="78" r="1.6" fill="#F0E8F5" />
+    <circle cx="200" cy="58" r="1.2" fill="#F0E8F5" />
+    <!-- Caption. -->
+    <text x="126" y="262" text-anchor="middle" font-family="Georgia, serif" font-size="14"
+          font-weight="600" font-style="italic" fill="#2A1B3D">"Best Picture · Anora"</text>
+    <text x="126" y="284" text-anchor="middle" font-family="Helvetica, sans-serif" font-size="10.5"
+          font-style="italic" fill="#4D3D63">Indie distributor energy nobody saw coming.</text>
+    <text x="126" y="312" text-anchor="middle" font-family="'Courier New', monospace" font-size="9.5"
+          fill="#8467BB" letter-spacing="1.2">@critic_at_large · EPIC</text>
   </g>
 
-  <g transform="translate(910 175) rotate(4)">
-    <rect x="0" y="0" width="220" height="295" rx="6" fill="#FFFCF6" stroke="#E5DCCB" stroke-width="1" />
-    <rect x="14" y="14" width="192" height="192" rx="2" fill="url(#sky2)" />
-    <circle cx="80" cy="105" r="42" fill="url(#sun2)" />
-    <circle cx="80" cy="105" r="18" fill="#A8F0D8" />
-    <circle cx="170" cy="125" r="32" fill="url(#sun2)" opacity="0.7" />
-    <circle cx="170" cy="125" r="13" fill="#F0A8D8" />
-    <path d="M 14 180 L 30 168 L 56 178 L 84 162 L 116 174 L 152 158 L 184 168 L 206 162 L 206 206 L 14 206 Z" fill="#150A28" />
-    <text x="110" y="232" text-anchor="middle" font-family="Georgia, serif" font-size="12" font-weight="600" font-style="italic" fill="#1A1814">"GPT-5 release"</text>
-    <text x="110" y="254" text-anchor="middle" font-family="Helvetica, sans-serif" font-size="9" font-style="italic" fill="#3F3A33">Two distinct windows.</text>
-    <text x="110" y="280" text-anchor="middle" font-family="Courier, monospace" font-size="8" fill="#6B5E50" letter-spacing="0.5">@lab_lurker · DEVELOPING</text>
+  <!-- Legendary polaroid (middle, tilted right). -->
+  <g transform="translate(880 168) rotate(5)">
+    <rect x="0" y="0" width="222" height="298" rx="6" fill="#FBF6FE" stroke="#D8C3E5" stroke-width="1.5" />
+    <rect x="14" y="14" width="194" height="194" rx="2" fill="url(#skyLegendary)" />
+    <!-- Twin suns to suggest legendary (rarer composition). -->
+    <circle cx="80" cy="105" r="44" fill="url(#sunLegendary)" />
+    <circle cx="80" cy="105" r="20" fill="#FFE5A8" />
+    <circle cx="170" cy="125" r="34" fill="url(#sunLegendary)" opacity="0.75" />
+    <circle cx="170" cy="125" r="14" fill="#F0C470" />
+    <!-- Mountain. -->
+    <path d="M 14 180 L 32 168 L 58 178 L 86 162 L 118 174 L 154 160 L 188 170 L 208 164 L 208 208 L 14 208 Z" fill="#1F1A0E" />
+    <!-- Stars. -->
+    <circle cx="48" cy="44" r="1.8" fill="#FFF5DC" />
+    <circle cx="78" cy="36" r="1.4" fill="#FFF5DC" />
+    <circle cx="120" cy="50" r="1.6" fill="#FFF5DC" />
+    <circle cx="158" cy="44" r="1.4" fill="#FFF5DC" />
+    <circle cx="190" cy="38" r="1.8" fill="#FFF5DC" />
+    <!-- Caption. -->
+    <text x="112" y="234" text-anchor="middle" font-family="Georgia, serif" font-size="13"
+          font-weight="600" font-style="italic" fill="#2A1B3D">"GPT-5 release window"</text>
+    <text x="112" y="254" text-anchor="middle" font-family="Helvetica, sans-serif" font-size="9.5"
+          font-style="italic" fill="#4D3D63">Two distinct windows.</text>
+    <text x="112" y="280" text-anchor="middle" font-family="'Courier New', monospace" font-size="9"
+          fill="#C28A2E" letter-spacing="1.1">@lab_lurker · LEGENDARY</text>
   </g>
 
-  <g transform="translate(1010 270) rotate(-3)">
-    <rect x="0" y="0" width="200" height="270" rx="6" fill="#FFFCF6" stroke="#E5DCCB" stroke-width="1" />
-    <rect x="12" y="12" width="176" height="176" rx="2" fill="url(#sky3)" />
-    <circle cx="100" cy="100" r="40" fill="url(#sun3)" />
-    <circle cx="100" cy="100" r="17" fill="#FFE0B8" />
-    <path d="M 12 162 L 30 148 L 54 156 L 80 142 L 110 152 L 142 138 L 168 148 L 188 144 L 188 188 L 12 188 Z" fill="#321820" />
-    <text x="100" y="216" text-anchor="middle" font-family="Georgia, serif" font-size="12" font-weight="600" font-style="italic" fill="#1A1814">"Taylor leg 4"</text>
-    <text x="100" y="238" text-anchor="middle" font-family="Helvetica, sans-serif" font-size="9" font-style="italic" fill="#3F3A33">Late spring announcement.</text>
-    <text x="100" y="258" text-anchor="middle" font-family="Courier, monospace" font-size="8" fill="#6B5E50" letter-spacing="0.5">@swiftie_prime · DEVELOPING</text>
+  <!-- Mythic polaroid (right-most, smallest, tilted left). -->
+  <g transform="translate(990 264) rotate(-4)">
+    <rect x="0" y="0" width="202" height="272" rx="6" fill="#FBF6FE" stroke="#D8C3E5" stroke-width="1.5" />
+    <rect x="12" y="12" width="178" height="178" rx="2" fill="url(#skyMythic)" />
+    <!-- Mythic sun + comet streak. -->
+    <circle cx="100" cy="98" r="42" fill="url(#sunMythic)" />
+    <circle cx="100" cy="98" r="18" fill="#FFC8A4" />
+    <path d="M 38 30 L 78 60 L 70 64 L 30 34 Z" fill="#FFC8A4" opacity="0.85" />
+    <!-- Mountain. -->
+    <path d="M 12 162 L 30 150 L 56 158 L 80 142 L 110 152 L 142 138 L 168 148 L 190 144 L 190 190 L 12 190 Z" fill="#2A0F1A" />
+    <!-- Stars (six for mythic). -->
+    <circle cx="40" cy="50" r="1.8" fill="#FFE6DC" />
+    <circle cx="60" cy="44" r="1.4" fill="#FFE6DC" />
+    <circle cx="86" cy="38" r="1.6" fill="#FFE6DC" />
+    <circle cx="124" cy="46" r="1.4" fill="#FFE6DC" />
+    <circle cx="154" cy="38" r="1.6" fill="#FFE6DC" />
+    <circle cx="178" cy="50" r="1.4" fill="#FFE6DC" />
+    <!-- Caption. -->
+    <text x="100" y="218" text-anchor="middle" font-family="Georgia, serif" font-size="13"
+          font-weight="600" font-style="italic" fill="#2A1B3D">"Taylor · leg 4"</text>
+    <text x="100" y="240" text-anchor="middle" font-family="Helvetica, sans-serif" font-size="9.5"
+          font-style="italic" fill="#4D3D63">Late-spring announcement.</text>
+    <text x="100" y="260" text-anchor="middle" font-family="'Courier New', monospace" font-size="9"
+          fill="#B5571A" letter-spacing="1.1">@swiftie_prime · MYTHIC</text>
   </g>
 </svg>

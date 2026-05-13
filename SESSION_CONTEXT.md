@@ -1,6 +1,6 @@
 # Session handoff: Conviction (FS Trading SDK competition entry)
 
-> Last updated: 2026-05-13 (light mode palette deepened so the purple/orange family is visible in BOTH modes; two new flagship features added: **The Wire** — public real-time activity feed using `useTradeHistory` polled across the top three highest-volume markets, merged on the client, with rows coloured by potential rarity — and **Consensus Drift Sparkline** — macro-historical sparkline on the Receipt page using `useMarketHistory` + `transformHistoryToFanChart`, overlaid with prediction reference line and "you signed here" caret. Total SDK hooks consumed is now 11.)
+> Last updated: 2026-05-13 (LATE EVENING). Five additional flagship features shipped in this session, on top of the morning's "The Wire + Drift Sparkline" pair: **(1) Replay Sparkline** — animated flip-book on the Consensus Drift Sparkline. A Play/Pause pill drives a `requestAnimationFrame` loop that traces the historical mean across 4.8 s, with a ghost trace for the full path and a playhead dot for the cursor. **(2) Comparison Pair** — side-by-side polaroid pair on the Receipt: the user's polaroid next to a synthesised "crowd polaroid" built from a moments analysis (mean + stdDev + conviction) of the live `useConsensus` density. A diff band below quantifies how far the user is from the crowd in % of range; if the market resolved, it also calls who landed closer. **(3) Achievements** — pure-function client-side achievement engine (`achievements.ts`) + Profile strip. Nine badges across bronze / silver / gold tiers, monotonic by construction, zero engine cost, all evaluated against the local rarity ledger. **(4) ErrorBoundary at every route** — a class-based boundary wraps both `ConvictionShell` Routes AND the `EmbedPage` Routes with `resetKeys={[location.pathname]}`. White-screen failures are replaced with an on-brand fallback that exposes the error message in a collapsible details element and offers "Try again" + "Back to the front." **(5) ShareKit** — unified share row on the Receipt: Web Share API with file-bearing fallback on mobile, Twitter intent on desktop, copy-link with toast, and PNG download. Replaces the standalone "Download as PNG" button so the page has ONE share affordance instead of two. The static OG card (`public/og-card.svg`) was also refreshed to the lavender + ember palette so social previews match the live UI. Total SDK hooks consumed remains 11; total client-side tests is now **370 across 25 files** (added 60+ tests for the new components — achievements pure math, achievements-strip render, error-boundary class behaviour, share-kit fallbacks, comparison-pair moments analysis, drift replay button).
 > Parent transcript: `[Where we are right now](b5263758-f700-4040-9a30-693a3a1cf730)`
 
 ## TL;DR for the next session
@@ -40,6 +40,7 @@ Architectural rules: this repo is a strict 3-layer monorepo (`core` -> `react` -
 
 | SHA       | Title                                                                                                       |
 |-----------|-------------------------------------------------------------------------------------------------------------|
+| _pending_ | feat(conviction): replay sparkline + comparison pair + achievements + route ErrorBoundary + unified ShareKit + lavender OG card |
 | _pending_ | feat(conviction): The Wire (useTradeHistory) + Consensus Drift Sparkline (useMarketHistory) + light mode palette deepening |
 | _pending_ | fix(conviction): aurora palette + bead ornament + Receipt local-fallback + shared demo galleries module     |
 | `0b0fd8e` | feat(conviction): live develop on Receipt + live portfolio P&L on Profile + cash-out flow + slider crash fix |
@@ -223,6 +224,34 @@ The SDK's `useSell` already calls `invalidate(marketId)` internally, so the live
 `components/LivePortfolioSection.tsx` is rendered once per market the user has open positions in. It uses `useMarket(marketId, { pollInterval: 15_000 })` for market metadata and polls `previewSell(positionId)` for every position in that market on the same cadence. Each thumbnail polaroid gets a corner P&L badge (jade gain, rose loss, muted flat). The section header aggregates STAKED / VALUE / UNREALIZED P&L.
 
 `pages/Profile.tsx` partitions enriched bets into open + resolved buckets when `isOwn === true`. Open bets go through the live portfolio block; resolved bets stay in the static "settled archive" grid below it. Non-owner profiles continue to use the full static grid (the preview-sell endpoint requires the caller to own the position).
+
+### Replay sparkline (animated drift playback)
+
+`components/ConsensusDriftSparkline.tsx` exposes a Play/Pause pill (visible only when the market has ≥ 3 snapshots). The pill toggles an `isPlaying` flag that drives a `requestAnimationFrame` loop. On each tick we map `now - playStartRef.current` to a [0, 1] `playProgress` and slice the snapshot list to `Math.round(points.length * playProgress)`. Two SVG paths are rendered: a faded `fullPath` ghost trace (full-history) and a darkening `playedPath` foreground (truncated). A separate `PlayheadDot` interpolates between the last fully-played snapshot and the next, so the cursor reads as a smooth playhead rather than jumping snapshot-to-snapshot. After replay (`playProgress === 1`), the rendered output is byte-identical to the pre-replay version.
+
+### Comparison pair (you vs the crowd)
+
+`components/ComparisonPair.tsx` renders two `Polaroid` instances side-by-side: the user's bet (left) and a synthesised "crowd polaroid" (right). The crowd polaroid pulls its `prediction`, `spread`, and `conviction` from `summariseConsensus(curve, lowerBound, upperBound)` — a pure helper that trapezoidal-integrates the `useConsensus` density curve to produce the three scalars the Polaroid renderer needs. The crowd polaroid is deterministic per market (its `marketId` is prefixed with `crowd-` to give it a separate procedural seed). A `DiffBand` below the pair quantifies the distance ("You are 12.3% of the range higher than the crowd"); post-resolution it adds a verdict ("You called it tighter than the crowd." / "The crowd called it tighter than you." / "You and the crowd landed equally close.").
+
+`summariseConsensus` returns `null` for degenerate inputs (undefined / empty / fewer than 3 points / zero mass / NaN-laden), so the comparison block hides itself rather than rendering a misleading half-broken polaroid. The `ComparisonPair` itself renders a skeleton block while `useConsensus` is still loading.
+
+### Achievements (client-side badges on Profile)
+
+`achievements.ts` is a pure-function module: it consumes an `AchievementBet[]` (rarity, accuracy, conviction, resolutionState, disagreement) and returns nine `AchievementUnlock` records. Tiers are bronze / silver / gold; badges are evaluated against the local ledger only (zero engine cost). Monotonicity is a hard invariant — once a badge unlocks it can never lock again, enforced by tests. `components/AchievementsStrip.tsx` renders a horizontal grid on the Profile page (between RarityLedger and CalibrationCard). Locked tiles render greyed out with a progress marker (e.g. `2 / 5`) and a `Locked.` hint via `title=`; unlocked tiles flip to colour and surface the editorial caption via `title=`. The strip is intentionally non-interactive — no modals, no clicks.
+
+### ShareKit (unified share row on Receipt)
+
+`components/ShareKit.tsx` exposes one share row at the bottom of the Receipt page with four actions: **Share** (Web Share API, file-bearing on mobile/Chromium, URL-only fallback, Twitter intent as last resort), **Copy link** (uses `navigator.clipboard.writeText` with a `document.execCommand('copy')` fallback for legacy browsers; shows a 1.8 s toast confirmation), **Download PNG** (delegates to the existing `downloadPolaroidPng` utility), and a textual handle row pointing to the author's profile. Replaces the older standalone "Download as PNG" button so the page has ONE share surface instead of two. The PNG path uses the SAME `downloadPolaroidPng` pipeline as before — no behaviour drift on existing share PNGs.
+
+### ErrorBoundary at every route
+
+`components/ErrorBoundary.tsx` is a class component (the only way to install an error boundary in React 18). `App.tsx` wraps BOTH the main `ConvictionShell` Routes AND the `EmbedPage` Routes with it, keying off `location.pathname` so a crashed boundary resets automatically on the next navigation. The default fallback is on-brand (lavender card, mono eyebrow with route label, Bricolage headline, ember "Try again" pill, paper "Back to the front" link) and exposes the error message in a collapsible `<details>` element. Crashes are logged via `console.error` only — no telemetry, no exfiltration.
+
+`storage.ts` was also hardened: all localStorage operations are wrapped in `try/catch` so quota-exceeded errors or private-browsing-disabled storage never blow up the page.
+
+### OG card refresh
+
+`demo-app/public/og-card.svg` was redrawn in the lavender + ember palette to match the live UI. The new card shows three rotated polaroids (epic / legendary / mythic, each with a different procedural sky and a tier-coloured handle line) over the editorial headline. The previous card was still in the old sepia palette and read as a different product on Twitter previews.
 
 ### Slider-drag crash fix (Polaroid memo + useDeferredValue + rAF-coalesced setPreviewBelief)
 

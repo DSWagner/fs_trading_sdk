@@ -12,6 +12,7 @@ import { ProfilePage } from './pages/Profile';
 import { EmbedPage } from './pages/Embed';
 import { AboutPage } from './pages/About';
 import { ExplorePage } from './pages/Explore';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 const FS_BASE_URL =
   import.meta.env.VITE_FS_BASE_URL || 'https://fs-engine-api-dev.onrender.com';
@@ -36,12 +37,20 @@ function ConvictionShell() {
   const location = useLocation();
   const isEmbed = location.pathname.startsWith('/embed/');
 
+  // resetKeys = [pathname] so that navigating to a different route
+  // automatically clears any captured error from the boundary. Without
+  // this, a crash on /r/A/B would persist into /discover after the
+  // user clicks the "Back to the front" link.
+  const resetKeys = [location.pathname];
+
   if (isEmbed) {
     return (
       <div style={{ background: palette.paper, minHeight: '100vh' }}>
-        <Routes>
-          <Route path="/embed/r/:marketId/:positionId" element={<EmbedPage />} />
-        </Routes>
+        <ErrorBoundary label="Embed" resetKeys={resetKeys}>
+          <Routes>
+            <Route path="/embed/r/:marketId/:positionId" element={<EmbedPage />} />
+          </Routes>
+        </ErrorBoundary>
       </div>
     );
   }
@@ -49,16 +58,24 @@ function ConvictionShell() {
   return (
     <div style={{ background: palette.paper, minHeight: '100vh' }}>
       <NavBar />
-      <Routes>
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/discover" element={<DiscoverPage />} />
-        <Route path="/explore" element={<ExplorePage />} />
-        <Route path="/m/:marketId" element={<BetFlowPage />} />
-        <Route path="/r/:marketId/:positionId" element={<ReceiptPage />} />
-        <Route path="/u/:username" element={<ProfilePage />} />
-        <Route path="/about" element={<AboutPage />} />
-        <Route path="*" element={<NotFound />} />
-      </Routes>
+      {/* One boundary around the entire routed area. Per-route boundaries
+       *  would also work, but a single boundary keyed on `pathname` is
+       *  simpler and gives the same UX: every navigation wipes the
+       *  crashed state. The NavBar deliberately sits OUTSIDE the
+       *  boundary so even if a page errors, the user still has the
+       *  global header (logo, theme toggle, auth) to navigate away with. */}
+      <ErrorBoundary label="Page" resetKeys={resetKeys}>
+        <Routes>
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/discover" element={<DiscoverPage />} />
+          <Route path="/explore" element={<ExplorePage />} />
+          <Route path="/m/:marketId" element={<BetFlowPage />} />
+          <Route path="/r/:marketId/:positionId" element={<ReceiptPage />} />
+          <Route path="/u/:username" element={<ProfilePage />} />
+          <Route path="/about" element={<AboutPage />} />
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </ErrorBoundary>
       <Footer />
     </div>
   );

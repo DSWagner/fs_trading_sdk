@@ -16,7 +16,7 @@
  */
 import React from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, cleanup, screen } from '@testing-library/react';
+import { render, cleanup, screen, fireEvent } from '@testing-library/react';
 
 const useMarketHistoryMock = vi.fn();
 
@@ -158,5 +158,67 @@ describe('ConsensusDriftSparkline: rendered timeline', () => {
     render(<ConsensusDriftSparkline {...defaultProps()} />);
     // The drift caption is "+NN.NN %" (positive drift upward).
     expect(screen.getByText(/\+\d+\.\d+\s*%/)).toBeTruthy();
+  });
+});
+
+describe('ConsensusDriftSparkline: replay control', () => {
+  // Build a history long enough to gate the replay button on (>= 3
+  // snapshots is the visibility threshold inside the component).
+  function longHistory() {
+    return {
+      history: {
+        marketId: 1,
+        totalSnapshots: 4,
+        snapshots: [
+          makeSnapshot({ ts: '2026-05-10T08:00:00Z', alpha: pointMassAt(11, 2), snapshotId: 1 }),
+          makeSnapshot({ ts: '2026-05-10T10:00:00Z', alpha: pointMassAt(11, 4), snapshotId: 2 }),
+          makeSnapshot({ ts: '2026-05-10T12:00:00Z', alpha: pointMassAt(11, 6), snapshotId: 3 }),
+          makeSnapshot({ ts: '2026-05-10T16:00:00Z', alpha: pointMassAt(11, 8), snapshotId: 4 }),
+        ],
+      },
+      loading: false,
+      isFetching: false,
+      error: null,
+      refetch: () => {},
+    };
+  }
+
+  it('renders the replay button when history has >= 3 snapshots', () => {
+    useMarketHistoryMock.mockReturnValue(longHistory());
+    render(<ConsensusDriftSparkline {...defaultProps()} />);
+    expect(screen.getByTestId('drift-replay-button')).toBeTruthy();
+  });
+
+  it('does NOT render the replay button on a 2-snapshot history', () => {
+    useMarketHistoryMock.mockReturnValue({
+      history: {
+        marketId: 1,
+        totalSnapshots: 2,
+        snapshots: [
+          makeSnapshot({ ts: '2026-05-10T10:00:00Z', alpha: pointMassAt(11, 3), snapshotId: 1 }),
+          makeSnapshot({ ts: '2026-05-10T16:00:00Z', alpha: pointMassAt(11, 7), snapshotId: 2 }),
+        ],
+      },
+      loading: false,
+      isFetching: false,
+      error: null,
+      refetch: () => {},
+    });
+    render(<ConsensusDriftSparkline {...defaultProps()} />);
+    expect(screen.queryByTestId('drift-replay-button')).toBeNull();
+  });
+
+  it('toggles aria-pressed when clicked to start the replay', () => {
+    useMarketHistoryMock.mockReturnValue(longHistory());
+    render(<ConsensusDriftSparkline {...defaultProps()} />);
+    const btn = screen.getByTestId('drift-replay-button');
+    expect(btn.getAttribute('aria-pressed')).toBe('false');
+    expect(btn.textContent).toMatch(/Replay/);
+    // Use fireEvent.click — wraps the click in React's act() so the
+    // state update flushes synchronously before our assertion runs.
+    fireEvent.click(btn);
+    // After click, the button enters the "isPlaying" branch.
+    expect(btn.getAttribute('aria-pressed')).toBe('true');
+    expect(btn.textContent).toMatch(/Pause/);
   });
 });

@@ -1,9 +1,16 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
+    <script type="module">import { injectIntoGlobalHook } from "/@react-refresh";
+injectIntoGlobalHook(window);
+window.$RefreshReg$ = () => {};
+window.$RefreshSig$ = () => (type) => type;</script>
+
+    <script type="module" src="/@vite/client"></script>
+
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#F0E7F5" />
+    <meta name="theme-color" content="#FBF6EE" />
 
     <title>Conviction · Receipts for beliefs</title>
     <meta name="description" content="Conviction turns prediction markets into a publication. Sign your call, attach your reasoning, and share a Polaroid receipt that develops when reality catches up." />

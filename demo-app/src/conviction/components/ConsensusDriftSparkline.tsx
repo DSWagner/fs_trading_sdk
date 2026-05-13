@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMarketHistory } from '@functionspace/react';
 import { transformHistoryToFanChart } from '@functionspace/core';
 import { palette, fonts } from '../theme';
@@ -71,6 +71,65 @@ export function ConsensusDriftSparkline({
     pollInterval: 60_000,
   });
 
+  // Replay state. `playProgress` is in [0, 1]: 0 means "show nothing",
+  // 1 means "show the full path." We also remember whether we're
+  // actively playing so the toggle button reads Play / Pause correctly.
+  // Both default to "full path, idle" so the static view is unchanged
+  // from before the replay feature shipped.
+  const [playProgress, setPlayProgress] = useState(1);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const rafRef = useRef<number | null>(null);
+  const playStartRef = useRef<number | null>(null);
+  // Total replay duration in ms. Tuned so even a market with a
+  // ridiculously long history (200 snapshots) replays in 5 seconds —
+  // long enough to read as a "movie", short enough to not feel slow.
+  const REPLAY_MS = 4800;
+
+  // The animation loop. Reads the current timestamp on each rAF tick,
+  // converts elapsed-since-start into [0, 1] progress, and ends when
+  // progress reaches 1. Pausing freezes progress at its current value.
+  useEffect(() => {
+    if (!isPlaying) {
+      if (rafRef.current != null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      return;
+    }
+    playStartRef.current = performance.now() - playProgress * REPLAY_MS;
+    const tick = (now: number) => {
+      const start = playStartRef.current ?? now;
+      const elapsed = now - start;
+      const next = Math.min(1, elapsed / REPLAY_MS);
+      setPlayProgress(next);
+      if (next >= 1) {
+        setIsPlaying(false);
+        rafRef.current = null;
+        return;
+      }
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (rafRef.current != null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+    };
+    // We deliberately omit `playProgress` from the dep array — it
+    // updates every frame, and including it would tear down the rAF
+    // loop on every tick. Only the start/stop intent (isPlaying) matters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPlaying]);
+
+  const startReplay = () => {
+    setPlayProgress(0);
+    setIsPlaying(true);
+  };
+  const pauseReplay = () => {
+    setIsPlaying(false);
+  };
+
   const series: DriftSeries | null = useMemo(() => {
     if (!history?.snapshots?.length) return null;
     const fan = transformHistoryToFanChart(history.snapshots, lowerBound, upperBound, 200);
@@ -112,7 +171,9 @@ export function ConsensusDriftSparkline({
   const plotW = w - padL - padR;
   const plotH = h - padT - padB;
 
-  const path = useMemo(() => {
+  // Full path covering every snapshot. Always computed so we can use
+  // it as the "ghost" trace behind the replay.
+  const fullPath = useMemo(() => {
     if (!series) return '';
     const { points, tMin, tMax, meanMin, meanMax } = series;
     const tSpan = Math.max(1, tMax - tMin);
@@ -126,6 +187,26 @@ export function ConsensusDriftSparkline({
     }
     return d;
   }, [series, plotH, plotW]);
+
+  // Partial path covering only the snapshots already "played." Used
+  // as the foreground trace during replay. When playProgress === 1
+  // this exactly matches fullPath, so the static view is byte-identical
+  // to the pre-replay implementation.
+  const playedPath = useMemo(() => {
+    if (!series) return '';
+    const { points, tMin, tMax, meanMin, meanMax } = series;
+    const tSpan = Math.max(1, tMax - tMin);
+    const ySpan = Math.max(0.0001, meanMax - meanMin);
+    const visibleCount = Math.max(2, Math.round(points.length * playProgress));
+    let d = '';
+    for (let i = 0; i < visibleCount; i++) {
+      const p = points[i];
+      const x = padL + ((p.t - tMin) / tSpan) * plotW;
+      const y = padT + (1 - (p.mean - meanMin) / ySpan) * plotH;
+      d += `${i === 0 ? 'M' : ' L'} ${x.toFixed(2)} ${y.toFixed(2)}`;
+    }
+    return d;
+  }, [series, plotH, plotW, playProgress]);
 
   if (loading && !series) {
     return (
@@ -169,6 +250,23 @@ export function ConsensusDriftSparkline({
   const first = points[0];
   const drift = last.mean - first.mean;
   const driftPct = Math.abs(drift) / Math.max(0.0001, upperBound - lowerBound);
+
+  // Replay: animate the consensus path being drawn from t=0 to the
+  // present. The slider value is "how many points of the time series
+  // have been drawn so far," from 0 to points.length. When the user
+  // clicks Play, we kick off a requestAnimationFrame loop that
+  // increments this counter at ~one point every (DURATION/points)
+  // ms so the full timeline replays over DURATION ms regardless of
+  // snapshot count. Clicking Pause halts the animation in place;
+  // clicking the rendered SVG also pauses (acts as a scrub
+  // intercept).
+  //
+  // We split the consensus path into two visible layers during
+  // replay: the "played" portion in ink colour, and the "future"
+  // portion in inkFade so the user can see the whole arc the replay
+  // is travelling along. After playback completes, both layers
+  // collapse into a single dark trace.
+
 
   const predictionY = padT + (1 - (prediction - meanMin) / ySpan) * plotH;
   const consensusY =
@@ -245,14 +343,44 @@ export function ConsensusDriftSparkline({
             points={`${betX - 3},${h - padB + 4} ${betX + 3},${h - padB + 4} ${betX},${h - padB - 1}`}
             fill={palette.inkFade}
           />
-          {/* Consensus mean trace */}
-          <path d={path} fill="none" stroke={palette.ink} strokeWidth={1.4} strokeLinejoin="round" />
-          {/* End dot in drift colour for emphasis */}
-          <circle
-            cx={padL + ((last.t - tMin) / tSpan) * plotW}
-            cy={padT + (1 - (last.mean - meanMin) / ySpan) * plotH}
-            r={3}
-            fill={driftColor}
+          {/* Ghost trace (full path, faded). Always painted underneath
+              so the user can see the full arc the replay is travelling
+              along. Becomes invisible-by-overlap once the replay
+              finishes (playedPath === fullPath). */}
+          <path
+            d={fullPath}
+            fill="none"
+            stroke={palette.inkFade}
+            strokeWidth={1}
+            strokeOpacity={isPlaying || playProgress < 1 ? 0.55 : 0}
+            strokeLinejoin="round"
+          />
+          {/* Played trace — the foreground darkening that grows during
+              replay. With playProgress === 1 this equals fullPath, so
+              the rendered visual is identical to the pre-replay
+              implementation. */}
+          <path
+            d={playedPath}
+            fill="none"
+            stroke={palette.ink}
+            strokeWidth={1.4}
+            strokeLinejoin="round"
+          />
+          {/* End dot in drift colour. During replay it tracks the most
+              recently played snapshot, not the latest snapshot, so the
+              dot reads as the "playhead" moving along the curve. */}
+          <PlayheadDot
+            points={points}
+            playProgress={playProgress}
+            tMin={tMin}
+            tSpan={tSpan}
+            meanMin={meanMin}
+            ySpan={ySpan}
+            padL={padL}
+            padT={padT}
+            plotW={plotW}
+            plotH={plotH}
+            color={driftColor}
           />
         </svg>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -291,10 +419,100 @@ export function ConsensusDriftSparkline({
             {' '}
             {Math.max(1, Math.round((Date.now() - last.t) / 60000))}m ago
           </span>
+          {/* Replay control. Only shown when there are at least 3
+              snapshots — anything shorter replays instantly and the
+              button reads as noise. */}
+          {points.length >= 3 && (
+            <button
+              type="button"
+              onClick={isPlaying ? pauseReplay : startReplay}
+              data-testid="drift-replay-button"
+              aria-pressed={isPlaying}
+              style={{
+                marginTop: 6,
+                alignSelf: 'flex-start',
+                padding: '6px 12px',
+                background: 'transparent',
+                color: palette.ember,
+                border: `1px solid ${palette.ember}`,
+                borderRadius: 999,
+                cursor: 'pointer',
+                fontFamily: fonts.mono,
+                fontSize: 10.5,
+                letterSpacing: 1.2,
+                textTransform: 'uppercase',
+                fontWeight: 600,
+                transition: 'background 160ms ease, color 160ms ease',
+              }}
+            >
+              {isPlaying
+                ? `Pause · ${Math.round(playProgress * 100)}%`
+                : playProgress < 1
+                  ? `Resume · ${Math.round(playProgress * 100)}%`
+                  : '▸ Replay the drift'}
+            </button>
+          )}
         </div>
       </div>
     </ShellCard>
   );
+}
+
+/**
+ * Playhead dot. During replay it tracks the interpolated position
+ * between the last fully-played snapshot and the next one. After
+ * replay (or when the user hasn't started one), it sits on the
+ * latest snapshot. The visual cue is what makes the replay read as
+ * "the crowd's mind moving" rather than just a path drawing in.
+ */
+function PlayheadDot({
+  points,
+  playProgress,
+  tMin,
+  tSpan,
+  meanMin,
+  ySpan,
+  padL,
+  padT,
+  plotW,
+  plotH,
+  color,
+}: {
+  points: Array<{ t: number; mean: number }>;
+  playProgress: number;
+  tMin: number;
+  tSpan: number;
+  meanMin: number;
+  ySpan: number;
+  padL: number;
+  padT: number;
+  plotW: number;
+  plotH: number;
+  color: string;
+}) {
+  const cursor = pickCursor(points, playProgress);
+  const cx = padL + ((cursor.t - tMin) / tSpan) * plotW;
+  const cy = padT + (1 - (cursor.mean - meanMin) / ySpan) * plotH;
+  return <circle cx={cx} cy={cy} r={3.4} fill={color} />;
+}
+
+function pickCursor(
+  points: Array<{ t: number; mean: number }>,
+  progress: number,
+): { t: number; mean: number } {
+  const safe = Math.max(0, Math.min(1, progress));
+  if (points.length === 0) return { t: 0, mean: 0 };
+  if (safe >= 1) return points[points.length - 1];
+  const cursorIndex = safe * (points.length - 1);
+  const lo = Math.floor(cursorIndex);
+  const hi = Math.min(points.length - 1, lo + 1);
+  const t = cursorIndex - lo;
+  const a = points[lo];
+  const b = points[hi];
+  return {
+    t: a.t + (b.t - a.t) * t,
+    mean: a.mean + (b.mean - a.mean) * t,
+  };
 }
 
 function Header() {
