@@ -32,12 +32,16 @@ const PROMPTS = [
 
 // Hard cap on the reasoning textarea length. Sized so that the
 // auto-fit logic inside `ReasoningQuote` (in components/Polaroid.tsx)
-// never has to ellipsize on the polaroid sizes the user composes at
-// (BetFlow preview ~280 px, Receipt ~420 px). On smaller polaroids
-// (gallery thumbnails ~200 px) very long reasoning may still hit the
-// MIN_FONT floor and ellipsize, but the full text remains available
-// on the Receipt page that the thumbnail links to.
-const MAX_REASONING_CHARS = 240;
+// can keep the quote at a comfortable, READABLE font (12-14 px on the
+// Receipt page; 10-12 px on the BetFlow preview) without ellipsizing.
+// At 180 chars the quote is concise enough to scan at a glance and
+// every line keeps healthy breathing room from the photo edge - even
+// on a 200 px gallery thumbnail the auto-fit lands at ~9 px and the
+// final line may ellipsize, which is acceptable for a thumbnail.
+// The previous 240-char cap let the quote bleed past the polaroid
+// frame whenever the user pasted a long single token; the new cap
+// + the wrap fixes inside ReasoningQuote eliminate that case.
+const MAX_REASONING_CHARS = 180;
 
 export function BetFlowPage() {
   const navigate = useNavigate();

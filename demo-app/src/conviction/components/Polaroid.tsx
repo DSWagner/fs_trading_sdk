@@ -841,11 +841,17 @@ export function Polaroid(props: PolaroidProps) {
             0,
             (1 - quoteAnchorFrac) * photoSize - Math.round(photoSize * 0.06),
           );
+          // Side padding is 5% of the photo edge so even on the wide
+          // Receipt (~400 px) the quote has roughly 20 px of breathing
+          // room each side; on a 200 px gallery thumbnail it tightens
+          // to 10 px. The ReasoningQuote auto-fit + textLength fail-
+          // safe (see below) clamp every line to this width.
+          const sidePad = Math.max(10, Math.round(photoSize * 0.05));
           return (
             <ReasoningQuote
-              x={photoX + 10}
+              x={photoX + sidePad}
               y={quoteAnchorY}
-              width={photoSize - 20}
+              width={photoSize - sidePad * 2}
               maxHeight={quoteMaxHeight}
               text={reasoning.trim()}
               handle={username}
@@ -2237,9 +2243,13 @@ function ReasoningQuote({
   // fits in the available vertical space (no truncation needed).
   function tryFit(font: number): { lines: string[]; lineHeight: number } | null {
     const lineHeight = Math.round(font * 1.18);
-    // Approximate char width for a serif italic at fontSize. ~0.45 of
-    // fontSize is a safe undercount that works for Fraunces italic.
-    const charsPerLine = Math.max(8, Math.floor(width / (font * 0.45)));
+    // Approximate char width for the display italic at this font size.
+    // Bricolage Grotesque italic renders at ~0.58 of font size on
+    // average, so we use 0.60 (a slight overcount) so the wrap math
+    // errs on the side of MORE lines / smaller font rather than risk
+    // overflow. Empirically picked: at 0.45 the previous implementation
+    // chronically overflowed the polaroid frame on long reasoning.
+    const charsPerLine = Math.max(8, Math.floor(width / (font * 0.60)));
     const lines = wrapText(text, charsPerLine, 999);
     const lastLine = lines[lines.length - 1] ?? '';
     // wrapText only adds ellipsis when the line count is clamped; with
@@ -2270,7 +2280,7 @@ function ReasoningQuote({
   // behaviour and only triggers on tiny polaroids with very long text.
   if (!fit) {
     const lineHeight = Math.round(MIN_FONT * 1.18);
-    const charsPerLine = Math.max(8, Math.floor(width / (MIN_FONT * 0.45)));
+    const charsPerLine = Math.max(8, Math.floor(width / (MIN_FONT * 0.60)));
     const availForLines = Math.max(
       lineHeight,
       maxHeight - attributionReserve(MIN_FONT),
@@ -2282,6 +2292,30 @@ function ReasoningQuote({
 
   const fontSize = chosenFont;
   const { lines, lineHeight } = fit;
+  // Belt-and-suspenders fail-safe: if a line's estimated rendered
+  // width is within 90% of the available width, force the SVG engine
+  // to lay it out within EXACTLY `width` pixels by setting textLength
+  // + lengthAdjust="spacingAndGlyphs". This way, even if our char-
+  // width estimate is slightly off (different glyph metrics, italics,
+  // font fallback), the rendered text physically cannot escape the
+  // photo frame. Short lines that wouldn't have overflowed anyway are
+  // left at their natural width so the layout still looks organic.
+  const estimatedCharPx = fontSize * 0.60;
+  const fullWidthThreshold = width * 0.90;
+  function maybeClamp(line: string): {
+    textLength?: number;
+    lengthAdjust?: 'spacingAndGlyphs';
+  } {
+    const estimated = line.length * estimatedCharPx;
+    if (estimated <= fullWidthThreshold) return {};
+    // Cap textLength at the smaller of (a) the estimated width or (b)
+    // the available width. Using `width` as the cap means visually
+    // wide lines get a tiny squish; using `estimated` lets lines
+    // breathe up to their natural width. We want the LATTER when
+    // estimate < available, and the FORMER otherwise.
+    const cap = Math.min(estimated, width);
+    return { textLength: cap, lengthAdjust: 'spacingAndGlyphs' };
+  }
 
   return (
     <g>
@@ -2295,23 +2329,30 @@ function ReasoningQuote({
         rx={4}
         fill="rgba(0,0,0,0.42)"
       />
-      {lines.map((line, i) => (
-        <text
-          key={`q-${i}`}
-          x={x + width / 2}
-          y={y + i * lineHeight}
-          textAnchor="middle"
-          fontFamily={fonts.display}
-          fontStyle="italic"
-          fontSize={fontSize}
-          fontWeight={500}
-          fill="rgba(255,250,240,0.96)"
-          letterSpacing="-0.1"
-        >
-          {i === 0 ? `\u201C${line}` : line}
-          {i === lines.length - 1 && '\u201D'}
-        </text>
-      ))}
+      {lines.map((line, i) => {
+        const isFirst = i === 0;
+        const isLast = i === lines.length - 1;
+        const rendered =
+          (isFirst ? '\u201C' : '') + line + (isLast ? '\u201D' : '');
+        const clamp = maybeClamp(rendered);
+        return (
+          <text
+            key={`q-${i}`}
+            x={x + width / 2}
+            y={y + i * lineHeight}
+            textAnchor="middle"
+            fontFamily={fonts.display}
+            fontStyle="italic"
+            fontSize={fontSize}
+            fontWeight={500}
+            fill="rgba(255,250,240,0.96)"
+            letterSpacing="-0.1"
+            {...clamp}
+          >
+            {rendered}
+          </text>
+        );
+      })}
       <text
         x={x + width / 2}
         y={y + lines.length * lineHeight + Math.round(fontSize * 0.7)}
