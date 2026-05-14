@@ -864,7 +864,7 @@ Honest backlog. Everything from the previous version, with status flags.
 - ✅ OG / Twitter meta tags, favicon, 1200x630 share card SVG.
 - ✅ Live consensus-disagreement indicator on the BetFlow page.
 - ✅ Download-as-PNG button on the Receipt page (pure client-side).
-- ✅ Real test suite (370 conviction-specific tests across 25 files: pure functions, render, achievement math, error-boundary class behaviour, share-kit fallbacks, replay animation, comparison-pair moments analysis, live data integrations, plus live API smoke).
+- ✅ Real test suite (390 conviction-specific tests across 27 files: pure functions, render, achievement math, error-boundary class behaviour, share-kit fallbacks, replay animation, comparison-pair moments analysis + render, polaroid `predictionLabel` regression, profile section ordering, receipt share-panel placement, live data integrations, plus live API smoke).
 - ✅ Readable Polaroid: numeric scale strip with bounds, prediction value, outcome value; sentence-style footer (`X → Y · off by Z%`); regression test for the empty-filter bug that used to blank the developed state.
 - ✅ Submission readiness: `SUBMISSION.md` form package, `vercel.json` and `netlify.toml` one-click deploy configs, public README leads with Conviction, custom auth widget swapped for `PasswordlessAuthWidget` (compliance), dev port pinned to 3000 (compliance).
 

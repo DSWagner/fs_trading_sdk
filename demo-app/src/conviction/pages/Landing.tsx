@@ -91,19 +91,12 @@ export function LandingPage() {
         }}
       >
         <div>
-          <p
-            style={{
-              fontFamily: fonts.mono,
-              color: palette.ember,
-              fontSize: 12,
-              letterSpacing: 2,
-              textTransform: 'uppercase',
-              margin: 0,
-              marginBottom: isMobile ? 16 : 24,
-            }}
-          >
-            Vol. I · Issue 1
-          </p>
+          {/* The "Vol. I · Issue 1" masthead-style eyebrow used to live
+              here as a typographic accent. The user asked for it to be
+              removed because it was decorative without communicating
+              anything actionable; the hero already carries the
+              editorial voice through its headline and Times-style
+              capsule rule below. */}
           <h1
             style={{
               fontFamily: fonts.display,

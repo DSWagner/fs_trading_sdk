@@ -83,6 +83,15 @@ export interface PolaroidProps {
    * rarity. When null/undefined the rarity treatment is suppressed.
    */
   consensusAtBet?: number | null;
+  /**
+   * Label used in the scale strip to mark the prediction tick. Defaults
+   * to "you" because the overwhelmingly common case is a polaroid that
+   * represents the viewer's OWN bet. ComparisonPair overrides this to
+   * "crowd" when it renders the aggregate-consensus crowd polaroid next
+   * to the user's, so the strip reads "crowd · 38.45" instead of the
+   * misleading "you · 38.45" on the crowd column.
+   */
+  predictionLabel?: string;
 }
 
 // Internal implementation; the exported `Polaroid` below wraps this in
@@ -113,6 +122,7 @@ function PolaroidImpl(props: PolaroidProps) {
     interactive = false,
     animateDevelop = false,
     consensusAtBet = null,
+    predictionLabel = 'you',
   } = props;
 
   const developed = resolutionState === 'resolved';
@@ -969,6 +979,7 @@ function PolaroidImpl(props: PolaroidProps) {
         units={marketUnits}
         prediction={prediction}
         predictionT={predictionT}
+        predictionLabel={predictionLabel}
         outcome={outcomeT != null ? resolvedOutcome ?? null : null}
         outcomeT={outcomeT}
         polaroidWidth={width}
@@ -2266,6 +2277,8 @@ interface ScaleStripProps {
   units: string;
   prediction: number;
   predictionT: number;
+  /** Label that prefixes the prediction tick value (e.g. "you" or "crowd"). */
+  predictionLabel: string;
   outcome: number | null;
   outcomeT: number | null;
   polaroidWidth: number;
@@ -2560,7 +2573,7 @@ function RarityStamp({
 }
 
 function ScaleStrip(props: ScaleStripProps) {
-  const { x, y, width, height, lowerBound, upperBound, units, prediction, predictionT, outcome, outcomeT, polaroidWidth } = props;
+  const { x, y, width, height, lowerBound, upperBound, units, prediction, predictionT, predictionLabel, outcome, outcomeT, polaroidWidth } = props;
   const axisY = y + Math.round(height * 0.55);
   const labelFontSize = Math.max(8, Math.round(polaroidWidth * 0.026));
   const boundFontSize = Math.max(7, Math.round(polaroidWidth * 0.022));
@@ -2619,7 +2632,7 @@ function ScaleStrip(props: ScaleStripProps) {
         fontWeight={600}
         letterSpacing="0.3"
       >
-        you · {formatScaleNumber(prediction, units)}
+        {predictionLabel} · {formatScaleNumber(prediction, units)}
       </text>
 
       {showOutcome && outX != null && outLabelX != null && (

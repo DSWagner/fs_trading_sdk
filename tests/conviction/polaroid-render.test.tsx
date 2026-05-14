@@ -65,6 +65,28 @@ describe('Polaroid: smoke render', () => {
   });
 });
 
+describe('Polaroid: prediction label (you vs crowd)', () => {
+  it('defaults the scale strip prediction label to "you"', () => {
+    const { container } = renderPolaroid();
+    const text = container.textContent ?? '';
+    expect(text).toMatch(/you · /);
+    expect(text).not.toMatch(/crowd · /);
+  });
+
+  it('renders a custom predictionLabel on the scale strip', () => {
+    const { container } = renderPolaroid({ predictionLabel: 'crowd', prediction: 42 });
+    const text = container.textContent ?? '';
+    expect(text).toMatch(/crowd · /);
+    expect(text).not.toMatch(/you · /);
+  });
+
+  it('the crowd-label polaroid still includes the prediction number', () => {
+    const { container } = renderPolaroid({ predictionLabel: 'crowd', prediction: 42 });
+    const text = container.textContent ?? '';
+    expect(text).toMatch(/crowd · 42/);
+  });
+});
+
 describe('Polaroid: extreme inputs do not crash', () => {
   it('handles empty reasoning', () => {
     expect(() => renderPolaroid({ reasoning: '' })).not.toThrow();

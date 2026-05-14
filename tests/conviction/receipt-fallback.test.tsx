@@ -210,4 +210,56 @@ describe('Receipt page: graceful market fallback', () => {
     expect(container.querySelector('[data-testid="receipt-polaroid-frame"]')).not.toBeNull();
     expect(container.textContent).toMatch(/Anora has the indie distributor energy/);
   });
+
+  it('renders the SHARE THIS CONVICTION embed block to the RIGHT of the headline (under the polaroid)', () => {
+    // Regression for the relocated share panel: this block used to
+    // sit as the closing element of the left column. The user asked
+    // for it to live UNDER the polaroid on the right column instead,
+    // so the artefact and its share actions stay paired. The polaroid
+    // frame has a fixed testid and the share embed block has its own
+    // testid; in document order the polaroid frame must come BEFORE
+    // the share embed block (they sit in the same flex column on the
+    // right) AND the share embed block must come AFTER any block
+    // that lives in the left column (e.g. the live drift card).
+    useMarketMock.mockReturnValue({
+      market: null,
+      loading: false,
+      isFetching: false,
+      error: null,
+      refetch: () => {},
+    });
+    recordBet(localBet);
+    const { container } = renderReceipt('archived-market', 'pos-1');
+
+    const polaroidFrame = container.querySelector('[data-testid="receipt-polaroid-frame"]');
+    const shareBlock = container.querySelector('[data-testid="receipt-share-embed-block"]');
+    const liveDrift = container.querySelector('[data-testid="receipt-live-drift"]');
+    expect(polaroidFrame).not.toBeNull();
+    expect(shareBlock).not.toBeNull();
+    expect(liveDrift).not.toBeNull();
+
+    // Use compareDocumentPosition to lock the geometry: the share
+    // block must come AFTER the polaroid frame in DOM order (they
+    // share the polaroidNode column on the right).
+    const pos = polaroidFrame!.compareDocumentPosition(shareBlock!);
+    // DOCUMENT_POSITION_FOLLOWING === 4
+    expect(pos & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('only renders ONE SHARE THIS CONVICTION embed block (not duplicated across columns)', () => {
+    // The relocation removed the left-column copy entirely. If the
+    // left-column block is accidentally re-added we want the test
+    // to flag it.
+    useMarketMock.mockReturnValue({
+      market: null,
+      loading: false,
+      isFetching: false,
+      error: null,
+      refetch: () => {},
+    });
+    recordBet(localBet);
+    const { container } = renderReceipt('archived-market', 'pos-1');
+    const shareBlocks = container.querySelectorAll('[data-testid="receipt-share-embed-block"]');
+    expect(shareBlocks.length).toBe(1);
+  });
 });

@@ -153,7 +153,7 @@ The setup guide lists hard guardrails. Conviction satisfies all of them:
 
 Run from the repo root with `npx vitest run tests/conviction` (free, no money spent; the live tests hit the dev engine):
 
-- **370 Conviction-specific tests** across 25 files (60+ tests added in the late-evening 2026-05-13 work for the new replay sparkline, comparison pair, achievements engine + strip, ErrorBoundary, and unified ShareKit):
+- **390 Conviction-specific tests** across 27 files (60+ tests added in the late-evening 2026-05-13 work for the new replay sparkline, comparison pair, achievements engine + strip, ErrorBoundary, and unified ShareKit; 20 more tests added 2026-05-14 for the `predictionLabel` prop on the Polaroid scale strip, the ComparisonPair crowd-polaroid render, the Profile section ordering, and the relocated Receipt share panel):
   - `hash.test.ts` (21 tests): URL-hash codec round-trip with empty / 4 KB / unicode / emoji / CJK / control chars; URL-safe alphabet; graceful failure; window-hash hydration.
   - `storage.test.ts` (19 tests): localStorage ledger record/read/replace, newest-first ordering, getBetsByUser filter, corrupt-store tolerance, username persistence.
   - `cashout-storage.test.ts` (9 tests): cash-out record persistence; round-trip, replace-existing, numeric/string id parity, corrupt-store tolerance, clearCashOuts wipe.
@@ -217,4 +217,4 @@ If anything in those files reads as wrong or off-message, fix before you push to
 
 ---
 
-*Last updated: 2026-05-13 (late evening): replay sparkline, comparison pair, achievements wall, route ErrorBoundary, unified ShareKit, lavender OG card refresh, 60+ new tests bringing the conviction suite to 370 tests across 25 files.*
+*Last updated: 2026-05-14 (midday): tactical UX hardening on top of the night's flagship-feature ship — crowd-polaroid label fix, Profile section reorder (live portfolio first), Receipt share panel relocation, Landing eyebrow trim, defensive polaroid aspect-ratio CSS, 20+ new regression tests bringing the conviction suite to 390 tests across 27 files.*

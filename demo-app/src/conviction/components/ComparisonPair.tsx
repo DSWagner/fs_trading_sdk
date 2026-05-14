@@ -235,6 +235,13 @@ export function ComparisonPair({
             width={crowdWidth}
             consensusAtBet={crowdSummary.mean}
             expiresAt={(market as any)?.expiresAt ?? null}
+            // The receipt's main polaroid is always the user's, so its
+            // scale strip prefix "you" is correct there. The CROWD
+            // polaroid in this side-by-side pair must instead read
+            // "crowd · 38.45" so the two polaroids stay
+            // distinguishable at a glance. Without this, both columns
+            // confusingly print the same "you · NN.NN" label.
+            predictionLabel="crowd"
           />
         </PairColumn>
       </div>

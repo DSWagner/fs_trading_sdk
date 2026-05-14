@@ -267,6 +267,67 @@ function ReceiptView({
   const showCashOutPanel = isOwner && isOpen && cashedOut == null;
   const showCashedStamp = cashedOut != null;
 
+  // The "SHARE THIS CONVICTION" panel — embed-code copy + markdown
+  // copy + share-link copy. The user explicitly asked to relocate
+  // this from the bottom of the LEFT column (where it used to sit
+  // beneath the consensus drift sparkline) to UNDER the polaroid on
+  // the RIGHT column, so the receipt's actionable share surface
+  // stays anchored to the artifact people are sharing. We render
+  // the panel here so it can be slotted into polaroidNode below
+  // ShareKit and above the cross-link.
+  const shareBlockNode = (
+    <div
+      data-testid="receipt-share-embed-block"
+      style={{
+        background: palette.card,
+        border: `1px solid ${palette.rule}`,
+        borderRadius: 8,
+        padding: 20,
+        width: '100%',
+        maxWidth: polaroidWidth,
+        boxSizing: 'border-box',
+      }}
+    >
+      <div style={{ fontFamily: fonts.mono, fontSize: 11, color: palette.inkMute, letterSpacing: 1.2, marginBottom: 10 }}>
+        SHARE THIS CONVICTION
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+        <button onClick={onCopyShare} style={primaryButton}>
+          {copyState === 'shared' ? 'Link copied ✓' : 'Copy share link'}
+        </button>
+        <button onClick={onCopyEmbed} style={secondaryButton}>
+          {copyState === 'embedded' ? 'Embed copied ✓' : 'Copy embed code'}
+        </button>
+        <button onClick={onCopyMarkdown} style={secondaryButton} title="Copy a quote-block snippet for Substack, GitHub, Notion, or any blog editor">
+          {copyState === 'markdown' && 'Markdown copied ✓'}
+          {copyState === 'markdown-error' && 'Copy failed'}
+          {copyState !== 'markdown' && copyState !== 'markdown-error' && 'Copy as Markdown'}
+        </button>
+      </div>
+      <pre
+        style={{
+          margin: 0,
+          background: palette.paper,
+          border: `1px solid ${palette.rule}`,
+          borderRadius: 6,
+          padding: '10px 12px',
+          fontFamily: fonts.mono,
+          fontSize: 11,
+          color: palette.inkSoft,
+          overflowX: 'auto',
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-all',
+        }}
+      >
+        {embedCode}
+      </pre>
+      <p style={{ fontFamily: fonts.body, fontSize: 12, color: palette.inkMute, lineHeight: 1.5, margin: '14px 0 0' }}>
+        The embed widget is iframe-friendly and self-contained. Drop it in any blog, Substack, Notion page, or
+        forum reply — the receipt auto-develops on resolution.
+      </p>
+    </div>
+  );
+
   const polaroidNode = (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
       <div
@@ -317,6 +378,7 @@ function ReceiptView({
         username={merged.username}
         marketTitle={merged.marketTitle ?? 'a market'}
       />
+      {shareBlockNode}
       <Link
         to={`/u/${encodeURIComponent(merged.username)}`}
         style={{ fontFamily: fonts.body, fontSize: 13, color: palette.inkMute, textDecoration: 'none', marginTop: 4 }}
@@ -543,53 +605,13 @@ function ReceiptView({
             </div>
           )}
 
-          <div
-            style={{
-              background: palette.card,
-              border: `1px solid ${palette.rule}`,
-              borderRadius: 8,
-              padding: 20,
-              marginBottom: 16,
-            }}
-          >
-            <div style={{ fontFamily: fonts.mono, fontSize: 11, color: palette.inkMute, letterSpacing: 1.2, marginBottom: 10 }}>
-              SHARE THIS CONVICTION
-            </div>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
-              <button onClick={onCopyShare} style={primaryButton}>
-                {copyState === 'shared' ? 'Link copied ✓' : 'Copy share link'}
-              </button>
-              <button onClick={onCopyEmbed} style={secondaryButton}>
-                {copyState === 'embedded' ? 'Embed copied ✓' : 'Copy embed code'}
-              </button>
-              <button onClick={onCopyMarkdown} style={secondaryButton} title="Copy a quote-block snippet for Substack, GitHub, Notion, or any blog editor">
-                {copyState === 'markdown' && 'Markdown copied ✓'}
-                {copyState === 'markdown-error' && 'Copy failed'}
-                {copyState !== 'markdown' && copyState !== 'markdown-error' && 'Copy as Markdown'}
-              </button>
-            </div>
-            <pre
-              style={{
-                margin: 0,
-                background: palette.paper,
-                border: `1px solid ${palette.rule}`,
-                borderRadius: 6,
-                padding: '10px 12px',
-                fontFamily: fonts.mono,
-                fontSize: 11,
-                color: palette.inkSoft,
-                overflowX: 'auto',
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-all',
-              }}
-            >
-              {embedCode}
-            </pre>
-          </div>
-          <p style={{ fontFamily: fonts.body, fontSize: 13, color: palette.inkMute, lineHeight: 1.5, marginTop: 18 }}>
-            The embed widget is iframe-friendly and self-contained. Drop it in any blog, Substack, Notion page, or
-            forum reply. The receipt automatically develops on resolution — no maintenance required.
-          </p>
+          {/* The "SHARE THIS CONVICTION" embed/markdown panel that used
+              to sit here as the closing block of the left column has
+              been relocated to UNDER the polaroid on the right column
+              (see `shareBlockNode` above). Anchoring share actions to
+              the artifact being shared reads better as an editorial
+              spread and keeps the long-text column focused on the
+              conviction narrative itself. */}
         </div>
 
         {!isMobile && polaroidNode}

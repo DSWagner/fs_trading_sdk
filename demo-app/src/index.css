@@ -208,10 +208,23 @@ html {
 /* SVG polaroids must NEVER extend past their container's width. Without
  * this, on browser zoom or narrow viewports the explicit width attribute
  * the component sets on the SVG element wins over the container layout,
- * which pushes the document horizontally wider than the viewport. */
+ * which pushes the document horizontally wider than the viewport.
+ *
+ * `aspect-ratio: 2 / 3` is a defensive belt-and-braces: in some layout
+ * contexts (notably the Receipt page, where the polaroid lives inside
+ * a grid cell with `align-items: start` and the wrapper is an
+ * inline-block inside a flex column), `height: auto` was occasionally
+ * collapsing the SVG to a near-square so the caption area below the
+ * scale strip rendered with no usable height -- the user saw the
+ * photo but no market title / handle / date line beneath it.  Pinning
+ * the aspect ratio at the canonical 2:3 forces the browser to expand
+ * the SVG vertically to match its declared height attribute even when
+ * the surrounding flex/grid context tries to shrink it. */
 svg[role="img"][aria-label^="Polaroid receipt"] {
   max-width: 100%;
   height: auto;
+  aspect-ratio: 2 / 3;
+  display: block;
 }
 
 a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible {

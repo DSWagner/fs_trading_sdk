@@ -223,10 +223,19 @@ export function ProfilePage() {
       ) : (
         <>
           {isDemoFallback && <DemoFallbackNotice isMobile={isMobile} />}
+          {/* Section order is deliberately "what's alive first, then
+              what's settled". The Live portfolio block surfaces every
+              open position with a live mark-to-market preview, so it
+              is the most useful thing the user can act on; the rarity
+              ledger and achievements grid are historical records and
+              read better as a follow-up to the live state. The
+              calibration card sits last among the editorial blocks
+              because it only contributes information once a non-
+              trivial number of receipts have resolved. */}
+          {isOwn && <LivePortfolioBlock enriched={enriched} isMobile={isMobile} />}
           <RarityLedger tierCounts={tierCounts} bestBet={bestBet} isMobile={isMobile} />
           <AchievementsStrip bets={achievementBets} isMobile={isMobile} />
           <CalibrationCard enriched={enriched} isMobile={isMobile} />
-          {isOwn && <LivePortfolioBlock enriched={enriched} isMobile={isMobile} />}
           <h2
             style={{
               fontFamily: fonts.display,
@@ -295,8 +304,8 @@ function LivePortfolioBlock({
       <section
         data-testid="live-portfolio-empty"
         style={{
-          marginTop: 32,
-          marginBottom: 8,
+          marginTop: 0,
+          marginBottom: 28,
           padding: isMobile ? '16px' : '20px 24px',
           background: palette.card,
           border: `1px dashed ${palette.rule}`,
@@ -328,7 +337,7 @@ function LivePortfolioBlock({
     );
   }
   return (
-    <section data-testid="live-portfolio-block" style={{ marginTop: 32 }}>
+    <section data-testid="live-portfolio-block" style={{ marginTop: 0, marginBottom: 28 }}>
       <h2
         style={{
           fontFamily: fonts.display,
