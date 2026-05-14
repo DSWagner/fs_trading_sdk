@@ -362,14 +362,24 @@ function WireRow({ trade, market, compact }: WireRowProps) {
       />
       <Link
         to={`/u/${encodeURIComponent(trade.username)}`}
+        title={`@${trade.username}`}
         style={{
+          // Tuned for the engine's auto-generated handles
+          // (`FunctionSpace_user_<6 chars>`, ~24 chars including the
+          // leading @). At 13px JetBrains Mono the average glyph
+          // advance is ~7px, so a 200 px cap fits ~28 chars cleanly
+          // and the ellipsis only kicks in for the rare extra-long
+          // custom handle. The earlier 120 px cap was tuned for short
+          // demo handles like @critic_at_large and truncated almost
+          // every real handle the engine returns.
+          flex: '0 0 auto',
           fontFamily: fonts.mono,
-          fontSize: compact ? 11.5 : 12.5,
+          fontSize: compact ? 12 : 13,
           color: palette.inkSoft,
           textDecoration: 'none',
           fontWeight: 600,
           whiteSpace: 'nowrap',
-          maxWidth: compact ? 88 : 120,
+          maxWidth: compact ? 150 : 220,
           overflow: 'hidden',
           textOverflow: 'ellipsis',
         }}

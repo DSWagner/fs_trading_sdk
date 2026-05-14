@@ -70,6 +70,49 @@ export function BetFlowPage() {
   const ctxRef = useRef(ctx);
   const previewPayoutRef = useRef(previewPayout);
 
+  // --- Performance: defer the slider inputs that feed the polaroid seed.
+  //
+  // Each slider tick previously did three expensive things in series:
+  //   1. Recompute the polaroid seed from prediction/spread/conviction
+  //      /collateral/shape, regenerating the full SVG (stars, suns,
+  //      comets, aurora, nebula, ground silhouette, caption).
+  //   2. Recompute the belief vector and broadcast it via
+  //      ctx.setPreviewBelief, which forced the SDK ConsensusChart to
+  //      redraw.
+  //   3. Re-run the debounced payout preview HTTP call.
+  // At 60+ Hz drag rate with TWO polaroids (before + after) and a
+  // Recharts SVG, the main thread saturated and the page eventually
+  // hit an OOM / unresponsive-tab state. The crash was strictly a
+  // client-side render storm, NOT a Vercel issue.
+  //
+  // Fix: wrap the polaroid-seed inputs in `useDeferredValue`. React
+  // keeps the slider input itself, the disagreement badge, the rarity
+  // hint, the chart, and the payout preview running at full priority
+  // (so they all feel instant), and renders the polaroid at LOW
+  // priority. During a fast drag React skips intermediate polaroid
+  // renders and only paints the polaroid when there's idle time. The
+  // result: the slider stays buttery, the polaroid trails by ~50-100 ms,
+  // and the main thread no longer falls behind.
+  //
+  // CRITICAL: these hooks MUST live ABOVE the loading / error
+  // early-return guards further down (`if (loading || !market)
+  // return ...`). React's Rules of Hooks require the same number of
+  // hooks to fire in the same order on every render of a component.
+  // The first render of this page returns early while market data
+  // loads; on the second render the market arrives and the body
+  // continues past the guard. If these useDeferredValue calls lived
+  // BELOW the guards, render 1 would fire 0 of them and render 2
+  // would fire 6, which trips minified React error #310 ("Rendered
+  // more hooks than during the previous render") and propagates
+  // straight into the route-level ErrorBoundary as a "Something on
+  // this page tripped" fallback.
+  const deferredPrediction = useDeferredValue(prediction);
+  const deferredSpread = useDeferredValue(spread);
+  const deferredConviction = useDeferredValue(conviction);
+  const deferredCollateral = useDeferredValue(collateral);
+  const deferredShape = useDeferredValue(shape);
+  const deferredReasoning = useDeferredValue(reasoning);
+
   // Measure BOTH halves of the page so we can:
   //   1. Pass the right-column width to the polaroid so it fills 50%
   //      of the page horizontally up to a 600 px cap.
@@ -382,39 +425,12 @@ export function BetFlowPage() {
 
   const expiresAt = (market as any).expiresAt ?? null;
 
-  // --- Performance: defer the slider inputs that feed the polaroid seed.
-  //
-  // Each slider tick previously did three expensive things in series:
-  //   1. Recompute the polaroid seed from prediction/spread/conviction
-  //      /collateral/shape, regenerating the full SVG (stars, suns,
-  //      comets, aurora, nebula, ground silhouette, caption).
-  //   2. Recompute the belief vector and broadcast it via
-  //      ctx.setPreviewBelief, which forced the SDK ConsensusChart to
-  //      redraw.
-  //   3. Re-run the debounced payout preview HTTP call.
-  // At 60+ Hz drag rate with TWO polaroids (before + after) and a
-  // Recharts SVG, the main thread saturated and the page eventually
-  // hit an OOM / unresponsive-tab state. The crash was strictly a
-  // client-side render storm, NOT a Vercel issue.
-  //
-  // Fix: wrap the polaroid-seed inputs in `useDeferredValue`. React
-  // keeps the slider input itself, the disagreement badge, the rarity
-  // hint, the chart, and the payout preview running at full priority
-  // (so they all feel instant), and renders the polaroid at LOW
-  // priority. During a fast drag React skips intermediate polaroid
-  // renders and only paints the polaroid when there's idle time. The
-  // result: the slider stays buttery, the polaroid trails by ~50-100 ms,
-  // and the main thread no longer falls behind.
-  //
-  // Combined with `React.memo` on the `Polaroid` component itself
-  // (Polaroid.tsx), parents that re-render the polaroid with byte-
-  // identical deferred props no-op cleanly.
-  const deferredPrediction = useDeferredValue(prediction);
-  const deferredSpread = useDeferredValue(spread);
-  const deferredConviction = useDeferredValue(conviction);
-  const deferredCollateral = useDeferredValue(collateral);
-  const deferredShape = useDeferredValue(shape);
-  const deferredReasoning = useDeferredValue(reasoning);
+  // (The `useDeferredValue` calls for prediction / spread /
+  // conviction / collateral / shape / reasoning live at the top of
+  // this component, ABOVE the loading + error early-return guards.
+  // See the long-form note up there explaining why they MUST stay
+  // unconditional. Moving them down here would re-introduce the
+  // React error #310 crash on every BetFlow visit.)
 
   // Factory so the same live preview can render at multiple sizes:
   // big sticky right-aside on desktop, regular top-of-form on mobile.
