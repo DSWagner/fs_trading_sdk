@@ -1,5 +1,5 @@
 import { useCallback, useContext, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   FunctionSpaceContext as _FunctionSpaceContext,
   useAuth,
@@ -20,6 +20,8 @@ import { Polaroid } from '../components/Polaroid';
 import { useIsMobile } from '../useMediaQuery';
 import { EditorialError, EditorialLoading } from '../components/EditorialState';
 import { potentialRarity, TIER_META, type Rarity } from '../rarity';
+import { decodeChallengeFromSearch, buildChallengeSeed } from '../challenge';
+import { canonicalFingerprint, signFingerprint } from '../receiptNft';
 
 type ShapeKind = 'gaussian' | 'range' | 'bimodal';
 
@@ -46,11 +48,23 @@ const MAX_REASONING_CHARS = 180;
 export function BetFlowPage() {
   const navigate = useNavigate();
   const { marketId: rawId = '' } = useParams<{ marketId: string }>();
+  const [searchParams] = useSearchParams();
   const ctx = useContext(FunctionSpaceContext);
   const { user, isAuthenticated } = useAuth();
   const isMobile = useIsMobile();
 
   const marketId = decodeURIComponent(rawId);
+
+  // Challenge mode: decoded once on mount. When the page was reached
+  // via the "Challenge this call" CTA on a Receipt, the seed below
+  // pre-fills the form with a mirrored counter-prediction and a
+  // quoted reasoning blockquote. Malformed payloads decode to null
+  // and the page falls back to its default "centre on consensus"
+  // seeding, so a broken challenge URL never crashes the page.
+  const challengePayload = useMemo(
+    () => decodeChallengeFromSearch(searchParams),
+    [searchParams],
+  );
   const { market, loading, error } = useMarket(marketId);
   const { execute: executeBuy, loading: buyLoading, error: buyError } = useBuy(marketId);
   const { execute: previewPayout } = usePreviewPayout(marketId);
@@ -250,11 +264,39 @@ export function BetFlowPage() {
     const { lowerBound, upperBound } = market.config;
     const mid = (lowerBound + upperBound) / 2;
     const range = upperBound - lowerBound;
-    setPrediction(market.consensusMean ?? mid);
-    setSpread(range * 0.06);
+    // Default seeding: prediction centred on consensus (falling back
+    // to the range midpoint), spread = 6% of range. This is the seed
+    // 99% of new bet flows start from.
+    let initialPrediction = market.consensusMean ?? mid;
+    let initialSpread = range * 0.06;
+    let initialShape: ShapeKind | null = null;
+    let initialReasoning: string | null = null;
+    let initialConviction: number | null = null;
+
+    // Challenge-mode seeding: when ?challenge=<payload> is present,
+    // override prediction / reasoning / shape / conviction with the
+    // mirrored counter-bet. `buildChallengeSeed` is a pure function
+    // exported from `challenge.ts` and tested independently.
+    if (challengePayload) {
+      const seed = buildChallengeSeed(challengePayload, {
+        consensusMean: market.consensusMean ?? null,
+        lowerBound,
+        upperBound,
+      });
+      initialPrediction = seed.prediction;
+      initialShape = seed.shape;
+      initialReasoning = seed.reasoning;
+      initialConviction = seed.conviction;
+    }
+
+    setPrediction(initialPrediction);
+    setSpread(initialSpread);
     setSecondPeak(mid + range * 0.2);
+    if (initialShape) setShape(initialShape);
+    if (initialReasoning != null) setReasoning(initialReasoning);
+    if (initialConviction != null) setConviction(initialConviction);
     initialisedRef.current = true;
-  }, [market]);
+  }, [market, challengePayload]);
 
   const buildBelief = useCallback(
     (m: NonNullable<typeof market>): BeliefVector => {
@@ -352,6 +394,33 @@ export function BetFlowPage() {
       const belief = buildBelief(market);
       const result = await executeBuy(belief, collateral);
       const positionId = String(result.positionId);
+      const createdAt = new Date().toISOString();
+
+      // Ed25519 sign the receipt fingerprint. The signature is purely
+      // additive: on hosts that don't support Ed25519 (or if the
+      // device hasn't been able to generate a keypair) the call
+      // returns null and we simply omit the `signature` field from
+      // the BetRecord. Either way the buy has already executed and
+      // the receipt write is unaffected.
+      const fingerprint = canonicalFingerprint({
+        marketId: market.marketId,
+        positionId,
+        username: user.username,
+        prediction,
+        conviction,
+        collateral,
+        spread,
+        shape,
+        reasoning: reasoning.trim(),
+        createdAt,
+      });
+      let signature: Awaited<ReturnType<typeof signFingerprint>> = null;
+      try {
+        signature = await signFingerprint(fingerprint);
+      } catch {
+        signature = null;
+      }
+
       recordBet({
         marketId: market.marketId,
         positionId,
@@ -362,13 +431,14 @@ export function BetFlowPage() {
         spread,
         collateral,
         shape,
-        createdAt: new Date().toISOString(),
+        createdAt,
         marketTitle: market.title,
         marketUnits: market.xAxisUnits,
         lowerBound: market.config.lowerBound,
         upperBound: market.config.upperBound,
         consensusAtBet: market.consensusMean ?? null,
         expiresAt: (market as any).expiresAt ?? null,
+        signature,
       });
       if (ctx) {
         ctx.setPreviewBelief(null);
@@ -637,9 +707,24 @@ export function BetFlowPage() {
             minHeight: isMobile ? undefined : MIN_VISUAL_TOTAL,
           }}
         >
-          <span style={{ fontFamily: fonts.mono, fontSize: 10.5, color: palette.ember, letterSpacing: 1.6 }}>
-            STAKE A CONVICTION
-          </span>
+          {challengePayload && challengePayload.username ? (
+            <div
+              data-testid="betflow-challenge-eyebrow"
+              style={{
+                fontFamily: fonts.mono,
+                fontSize: 10.5,
+                color: palette.teal,
+                letterSpacing: 1.6,
+                fontWeight: 700,
+              }}
+            >
+              CHALLENGE @{challengePayload.username.toUpperCase()}
+            </div>
+          ) : (
+            <span style={{ fontFamily: fonts.mono, fontSize: 10.5, color: palette.ember, letterSpacing: 1.6 }}>
+              STAKE A CONVICTION
+            </span>
+          )}
           <h1
             style={{
               fontFamily: fonts.display,

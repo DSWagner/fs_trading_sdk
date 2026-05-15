@@ -469,6 +469,30 @@ Critically, this happens *automatically*. Because the receipt page always calls 
 
 ---
 
+## Five flagship features (2026-05-14 afternoon ship)
+
+Each of the five features below is a self-contained module: a pure-function file under `demo-app/src/conviction/`, a UI component that consumes it, and a dedicated test file. None of them depend on the others; failing or unsupporting any one of them never affects the rest of the receipt flow.
+
+### 1. Conviction Streak Halo · `streak.ts` + `components/StreakHalo.tsx`
+
+A concentric SVG ornament rendered around the user's handle in the NavBar. The current-streak length is computed from the local rarity ledger as the longest run of resolved-and-accurate bets ending at the most recent resolution. Five visual tiers escalate the treatment: tier 0 renders nothing, tier 1-2 a thin warm-up ring, tier 3-5 a single ring with an outer glow, tier 6-9 two concentric rings, tier 10+ adds an orbiting comet via a CSS keyframe. Pure-derived from `getBetsByUser` + `calculateRarity`; no engine call.
+
+### 2. Receipt for Receipt · `challenge.ts`
+
+A "Challenge this call →" button renders on someone else's receipt when the viewer is signed in and the market is still open. Clicking it builds `/m/:marketId?challenge=<base64>` with the original payload, navigates there, and the BetFlow page decodes the param and pre-fills the form: prediction = mirror reflection across consensus (clamped to bounds), reasoning = Markdown blockquote of the original author, conviction = 0.5 (neutral), shape = original's shape. An eyebrow flips from `STAKE A CONVICTION` to `CHALLENGE @author` so the challenger knows what mode they're in. Malformed payloads decode to null and BetFlow falls back to default seeding.
+
+### 3. Convex Hull Frontier · `convexHull.ts` + `components/ConvexHullFrontier.tsx`
+
+A new section on Discover that plots every live trade across the top 5 markets as a `(prediction, log-normalised-stake)` point and overlays the convex hull as a dashed editorial frontier (Andrew's monotone chain algorithm, O(n log n)). Hull vertices are by construction the boldest contrarians and the heaviest stakes; each is a clickable link to its source market. Interior points render at smaller radius. Empty trade lists collapse to an editorial empty state; collinear points render the dots without a hull. The same `useMarkets` + `useTradeHistory` SDK plumbing that powers The Wire is reused for free.
+
+### 4. Live Calibration Leaderboard · `calibration.ts` + `pages/Leaderboard.tsx`
+
+A new `/leaderboard` route ranks every author whose bets have settled by `calibration = 1 - mean(|conviction - accuracy|)`. Data sources combine localStorage history (cross-referenced with `useMarkets` resolutions for outcome data) plus the demo galleries' baked-in `__demoOutcome` values, so the page is never empty even on a clean install. Sort order is score DESC, sample-count DESC, username ASC for stable rankings. Each row links to `/u/<handle>`. The choice of metric (mean absolute calibration error, rather than Brier or log-loss) is the simplest one that works for continuous accuracy values without thresholding.
+
+### 5. Receipt-as-NFT (no chain) · `receiptNft.ts` + `components/VerifiedReceiptBadge.tsx`
+
+Every conviction the user posts is signed at bet time with a per-device Ed25519 keypair stored in localStorage. The signature covers a canonical fingerprint of the receipt (marketId, positionId, username, prediction, conviction, collateral, spread, shape, reasoning, createdAt — keys sorted alphabetically, floats rounded to 6 decimals to dodge cross-browser drift). The Receipt page re-derives the live fingerprint on render and verifies it against the stored signature, surfacing one of five verdicts: `verified` (jade pill + 8-char fingerprint), `tampered` (rose pill — fields changed since sign), `invalid` (rose pill — signature failed Ed25519 verify entirely), `unsigned` (muted pill — older receipts or hosts without Ed25519), `unsupported` (muted pill — host doesn't expose Ed25519 in Web Crypto). The signing pipeline is purely additive: signing failure short-circuits to "no signature recorded" without affecting the rest of the bet flow.
+
 ## File-by-file walkthrough
 
 Every file in `demo-app/src/conviction/`, what it does, what to look at first.
@@ -864,7 +888,7 @@ Honest backlog. Everything from the previous version, with status flags.
 - ✅ OG / Twitter meta tags, favicon, 1200x630 share card SVG.
 - ✅ Live consensus-disagreement indicator on the BetFlow page.
 - ✅ Download-as-PNG button on the Receipt page (pure client-side).
-- ✅ Real test suite (390 conviction-specific tests across 27 files: pure functions, render, achievement math, error-boundary class behaviour, share-kit fallbacks, replay animation, comparison-pair moments analysis + render, polaroid `predictionLabel` regression, profile section ordering, receipt share-panel placement, live data integrations, plus live API smoke).
+- ✅ Real test suite (479 conviction-specific tests across 39 files: pure functions, render, achievement math, error-boundary class behaviour, share-kit fallbacks, replay animation, comparison-pair moments analysis + render, polaroid `predictionLabel` regression, profile section ordering, receipt share-panel placement, live data integrations, plus the five 2026-05-14 flagships: streak math + halo render, Receipt-for-Receipt challenge plumbing + button visibility, Andrew's monotone-chain convex hull + frontier widget, calibration score + leaderboard aggregation + render, Ed25519 receipt-NFT sign/verify roundtrip + tamper detection + verify-badge render. Plus live API smoke).
 - ✅ Readable Polaroid: numeric scale strip with bounds, prediction value, outcome value; sentence-style footer (`X → Y · off by Z%`); regression test for the empty-filter bug that used to blank the developed state.
 - ✅ Submission readiness: `SUBMISSION.md` form package, `vercel.json` and `netlify.toml` one-click deploy configs, public README leads with Conviction, custom auth widget swapped for `PasswordlessAuthWidget` (compliance), dev port pinned to 3000 (compliance).
 

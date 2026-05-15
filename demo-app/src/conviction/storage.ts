@@ -49,6 +49,20 @@ export interface BetRecord {
    * if the engine later re-schedules the market. Null when unknown.
    */
   expiresAt?: string | null;
+  /**
+   * Optional Ed25519 signature over the canonical receipt fingerprint.
+   * Set when the device successfully signed the receipt at bet time
+   * (see `receiptNft.ts`). The Receipt page verifies this against the
+   * live fingerprint and surfaces "Verified" / "Tampered" badges
+   * accordingly. Null on hosts that don't expose Ed25519 in Web
+   * Crypto, in which case the receipt simply renders without the
+   * verify chrome and everything else continues working.
+   */
+  signature?: {
+    pubKey: string;
+    sig: string;
+    fingerprint: string;
+  } | null;
 }
 
 /**

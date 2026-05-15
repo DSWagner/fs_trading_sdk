@@ -12,6 +12,8 @@ import { ShareKit } from '../components/ShareKit';
 import { getBet, getCashOut, type CashOutRecord, type BetRecord } from '../storage';
 import { getDemoBet } from '../demoGalleries';
 import { buildEmbedUrl, buildShareUrl, readShareFromHash } from '../hash';
+import { buildChallengeUrl } from '../challenge';
+import { VerifiedReceiptBadge } from '../components/VerifiedReceiptBadge';
 import { useIsMobile } from '../useMediaQuery';
 // downloadPolaroidPng is now invoked transitively through the ShareKit
 // component, which owns the receipt's PNG export flow. Importing it
@@ -174,7 +176,7 @@ function ReceiptView({
   // (Previous local `downloadState` removed; the ShareKit owns this state now.)
   const polaroidRef = useRef<HTMLDivElement | null>(null);
   const isMobile = useIsMobile();
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
 
   // Cash-out state: starts from localStorage so the stamp survives a
   // page reload before the SDK cache surfaces the position as sold.
@@ -470,6 +472,33 @@ function ReceiptView({
             <Stat k="SHAPE" v={merged.shape.toUpperCase()} />
           </div>
 
+          {/* On-device Ed25519 verify badge. Recomputes the canonical
+              fingerprint from the LIVE receipt fields and verifies it
+              against the stored signature; the badge flips between
+              `verified`, `tampered`, `invalid`, `unsigned`, and
+              `unsupported` automatically. Receipts authored before
+              this feature shipped (or on hosts without Ed25519)
+              simply render the muted "no on-device signature" pill -
+              the rest of the receipt continues working unchanged. */}
+          <div style={{ marginBottom: isMobile ? 16 : 20 }}>
+            <VerifiedReceiptBadge
+              signature={(merged as any)?.signature ?? null}
+              inputs={{
+                marketId: merged.marketId,
+                positionId: merged.positionId,
+                username: merged.username,
+                prediction: merged.prediction,
+                conviction: merged.conviction,
+                collateral: merged.collateral,
+                spread: merged.spread,
+                shape: merged.shape,
+                reasoning: merged.reasoning,
+                createdAt: merged.createdAt,
+              }}
+              compact={isMobile}
+            />
+          </div>
+
           {/* Live consensus drift card. Drives the "this receipt is a
               living object" feel by polling the market every 5 seconds
               and showing where the crowd has moved since the user
@@ -488,6 +517,36 @@ function ReceiptView({
               marketUnits={merged.marketUnits ?? ''}
             />
           </div>
+
+          {/* Challenge this call -- the "Receipt for Receipt" mechanic.
+              Visible only when (a) the viewer is signed in, (b) the
+              viewer is NOT the author, and (c) the market is still
+              open. Clicking the button navigates to /m/:marketId with
+              a `challenge` query parameter that the BetFlow page
+              decodes to seed the sliders with a mirrored
+              counter-prediction and a quoted reasoning blockquote.
+              For authors / resolved markets / signed-out users the
+              block hides itself, so a shared receipt link reads
+              cleanly without the call-to-arms. */}
+          {isAuthenticated && !isOwner && isOpen && (
+            <ChallengeBlock
+              marketId={merged.marketId}
+              author={merged.username}
+              isMobile={isMobile}
+              payload={{
+                reasoning: merged.reasoning,
+                conviction: merged.conviction,
+                username: merged.username,
+                prediction: merged.prediction,
+                spread: merged.spread,
+                shape: merged.shape,
+                collateral: merged.collateral,
+                createdAt: merged.createdAt,
+                marketTitle: merged.marketTitle,
+                consensusAtBet: merged.consensusAtBet ?? null,
+              }}
+            />
+          )}
 
           {/* Comparison pair — your call vs the crowd, side by side.
               Reads the live consensus density from useConsensus,
@@ -656,3 +715,86 @@ const secondaryButton: React.CSSProperties = {
   cursor: 'pointer',
   letterSpacing: 0.3,
 };
+
+/**
+ * Receipt-for-Receipt CTA. Rendered only when the viewer is signed in,
+ * is NOT the author, and the market is still open. The button is
+ * accessible as a plain anchor so middle-click / cmd-click open the
+ * challenge in a new tab (same behaviour as the rest of the editorial
+ * links on this page).
+ */
+function ChallengeBlock({
+  marketId,
+  author,
+  isMobile,
+  payload,
+}: {
+  marketId: string | number;
+  author: string;
+  isMobile: boolean;
+  payload: Parameters<typeof buildChallengeUrl>[1];
+}) {
+  const href = buildChallengeUrl(marketId, payload);
+  return (
+    <div
+      data-testid="receipt-challenge-block"
+      style={{
+        marginBottom: 16,
+        padding: isMobile ? '14px 16px' : '16px 18px',
+        background: palette.card,
+        border: `1px dashed ${palette.teal}`,
+        borderRadius: 10,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 16,
+        flexWrap: 'wrap',
+      }}
+    >
+      <div style={{ flex: '1 1 220px', minWidth: 0 }}>
+        <div
+          style={{
+            fontFamily: fonts.mono,
+            fontSize: 10.5,
+            letterSpacing: 1.4,
+            color: palette.teal,
+            fontWeight: 700,
+            marginBottom: 4,
+          }}
+        >
+          RECEIPT FOR RECEIPT
+        </div>
+        <div
+          style={{
+            fontFamily: fonts.display,
+            fontSize: isMobile ? 14 : 15,
+            fontWeight: 600,
+            color: palette.ink,
+            lineHeight: 1.4,
+          }}
+        >
+          Think @{author} is wrong? Sign a counter-conviction.
+        </div>
+      </div>
+      <Link
+        to={href}
+        data-testid="receipt-challenge-button"
+        style={{
+          padding: '10px 16px',
+          background: palette.teal,
+          color: palette.card,
+          border: 'none',
+          borderRadius: 6,
+          fontFamily: fonts.body,
+          fontSize: 13,
+          fontWeight: 600,
+          cursor: 'pointer',
+          letterSpacing: 0.3,
+          textDecoration: 'none',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        Challenge this call →
+      </Link>
+    </div>
+  );
+}

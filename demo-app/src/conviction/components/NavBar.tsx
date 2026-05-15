@@ -5,6 +5,7 @@ import { palette, fonts } from '../theme';
 import { useIsMobile, useIsNarrow } from '../useMediaQuery';
 import { useDarkMode } from '../useDarkMode';
 import { rememberUsername } from '../storage';
+import { StreakHalo, StreakCaption, STREAK_HALO_KEYFRAMES } from './StreakHalo';
 
 export function NavBar() {
   const { user, isAuthenticated, logout } = useAuth();
@@ -43,6 +44,7 @@ export function NavBar() {
         <nav style={{ display: 'flex', gap: isMobile ? 12 : 22, flexShrink: 0 }}>
           <NavTab to="/discover" label="Discover" />
           <NavTab to="/explore" label={isNarrow ? 'Galleries' : 'Galleries'} />
+          {!isMobile && <NavTab to="/leaderboard" label="Leaderboard" />}
           {isAuthenticated && user && !isNarrow && (
             <NavTab to={`/u/${encodeURIComponent(user.username)}`} label="My Convictions" />
           )}
@@ -55,6 +57,17 @@ export function NavBar() {
           <DarkModeToggle isMobile={isMobile} />
           {isAuthenticated && user ? (
             <>
+              {/* StreakHalo: a derived SVG ornament that sits left of
+                  the handle. It renders nothing when the user has no
+                  active streak, so the navbar layout for inactive
+                  users is unchanged. The halo's color, ring count,
+                  and the optional orbiting comet are all driven by
+                  `computeStreak` over the local rarity ledger -- zero
+                  engine cost. The matching `StreakCaption` (also
+                  conditional) renders a tiny "3-BET HOT STREAK" tag
+                  on wider viewports. */}
+              <StreakHalo username={user.username} />
+              <StreakCaption username={user.username} isMobile={isMobile || isNarrow} />
               <span
                 style={{
                   fontFamily: fonts.mono,
@@ -115,6 +128,11 @@ export function NavBar() {
           )}
         </div>
       </div>
+      {/* Keyframes for the streak halo's orbiting comet (tier 4).
+          Mounted at navbar level so the animation registers globally,
+          irrespective of which route is currently visible. The rule
+          is inert when no halo is rendered. */}
+      <style>{STREAK_HALO_KEYFRAMES}</style>
     </header>
   );
 }

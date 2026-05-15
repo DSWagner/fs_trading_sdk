@@ -6,6 +6,7 @@ import { palette, fonts } from '../theme';
 import { useIsMobile } from '../useMediaQuery';
 import { EditorialEmpty, EditorialError, EditorialLoading } from '../components/EditorialState';
 import { TheWire } from '../components/TheWire';
+import { ConvexHullFrontier } from '../components/ConvexHullFrontier';
 
 /**
  * Discover — an editorial feed of markets worth a take. Curated toward weird,
@@ -141,6 +142,15 @@ export function DiscoverPage() {
           right now." Driven by useTradeHistory polled across the top
           markets and merged on the client. */}
       {!loading && !error && <TheWire rowLimit={8} marketLimit={3} compact={isMobile} />}
+
+      {/* Convex Hull Frontier — 2D scatter of every live conviction
+          across the top markets, with the convex hull drawn as a
+          dashed editorial frontier. Vertices are by construction the
+          loudest contrarians and the heaviest stakes; each one
+          links to its source market. Adds a top-down "shape of the
+          crowd's calls right now" visual layer above the linear
+          row-by-row Wire feed. */}
+      {!loading && !error && <ConvexHullFrontier marketLimit={5} compact={isMobile} />}
 
       {!loading && featured && (
         <FeaturedMarket market={featured} isMobile={isMobile} />

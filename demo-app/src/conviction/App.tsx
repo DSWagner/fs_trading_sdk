@@ -12,6 +12,7 @@ import { ProfilePage } from './pages/Profile';
 import { EmbedPage } from './pages/Embed';
 import { AboutPage } from './pages/About';
 import { ExplorePage } from './pages/Explore';
+import { LeaderboardPage } from './pages/Leaderboard';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
 const FS_BASE_URL =
@@ -72,6 +73,7 @@ function ConvictionShell() {
           <Route path="/m/:marketId" element={<BetFlowPage />} />
           <Route path="/r/:marketId/:positionId" element={<ReceiptPage />} />
           <Route path="/u/:username" element={<ProfilePage />} />
+          <Route path="/leaderboard" element={<LeaderboardPage />} />
           <Route path="/about" element={<AboutPage />} />
           <Route path="*" element={<NotFound />} />
         </Routes>

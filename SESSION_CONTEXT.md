@@ -1,6 +1,6 @@
 # Session handoff: Conviction (FS Trading SDK competition entry)
 
-> Last updated: 2026-05-14 (MIDDAY). Tactical UX hardening pass on top of the night's flagship-feature ship. Six changes landed: **(1) Crowd polaroid scale-strip label fixed** — the Polaroid now accepts a `predictionLabel` prop (default `'you'`) which is threaded into the scale strip's prediction tick. `ComparisonPair` passes `predictionLabel="crowd"` to the synthesised crowd polaroid so the side-by-side now reads `you · 38.74` next to `crowd · 38.45` instead of the misleading "you · 38.45" on both columns. **(2) Profile section order reflows live-first** — the "My Convictions" page now opens with the Live Portfolio block (open positions, mark-to-market every 15 s), then the Rarity Ledger, then the Achievements strip; the user wanted to land on the most actionable block first. **(3) Receipt share panel relocated** — the SHARE THIS CONVICTION block (embed code + markdown + copy share link) moves from the bottom of the LEFT column to UNDER the polaroid on the RIGHT column, anchoring share actions to the artefact being shared. **(4) Polaroid display fix on the Receipt** — defensive `aspect-ratio: 2 / 3` CSS rule on every `<svg role="img" aria-label^="Polaroid receipt">` so the SVG cannot collapse to a near-square in flex/grid contexts that previously caused the receipt's main polaroid to render its caption area with zero usable height (the user saw the photo but no title/handle line beneath it). **(5) Landing eyebrow trimmed** — the decorative `Vol. I · Issue 1` masthead-style label was removed because it carried no editorial information. **(6) Tests for every regression** — three new test files (`comparison-pair-render.test.tsx`, `profile-ordering.test.tsx`, additions to `polaroid-render.test.tsx` and `receipt-fallback.test.tsx`) pin all of the above; total client-side tests is now **390 across 27 files**. SDK hooks consumed stays at 12.
+> Last updated: 2026-05-14 (LATE AFTERNOON). Five new flagship features shipped on top of the morning's tactical hardening: **(A) Conviction Streak Halo** -- a concentric SVG halo with an orbiting comet at high tiers, rendered around the user's handle in the NavBar. Pure-derived from `computeStreak` over the local rarity ledger (`demo-app/src/conviction/streak.ts`), no engine cost. Five visual tiers (0/1/2/3/4) keyed off the current streak length, with a matching `<StreakCaption>` tag for wider viewports. **(B) Receipt for Receipt challenge** -- a "Challenge this call" CTA renders on someone else's receipt (signed-in viewer + open market). Clicking it navigates to `/m/:marketId?challenge=<base64>`. The BetFlow page decodes the payload and seeds the sliders with a *mirrored* counter-prediction (reflected across the consensus and clamped to bounds), a Markdown-style quoted reasoning blockquote, neutral 0.5 conviction, and the original shape. An eyebrow flips from "STAKE A CONVICTION" to "CHALLENGE @author" to telegraph the mode. Plumbing lives in `demo-app/src/conviction/challenge.ts`. **(C) Convex Hull Frontier widget** -- a new Discover-page section plots every live trade as a (prediction, log-stake) point and draws Andrew's monotone-chain convex hull as a dashed editorial frontier. Each vertex is a clickable link to its source market. Math in `demo-app/src/conviction/convexHull.ts`. **(D) Live Calibration Leaderboard** -- new `/leaderboard` route ranks authors by `1 - mean(|conviction - accuracy|)` across resolved bets, combining local localStorage history with the demo galleries' baked-in `__demoOutcome` values. Pure scoring in `demo-app/src/conviction/calibration.ts`. **(E) Receipt-as-NFT (no chain)** -- every bet now signs a canonical receipt fingerprint with a per-device Ed25519 keypair stored in localStorage. The Receipt page renders a `VerifiedReceiptBadge` that recomputes the fingerprint at view-time and verifies it against the stored signature, surfacing one of five verdicts (verified / tampered / invalid / unsigned / unsupported). Module at `demo-app/src/conviction/receiptNft.ts`. The whole NFT layer is purely additive -- on hosts without Ed25519 the badge falls back to "verification unavailable" and the rest of the receipt continues working unchanged. **(F) Tests for everything** -- five new pure-function test files (`streak.test.ts`, `challenge.test.ts`, `convex-hull.test.ts`, `calibration.test.ts`, `receipt-nft.test.ts`) plus five new render tests (`streak-halo-render.test.tsx`, `verified-receipt-badge-render.test.tsx`, `leaderboard-render.test.tsx`, `convex-hull-frontier-render.test.tsx`, `challenge-button-render.test.tsx`). Total client-side conviction tests is now **479 across 39 files** (up from 390/27). SDK hooks consumed unchanged at 12.
 > Parent transcript: `[Where we are right now](b5263758-f700-4040-9a30-693a3a1cf730)`
 
 ## TL;DR for the next session
@@ -15,23 +15,32 @@
 ```
 demo-app/src/conviction/
   pages/
-    BetFlow.tsx        <- /m/:marketId  (THE active page, most recent edits)
-    Discover.tsx       <- /discover
-    Receipt.tsx        <- /r/:id
+    BetFlow.tsx        <- /m/:marketId  (decodes ?challenge=<base64> for receipt-for-receipt mode)
+    Discover.tsx       <- /discover (now includes TheWire + ConvexHullFrontier)
+    Receipt.tsx        <- /r/:id (renders VerifiedReceiptBadge + ChallengeBlock + share panel under polaroid)
     Embed.tsx          <- /e/:id
     Landing.tsx        <- /
-    Profile.tsx        <- /u/:handle
+    Profile.tsx        <- /u/:handle (Live Portfolio first, then Rarity Ledger, then Achievements)
     Explore.tsx        <- /explore (gallery browser)
+    Leaderboard.tsx    <- /leaderboard (NEW: live calibration leaderboard)
     About.tsx          <- /about
   components/
     Polaroid.tsx       <- THE SVG generator (rarity palette, seed-driven layout)
     AuthGate.tsx
-    NavBar.tsx         <- main header (dark mode toggle lives here)
+    NavBar.tsx         <- main header (dark mode toggle + StreakHalo + StreakCaption + Leaderboard link live here)
+    StreakHalo.tsx     <- NEW: derived SVG ornament from rarity ledger
+    ConvexHullFrontier.tsx <- NEW: 2D scatter + Andrew's monotone chain hull
+    VerifiedReceiptBadge.tsx <- NEW: Ed25519 verify badge
     EditorialState.tsx
   rarity.ts            <- Rarity type, TIER_META, calculateRarity, potentialRarity
-  storage.ts           <- localStorage BetRecord persistence
+  storage.ts           <- localStorage BetRecord persistence (now carries optional signature)
   hash.ts              <- SharedPayload for /e and /r URL hash encoding
   theme.ts             <- CSS-variable palette (light + dark)
+  streak.ts            <- NEW: computeStreak + haloTreatmentForStreak (pure)
+  challenge.ts         <- NEW: buildChallengeUrl / decodeChallengeFromSearch / mirrorPrediction
+  convexHull.ts        <- NEW: Andrew's monotone chain + collinearity check (pure)
+  calibration.ts       <- NEW: calibrationScore + buildLeaderboard (pure)
+  receiptNft.ts        <- NEW: Ed25519 sign / verify + canonicalFingerprint
 ```
 
 Architectural rules: this repo is a strict 3-layer monorepo (`core` -> `react` -> `ui`) plus the `demo-app`. Architecture tests enforce no upward imports. Always read `internal_sdk_docs/CLAUDE.md` before adding to `packages/*`.
@@ -40,6 +49,7 @@ Architectural rules: this repo is a strict 3-layer monorepo (`core` -> `react` -
 
 | SHA       | Title                                                                                                       |
 |-----------|-------------------------------------------------------------------------------------------------------------|
+| _pending_ | feat(conviction): Streak Halo + Receipt-for-Receipt + Convex Hull frontier + Calibration leaderboard + Ed25519 receipt-NFT signing (5 features, 89 new tests) |
 | _pending_ | fix(conviction): crowd-polaroid label, Profile section order, Receipt share panel relocation, Landing eyebrow trim, defensive polaroid aspect-ratio |
 | _pending_ | feat(conviction): replay sparkline + comparison pair + achievements + route ErrorBoundary + unified ShareKit + lavender OG card |
 | _pending_ | feat(conviction): The Wire (useTradeHistory) + Consensus Drift Sparkline (useMarketHistory) + light mode palette deepening |
