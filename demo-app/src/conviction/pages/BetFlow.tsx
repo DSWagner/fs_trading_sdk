@@ -122,6 +122,7 @@ export function BetFlowPage() {
   // this page tripped" fallback.
   const deferredPrediction = useDeferredValue(prediction);
   const deferredSpread = useDeferredValue(spread);
+  const deferredSecondPeak = useDeferredValue(secondPeak);
   const deferredConviction = useDeferredValue(conviction);
   const deferredCollateral = useDeferredValue(collateral);
   const deferredShape = useDeferredValue(shape);
@@ -429,6 +430,12 @@ export function BetFlowPage() {
         conviction,
         prediction,
         spread,
+        // Persist the SECOND independent bimodal peak so the receipt
+        // can replay the exact two-peak silhouette the chart drew at
+        // bet time. We only store it when the user actually picked
+        // the bimodal shape; the storage type accepts null for
+        // gaussian / range bets and for legacy receipts.
+        secondPeak: shape === 'bimodal' ? secondPeak : null,
         collateral,
         shape,
         createdAt,
@@ -452,7 +459,7 @@ export function BetFlowPage() {
     } finally {
       setSubmitting(false);
     }
-  }, [market, user, buildBelief, executeBuy, collateral, reasoning, conviction, prediction, spread, shape, navigate, ctx]);
+  }, [market, user, buildBelief, executeBuy, collateral, reasoning, conviction, prediction, spread, secondPeak, shape, navigate, ctx]);
 
   if (loading || !market) {
     return (
@@ -534,7 +541,7 @@ export function BetFlowPage() {
       // collide on caches keyed by positionId. NOTE: this is built from
       // the *deferred* slider values so the polaroid only reseeds when
       // React picks up the deferred batch, not on every input event.
-      positionId={`preview-${mode}-${deferredPrediction.toFixed(3)}-${deferredSpread.toFixed(3)}-${deferredConviction.toFixed(3)}-${deferredCollateral.toFixed(0)}-${deferredShape}`}
+      positionId={`preview-${mode}-${deferredPrediction.toFixed(3)}-${deferredSpread.toFixed(3)}-${deferredSecondPeak.toFixed(3)}-${deferredConviction.toFixed(3)}-${deferredCollateral.toFixed(0)}-${deferredShape}`}
       marketTitle={market.title}
       marketUnits={market.xAxisUnits}
       username={user?.username ?? 'you'}
@@ -542,6 +549,7 @@ export function BetFlowPage() {
       createdAt={previewCreatedAt}
       prediction={deferredPrediction}
       spread={deferredSpread}
+      secondPeak={deferredShape === 'bimodal' ? deferredSecondPeak : null}
       conviction={deferredConviction}
       collateral={deferredCollateral}
       shape={deferredShape}

@@ -12,6 +12,14 @@ export interface SharedPayload {
   username?: string;
   prediction?: number;
   spread?: number;
+  /**
+   * Second peak position for the `bimodal` shape. Persisted in the
+   * share / embed URL hash so a shared link replays the EXACT
+   * two-peak silhouette the chart drew at bet time. Old share links
+   * that pre-date this field omit it; the receipt then falls back to
+   * the legacy symmetric reconstruction in Polaroid's `densityAt`.
+   */
+  secondPeak?: number | null;
   shape?: string;
   collateral?: number;
   createdAt?: string;

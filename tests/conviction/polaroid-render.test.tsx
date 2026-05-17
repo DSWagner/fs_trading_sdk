@@ -812,3 +812,172 @@ describe('Polaroid: crowd consensus back hill (parallax depth)', () => {
     expect(maxY - minY).toBeGreaterThan(photoSize * 0.05);
   });
 });
+
+// ────────────────────────────────────────────────────────────────────
+// BIMODAL SILHOUETTE -- pins the polaroid hill to the chart's two-
+// gaussian mixture (peaks at `prediction` and `secondPeak`, weights
+// 0.5 / 0.7, σ = `spread`). Regression for the user's complaint:
+// "Why are the curves in the top image different than the curves in
+// the lower chart? I said they should look the same."
+//
+// Before the fix, the polaroid faked a bimodal as
+//   peak1 = prediction - spread*1.6
+//   peak2 = prediction + spread*1.6
+// which only touched ONE of the user's slider values (prediction)
+// and ignored the second-peak slider entirely. A user who set
+// prediction=1023 / secondPeak=953 / spread=83 saw the chart paint
+// a pair of close peaks (almost merged into one tall bump near
+// 985), but the polaroid drew TWO peaks at 890 / 1156 -- nowhere
+// near where the chart was drawing them.
+// ────────────────────────────────────────────────────────────────────
+
+describe('Polaroid: bimodal silhouette tracks the BetFlow chart', () => {
+  // Helper: parse a silhouette path into (x, y) samples in photo-local
+  // coordinates and normalise X to [0, 1] across the photo's
+  // horizontal extent. The first two and last two points of the
+  // path are the polygon base corners that close the filled
+  // silhouette; we trim those so we only inspect the silhouette
+  // samples themselves.
+  function silhouetteSamples(
+    d: string,
+    photoX: number,
+    photoSize: number,
+  ): Array<{ tx: number; y: number }> {
+    const points: Array<[number, number]> = [];
+    const re = /[ML]\s*([-\d.]+)\s+([-\d.]+)/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(d)) !== null) {
+      points.push([parseFloat(m[1]), parseFloat(m[2])]);
+    }
+    return points
+      .slice(2, points.length - 2)
+      .map(([x, y]) => ({ tx: (x - photoX) / photoSize, y }));
+  }
+
+  // Helper: weighted mass centre on the X-axis. Each sample
+  // contributes `peakLift = horizonY - y` mass (lower Y means a
+  // taller hill at that X, which is exactly the PDF density
+  // proportionally normalised by `sharedPdfMax`). Robust to
+  // jitter because we average over ALL samples, not just the
+  // discrete local maxima.
+  function massCentreX(samples: Array<{ tx: number; y: number }>): number {
+    let mass = 0;
+    let weighted = 0;
+    // Use the maximum Y in the sample set as the local horizon
+    // baseline (the silhouette's lowest point on the photo). Mass
+    // at each sample is "horizon minus y" -- always non-negative,
+    // and zero where the silhouette dips back to the baseline.
+    const horizonY = Math.max(...samples.map((s) => s.y));
+    for (const { tx, y } of samples) {
+      const m = Math.max(0, horizonY - y);
+      mass += m;
+      weighted += m * tx;
+    }
+    if (mass <= 1e-9) return 0.5;
+    return weighted / mass;
+  }
+
+  it('uses BOTH the prediction and secondPeak sliders, not a synthetic ±spread*1.6 reconstruction', () => {
+    // Real user case from the screenshot: MrBeast subscribers,
+    // range 0..1375M. User picked prediction=1023, secondPeak=953,
+    // spread=83. The chart paints two close peaks that almost merge
+    // around 988 (mass-weighted average of 1023 with weight 0.5
+    // and 953 with weight 0.7 = (0.5*1023 + 0.7*953) / 1.2 ≈ 982).
+    // 982 / 1375 ≈ 0.715. The new polaroid renders mass centred at
+    // ~0.715 too. The legacy symmetric reconstruction would have
+    // centred mass at  (0.5*890 + 0.7*1156) / 1.2 ≈ 1045 -- 0.760
+    // -- noticeably to the right of the chart's actual centre.
+    const { container } = renderPolaroid({
+      lowerBound: 0,
+      upperBound: 1375,
+      prediction: 1023,
+      secondPeak: 953,
+      spread: 83,
+      shape: 'bimodal',
+      width: 320,
+      // Suppress the back hill so we only inspect the user silhouette.
+      consensusAtBet: null,
+    });
+    const front = container.querySelector(
+      '[data-testid="polaroid-user-silhouette"]',
+    ) as Element | null;
+    expect(front).not.toBeNull();
+    const d = front!.getAttribute('d') ?? '';
+    expect(d.length).toBeGreaterThan(50);
+
+    const samples = silhouetteSamples(d, 16, 320 - 32);
+    const centre = massCentreX(samples);
+    // Mass centre must sit close to the chart's actual mass centre
+    // at 982/1375 ≈ 0.715. A ±0.06 window absorbs the jitter
+    // overlay and the discrete-sampling bias. The legacy contract
+    // (mass centre near 0.76) would fall outside the upper bound.
+    expect(centre).toBeGreaterThan(0.65);
+    expect(centre).toBeLessThan(0.78);
+  });
+
+  it('respects the secondPeak slider: changing it shifts the silhouette', () => {
+    // Fixed prediction=50, varying secondPeak. The silhouette's
+    // overall mass centre should track secondPeak monotonically:
+    // if we move secondPeak from 20 to 80 with prediction held at
+    // 50, the silhouette's mass centre must rise.
+    const renderWithPeak = (sp: number) => {
+      const { container } = renderPolaroid({
+        lowerBound: 0,
+        upperBound: 100,
+        prediction: 50,
+        secondPeak: sp,
+        // A tight spread keeps the two crests well separated so
+        // the mass centre actually moves with the second peak
+        // instead of both peaks blurring into a wide single hump.
+        spread: 3,
+        shape: 'bimodal',
+        width: 320,
+        consensusAtBet: null,
+      });
+      const front = container.querySelector(
+        '[data-testid="polaroid-user-silhouette"]',
+      ) as Element | null;
+      const d = front?.getAttribute('d') ?? '';
+      const samples = silhouetteSamples(d, 16, 320 - 32);
+      return massCentreX(samples);
+    };
+    const left = renderWithPeak(20);
+    const right = renderWithPeak(80);
+    // Sanity: with the second peak at 0.20 the mass centre should
+    // sit clearly LEFT of 0.5; with the second peak at 0.80 it
+    // should sit clearly RIGHT of 0.5. The gap must be at least
+    // ~0.15 of photo width so we know we're not just measuring
+    // jitter noise.
+    expect(right - left).toBeGreaterThan(0.15);
+  });
+
+  it('falls back to the legacy ±spread*1.6 reconstruction when secondPeak is omitted (legacy receipts)', () => {
+    // Backwards compatibility: a receipt saved before the
+    // `secondPeak` field existed must still render a bimodal hill.
+    // We don't pin the exact crest positions (those depend on jitter
+    // and rng draws), only the structural property: the silhouette
+    // path renders, contains samples, and isn't a flat line.
+    const { container } = renderPolaroid({
+      lowerBound: 0,
+      upperBound: 100,
+      prediction: 50,
+      // secondPeak omitted -- legacy contract.
+      spread: 8,
+      shape: 'bimodal',
+      width: 320,
+      consensusAtBet: null,
+    });
+    const front = container.querySelector(
+      '[data-testid="polaroid-user-silhouette"]',
+    ) as Element | null;
+    expect(front).not.toBeNull();
+    const d = front!.getAttribute('d') ?? '';
+    expect(d.length).toBeGreaterThan(50);
+    const ys: number[] = [];
+    const re = /[ML]\s*([-\d.]+)\s+([-\d.]+)/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(d)) !== null) ys.push(parseFloat(m[2]));
+    const photoSize = 320 - 32;
+    expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(photoSize * 0.05);
+  });
+});

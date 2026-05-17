@@ -112,6 +112,10 @@ export function ReceiptPage() {
         conviction: fromHash.conviction ?? 0.5,
         prediction: fromHash.prediction ?? (market?.consensusMean ?? (lowerBound + upperBound) / 2),
         spread: fromHash.spread ?? Math.max(1, (upperBound - lowerBound) * 0.1),
+        // Hash-encoded second peak. Only meaningful for `bimodal`
+        // receipts. When omitted the polaroid falls back to the
+        // legacy symmetric reconstruction in `densityAt`.
+        secondPeak: fromHash.secondPeak ?? null,
         collateral: fromHash.collateral ?? 0,
         shape: (fromHash.shape ?? 'gaussian') as 'gaussian' | 'range' | 'bimodal',
         createdAt: fromHash.createdAt ?? new Date().toISOString(),
@@ -233,6 +237,12 @@ function ReceiptView({
     username: merged.username,
     prediction: merged.prediction,
     spread: merged.spread,
+    // Persist the second bimodal peak in share + embed URLs so a
+    // shared link replays the same two-peak silhouette the chart
+    // drew at bet time. Only relevant when shape === 'bimodal'; the
+    // hash decoder treats null / undefined as "fall back to the
+    // legacy symmetric reconstruction".
+    secondPeak: merged.shape === 'bimodal' ? merged.secondPeak ?? null : null,
     shape: merged.shape,
     collateral: merged.collateral,
     createdAt: merged.createdAt,
@@ -431,6 +441,7 @@ function ReceiptView({
           createdAt={merged.createdAt}
           prediction={merged.prediction}
           spread={merged.spread}
+          secondPeak={merged.shape === 'bimodal' ? merged.secondPeak ?? null : null}
           conviction={merged.conviction}
           collateral={merged.collateral}
           shape={merged.shape}

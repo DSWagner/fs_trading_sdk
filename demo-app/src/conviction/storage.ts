@@ -22,6 +22,18 @@ export interface BetRecord {
   conviction: number;
   prediction: number;
   spread: number;
+  /**
+   * Second peak position for the `bimodal` shape. The first peak is
+   * stored in `prediction`; this is the SECOND independent slider
+   * value the user picked in BetFlow. We persist it so the receipt /
+   * polaroid can replay the EXACT bimodal silhouette the chart drew
+   * at bet time. Older receipts that pre-date this field omit it; in
+   * that case the polaroid falls back to the legacy symmetric
+   * `prediction +- spread*1.6` reconstruction (still bimodal, just
+   * less faithful to the chart). Ignored for `gaussian` and `range`
+   * shapes.
+   */
+  secondPeak?: number | null;
   collateral: number;
   shape: 'gaussian' | 'range' | 'bimodal';
   createdAt: string;

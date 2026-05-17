@@ -51,6 +51,19 @@ export interface PolaroidProps {
   createdAt: string;
   prediction: number;
   spread: number;
+  /**
+   * Second peak position for the `bimodal` shape. Pairs 1:1 with the
+   * BetFlow "Second peak" slider, so the polaroid hill silhouette
+   * matches the bottom-of-page chart curve EXACTLY (two independent
+   * gaussians at `prediction` and `secondPeak`, weights 0.5 / 0.7).
+   *
+   * Legacy receipts that pre-date this field pass `null` /
+   * `undefined`, in which case `densityAt` falls back to the original
+   * symmetric `prediction +- spread*1.6` reconstruction so old
+   * polaroids keep rendering the same shape they always did. Ignored
+   * for `gaussian` and `range` shapes.
+   */
+  secondPeak?: number | null;
   conviction: number;
   collateral: number;
   shape: 'gaussian' | 'range' | 'bimodal';
@@ -110,6 +123,7 @@ function PolaroidImpl(props: PolaroidProps) {
     createdAt,
     prediction,
     spread,
+    secondPeak = null,
     conviction,
     collateral,
     shape,
@@ -274,6 +288,10 @@ function PolaroidImpl(props: PolaroidProps) {
         photoHeight: width - 32,
         prediction,
         spread,
+        // Pair 1:1 with the BetFlow chart's bimodal config so the
+        // hill silhouette draws the same two-Gaussian mixture the
+        // chart draws, not a synthetic symmetric reconstruction.
+        secondPeak,
         shape,
         lowerBound,
         upperBound,
@@ -297,6 +315,7 @@ function PolaroidImpl(props: PolaroidProps) {
       width,
       prediction,
       spread,
+      secondPeak,
       shape,
       lowerBound,
       upperBound,
@@ -1428,6 +1447,12 @@ function buildPhoto(opts: {
   photoHeight: number;
   prediction: number;
   spread: number;
+  /**
+   * Second peak position for `bimodal` shape. When non-null we draw
+   * the silhouette as a true two-gaussian mixture matching the chart;
+   * when null we fall back to the legacy symmetric reconstruction.
+   */
+  secondPeak: number | null;
   shape: 'gaussian' | 'range' | 'bimodal';
   lowerBound: number;
   upperBound: number;
@@ -2161,7 +2186,14 @@ function accentStarFraction(rarity: Rarity | null): number {
 
 function densityAt(
   x: number,
-  opts: { prediction: number; spread: number; shape: string; lowerBound: number; upperBound: number },
+  opts: {
+    prediction: number;
+    spread: number;
+    secondPeak?: number | null;
+    shape: string;
+    lowerBound: number;
+    upperBound: number;
+  },
 ): number {
   if (opts.shape === 'range') {
     const half = opts.spread;
@@ -2172,6 +2204,30 @@ function densityAt(
     return Math.exp(-dist / (half * 0.4));
   }
   if (opts.shape === 'bimodal') {
+    // Match the BetFlow chart EXACTLY. The chart calls
+    // `generateBelief([{point, prediction, spread, weight: 0.5},
+    // {point, secondPeak, spread, weight: 0.7}])` -- two
+    // independent Gaussians at two independently-chosen positions,
+    // each with the user's own `spread` as σ. We mirror the same
+    // weights, the same σ, and (when the receipt has a stored
+    // `secondPeak`) the same two centres so the polaroid
+    // silhouette and the chart curve are pixel-equivalent.
+    if (
+      opts.secondPeak != null &&
+      Number.isFinite(opts.secondPeak)
+    ) {
+      const sigma = Math.max(opts.spread, 1e-9);
+      return (
+        0.5 * gaussian(x, opts.prediction, sigma) +
+        0.7 * gaussian(x, opts.secondPeak, sigma)
+      );
+    }
+    // Legacy fallback for receipts saved before the `secondPeak`
+    // field was persisted. The original symmetric reconstruction
+    // (peaks at `prediction +- spread*1.6`) keeps old polaroids
+    // rendering the same shape they always did rather than
+    // suddenly collapsing to a single peak when their `secondPeak`
+    // is missing.
     const offset = opts.spread * 1.6;
     return (
       0.5 * gaussian(x, opts.prediction - offset, opts.spread * 0.7) +

@@ -38,6 +38,7 @@ export function EmbedPage() {
         conviction: fromHash.conviction ?? 0.5,
         prediction: fromHash.prediction ?? (market.consensusMean ?? 0),
         spread: fromHash.spread ?? Math.max(1, (market.config.upperBound - market.config.lowerBound) * 0.1),
+        secondPeak: fromHash.secondPeak ?? null,
         collateral: fromHash.collateral ?? 0,
         shape: (fromHash.shape ?? 'gaussian') as 'gaussian' | 'range' | 'bimodal',
         createdAt: fromHash.createdAt ?? new Date().toISOString(),
@@ -109,6 +110,7 @@ export function EmbedPage() {
           createdAt={merged.createdAt}
           prediction={merged.prediction}
           spread={merged.spread}
+          secondPeak={merged.shape === 'bimodal' ? merged.secondPeak ?? null : null}
           conviction={merged.conviction}
           collateral={merged.collateral}
           shape={merged.shape}
