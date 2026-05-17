@@ -2,16 +2,20 @@
 
 Everything you need to submit Conviction to the [FunctionSpace Vibecoding Competition](https://ecosystem.functionspace.dev/competition). Form lives at <https://ecosystem.functionspace.dev/competition/submit>.
 
-> **Action items only you can do** (the human, not the agent):
+> **Action items only you (the human) can still do** — everything below is verified done:
 >
-> 1. Fork `https://github.com/functionspace/fs_trading_sdk` to your GitHub.
-> 2. Push this branch to your fork (`git push -u origin <branch>`).
-> 3. Deploy the fork to Vercel or Netlify (one-click — configs are at the repo root).
-> 4. Follow [@functionspaceHQ on X](https://x.com/functionspaceHQ).
-> 5. Post about the build on X tagging `@functionspaceHQ`. Include a screenshot or short clip.
-> 6. Open the [submission form](https://ecosystem.functionspace.dev/competition/submit) and paste the answers below.
+> | Status | Item |
+> | --- | --- |
+> | ✓ done | Public fork at https://github.com/DSWagner/fs_trading_sdk (parent: `functionspace/fs_trading_sdk`, default branch `main`, latest push 2026-05-15). |
+> | ✓ done | Vercel deploy live at https://fs-trading-sdk-docs.vercel.app/ (renders the current `main` build). |
+> | ✓ done | All 479 conviction tests pass + vite + docusaurus builds clean. |
+> | ☐ you | Follow [@functionspaceHQ on X](https://x.com/functionspaceHQ) — required for eligibility, the rule is checked manually before announcement. |
+> | ☐ you | Post about the build on X tagging `@functionSPACEHQ`. Suggested copy is in §1 below; attach a screenshot or short clip of the receipt developing. |
+> | ☐ you | Have your **Telegram handle** ready — the form requires it (winners are contacted via Telegram). |
+> | ☐ you | Open the [submission form](https://ecosystem.functionspace.dev/competition/submit) and paste the values from §1 below. Every text field already has a copy-paste-ready answer. |
+> | ☐ you | Tick both acknowledgement boxes on the form (follow on X + IP terms). |
 >
-> Everything else (build compliance, deploy configs, copy, market picks, demo script, tests) is done.
+> Everything else — build compliance, deploy configs, copy, market picks, demo script, tests, OG meta tags — is done and verified against [the rules page](https://ecosystem.functionspace.dev/competition/setupguide).
 
 ---
 
@@ -56,13 +60,15 @@ These are picked because they are the markets a publication audience would actua
 ### GitHub repo URL
 
 ```
-https://github.com/<your-handle>/fs_trading_sdk
+https://github.com/DSWagner/fs_trading_sdk
 ```
+
+(Verified public fork of `functionspace/fs_trading_sdk` via the GitHub API on 2026-05-17.)
 
 ### Deployed URL
 
 ```
-<paste the Vercel or Netlify URL here>
+https://fs-trading-sdk-docs.vercel.app/
 ```
 
 (One-click deploys: Vercel auto-detects `vercel.json`. Netlify auto-detects `netlify.toml`. Both already inject `VITE_FS_BASE_URL` at build time.)
@@ -70,7 +76,7 @@ https://github.com/<your-handle>/fs_trading_sdk
 ### X post URL
 
 ```
-<paste your tweet URL here>
+<paste your tweet URL here once posted>
 ```
 
 Suggested tweet (≤280 chars):
@@ -79,9 +85,23 @@ Suggested tweet (≤280 chars):
 >
 > a publication tool that turns every prediction into a Polaroid receipt that "develops" when reality catches up. The reasoning rides in the share link.
 >
-> Live: <deploy-url>
-> Source: <repo-url>
+> Live: https://fs-trading-sdk-docs.vercel.app/
+> Source: https://github.com/DSWagner/fs_trading_sdk
 > #vibecoding
+
+### Telegram handle
+
+```
+<your @handle here>
+```
+
+(Required so the team can reach you if you win. Not visible publicly.)
+
+### Referred by (optional)
+
+```
+<leave blank or fill if someone referred you>
+```
 
 ### Acknowledgement
 
