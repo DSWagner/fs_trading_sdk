@@ -330,45 +330,21 @@ function ReceiptView({
     </div>
   );
 
-  // The polaroid SVG is intrinsically 2:3 (height = width * 1.5). The
-  // wrapper enforces that ratio on FOUR independent axes so no single
-  // CSS quirk can collapse the bottom portion (caption strip with
-  // market title + handle + date footer):
-  //
-  //   1. width:  explicit polaroidWidth  px
-  //   2. height: explicit polaroidHeight px  (= polaroidWidth * 1.5)
-  //   3. minHeight: same as #2 -- the parent flex/grid can never
-  //      compute a smaller block height
-  //   4. aspectRatio: '2 / 3' -- if anything still clamps width,
-  //      height follows proportionally rather than collapsing
-  //
-  // The polaroid SVG itself is forced to fill the wrapper at exactly
-  // 100% x 100% via inline style on the <svg> element (set in
-  // Polaroid.tsx). Combined with the SVG's `viewBox` + matching
-  // `preserveAspectRatio="xMidYMid meet"`, that means the SVG
-  // content always renders at the wrapper's actual pixel size with
-  // correct proportions, regardless of the global
-  // `svg[role="img"]{max-width:100%}` defensive rule in index.css.
-  //
-  // Three earlier attempts at this fix proved insufficient:
-  //   - global `aspect-ratio: 2/3 + height: auto` on the SVG -- the
-  //     SVG collapsed in some flex/grid contexts and the caption
-  //     strip vanished.
-  //   - `display: inline-block` wrapper -- intermittent collapse
-  //     during browser zoom.
-  //   - explicit pixel width+height on the wrapper alone -- still
-  //     reproduced under specific zoom + viewport combinations
-  //     because `max-width: 100%` on the inner SVG caused the
-  //     browser to recompute height based on the clamped width
-  //     rather than honour the explicit attribute.
-  //
-  // Pinning all four axes + 100% SVG fill is bulletproof: every
-  // independent constraint must be violated simultaneously to
-  // collapse the polaroid, which is impossible in any browser
-  // engine. `flexShrink: 0` prevents the parent flex column from
-  // squishing it on narrow viewports.
-  const polaroidHeight = Math.round(polaroidWidth * 1.5);
-
+  // The polaroid SVG renders at its INTRINSIC pixel size (set via
+  // width/height attributes inside the Polaroid component). The
+  // wrapper provides positioning context for the cashed-out stamp
+  // overlay and the share-kit ref target -- it deliberately uses
+  // ONLY width/flexShrink, no explicit height or aspect-ratio,
+  // because empirical testing showed that combining wrapper
+  // aspect-ratio with the SVG's viewBox-based scaling caused some
+  // browsers to render the SVG content inside a square sub-region
+  // (leaving the lower 25% of the polaroid -- the caption strip with
+  // market title + handle + date -- empty). Letting the SVG dictate
+  // the wrapper's height through normal block flow is the simpler,
+  // more reliable approach. `flexShrink: 0` keeps the polaroid from
+  // being squished on narrow viewports; responsive scaling for very
+  // narrow containers is handled by the global CSS rule in
+  // index.css (max-width:100% + height:auto + aspect-ratio:2/3).
   const polaroidNode = (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
       <div
@@ -376,11 +352,7 @@ function ReceiptView({
         style={{
           position: 'relative',
           width: polaroidWidth,
-          height: polaroidHeight,
-          minHeight: polaroidHeight,
-          aspectRatio: '2 / 3',
           flexShrink: 0,
-          display: 'block',
         }}
         data-testid="receipt-polaroid-frame"
       >

@@ -205,26 +205,35 @@ html {
   min-height: 100vh;
 }
 
-/* SVG polaroids must NEVER extend past their container's width. Without
- * this, on browser zoom or narrow viewports the explicit width attribute
- * the component sets on the SVG element wins over the container layout,
- * which pushes the document horizontally wider than the viewport.
+/* SVG polaroids must never extend past their container's width AND
+ * must always render at the full 2:3 aspect ratio so the caption strip
+ * (italic market title + @handle + predicted/stake/date footer) is
+ * visible under the photo. Without `height: auto` + `aspect-ratio`,
+ * browsers honour the SVG's explicit `width` attribute, get clamped
+ * by `max-width: 100%`, and then leave the explicit `height`
+ * attribute alone -- which produces a SVG element that's narrower
+ * than the original yet still uses the original height in CSS
+ * pixels. With `preserveAspectRatio="xMidYMid meet"` (the SVG
+ * default), the viewBox content is then scale-to-fit centred inside
+ * the new (narrower, but full-original-height) box, which renders
+ * the photo + scale strip at the top, the caption strip at the
+ * bottom, and a HUGE empty band of matte in between -- exactly the
+ * "polaroid shows photo and scale but the title and footer are
+ * missing" bug the user reported.
  *
- * IMPORTANT: we deliberately do NOT use `height: auto` + `aspect-ratio`
- * here. An earlier version of this rule did exactly that and proved
- * brittle in flex/grid contexts (notably the Receipt page): in some
- * browser + zoom-level combinations the SVG collapsed vertically and
- * the caption strip below the scale row vanished, so users saw the
- * photo + scale but no market title / handle / date line. The
- * polaroid component already declares matching `width` / `height`
- * HTML attributes plus a `viewBox`, so the browser has every signal
- * it needs to render at the natural 2:3 aspect. The Receipt page
- * (and any other page that hosts a polaroid in a flex / grid cell)
- * additionally PINS explicit pixel dimensions on the wrapper div so
- * the SVG can never collapse regardless of CSS sizing quirks. */
+ * The fix is to let HEIGHT track WIDTH. With `aspect-ratio: 2/3` +
+ * `height: auto`, a clamped width pulls the height down
+ * proportionally; the viewBox content fills the box exactly, and
+ * the caption strip stays visible. Pages that host the polaroid in
+ * a flex/grid cell still set their own polaroidWidth so the
+ * intrinsic size is normally a perfect match for the container --
+ * this rule is the safety net for browser zoom and narrow
+ * viewports. */
 svg[role="img"][aria-label^="Polaroid receipt"] {
-  max-width: 100%;
   display: block;
+  max-width: 100%;
+  height: auto;
+  aspect-ratio: 2 / 3;
 }
 
 a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible {

@@ -451,22 +451,23 @@ function PolaroidImpl(props: PolaroidProps) {
       width={width}
       height={height}
       viewBox={`0 0 ${width} ${height}`}
-      preserveAspectRatio="xMidYMid meet"
       xmlns="http://www.w3.org/2000/svg"
       style={{
-        // Fill the parent wrapper at exactly its pixel dimensions.
-        // The wrapper (e.g. Receipt page's polaroid frame) pins
-        // width, height, minHeight and aspectRatio so it is always
-        // a true 2:3 box; setting both axes to 100% here means the
-        // SVG cannot under-render even if the global
-        // `svg[role="img"]{max-width:100%}` rule in index.css would
-        // otherwise have caused the browser to recompute height
-        // from the clamped width and silently chop the caption
-        // strip. The viewBox + preserveAspectRatio above keeps the
-        // photo composition correct at every container size.
+        // The SVG renders at its INTRINSIC pixel size (set via the
+        // width/height attributes above). We deliberately do NOT
+        // set width:100%/height:100% here -- empirical testing
+        // showed that combination interacted badly with the
+        // wrapper's aspect-ratio under some browser zoom levels,
+        // causing the SVG content to scale-to-fit inside a square
+        // sub-region and leaving the lower 25% of the polaroid
+        // (the caption strip with market title + handle + date)
+        // empty. Letting the SVG size from its attributes is the
+        // simpler, more reliable choice; responsiveness is handled
+        // by the index.css global rule (max-width:100% +
+        // height:auto + aspect-ratio:2/3) for the rare case the
+        // container is narrower than the polaroid's intrinsic
+        // width.
         display: 'block',
-        width: '100%',
-        height: '100%',
         filter: developFilter,
         transition: developTransition,
         cursor: interactive ? 'pointer' : 'default',

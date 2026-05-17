@@ -264,18 +264,23 @@ describe('Receipt page: graceful market fallback', () => {
   });
 
   // ────────────────────────────────────────────────────────────────────
-  // POLAROID FRAME GEOMETRY -- pins the multi-axis sizing contract.
+  // POLAROID FRAME GEOMETRY  -- pins the simple, reliable contract.
   //
-  // Regression for "the polaroid image is smaller than the polaroid
-  // frame" -- where the wrapper rendered at near-square (clipping
-  // ~200 px off the bottom) and the caption strip with the italic
-  // title + handle + date footer disappeared. The wrapper now pins
-  // its 2:3 box on FOUR independent axes (width, height, minHeight,
-  // aspectRatio) and the SVG inside fills it at 100% x 100% via
-  // inline style, so no single CSS quirk can collapse the bottom.
+  // Regression for "the polaroid is cropped and missing the caption
+  // strip" -- the wrapper used to set width + height + aspectRatio
+  // simultaneously, which interacted badly with the SVG's viewBox
+  // scaling under some browser zoom levels (the SVG content rendered
+  // inside a square sub-region, leaving the lower 25% of the polaroid
+  // empty). The current contract is the simplest possible:
+  //   - wrapper has explicit width and flexShrink:0, no height
+  //   - SVG renders at its intrinsic pixel size (width x width*1.5)
+  //     via the SVG element's width/height attributes
+  //   - the global CSS rule scales the SVG proportionally if the
+  //     container ever gets narrower than the polaroid's intrinsic
+  //     width (height:auto + aspect-ratio:2/3)
   // ────────────────────────────────────────────────────────────────────
 
-  it('the polaroid frame wrapper is sized 2:3 (height = width * 1.5) on every axis', () => {
+  it('the polaroid frame wrapper sets width and flexShrink (height comes from the SVG)', () => {
     useMarketMock.mockReturnValue({
       market: null,
       loading: false,
@@ -290,28 +295,18 @@ describe('Receipt page: graceful market fallback', () => {
     ) as HTMLElement | null;
     expect(frame).not.toBeNull();
     const style = (frame as HTMLElement).style;
-    // The desktop branch reads as 420 -> 630 (mobile would be 300 ->
-    // 450). matchMedia is stubbed to `matches: false` for every query
-    // in the beforeAll above, so useIsMobile() returns false and we
-    // get the desktop path.
     const w = parseInt(style.width, 10);
-    const h = parseInt(style.height, 10);
     expect(w).toBeGreaterThan(0);
-    // height MUST be width * 1.5 (allow a 1 px rounding wobble).
-    expect(Math.abs(h - Math.round(w * 1.5))).toBeLessThanOrEqual(1);
-    // Defensive: minHeight must match height so flex / grid layouts
-    // can never compute a smaller block height for this cell.
-    const minH = parseInt(style.minHeight, 10);
-    expect(Math.abs(minH - h)).toBeLessThanOrEqual(1);
-    // Defensive: aspectRatio must be locked to 2/3 so a clamped
-    // width still produces a proportional height instead of
-    // collapsing to whatever the parent's flex baseline is.
-    expect(style.aspectRatio).toBe('2 / 3');
     // flex-shrink must be 0 so a narrow flex column does not squish.
     expect(style.flexShrink).toBe('0');
+    // The wrapper deliberately does NOT set height/minHeight/
+    // aspectRatio -- those caused regressions where the SVG content
+    // collapsed into a square sub-region. Height comes from the SVG.
+    expect(style.height).toBe('');
+    expect(style.aspectRatio).toBe('');
   });
 
-  it('the polaroid SVG fills the wrapper at 100% x 100% (so the caption strip cannot be clipped)', () => {
+  it('the polaroid SVG declares explicit width and height attributes matching its 2:3 intrinsic size', () => {
     useMarketMock.mockReturnValue({
       market: null,
       loading: false,
@@ -325,16 +320,21 @@ describe('Receipt page: graceful market fallback', () => {
       '[data-testid="receipt-polaroid-frame"] svg[role="img"][aria-label^="Polaroid receipt"]',
     ) as SVGSVGElement | null;
     expect(svg).not.toBeNull();
-    // Inline style on the SVG element must declare explicit 100% on
-    // both axes, otherwise the global `svg[role="img"]{max-width:
-    // 100%}` rule in index.css can in some browser engines cause the
-    // SVG to render at the clamped width with the explicit height
-    // attribute interpreted as `auto`, which collapses the caption
-    // strip. The 100% / 100% inline style + viewBox + aspectRatio on
-    // the wrapper makes the geometry bulletproof.
+    // The SVG must carry explicit numeric width/height attributes so
+    // its intrinsic size is the full 2:3 box. The inline style must
+    // NOT set width:100%/height:100% because that combination
+    // interacted badly with the wrapper's aspect-ratio in some
+    // browsers and caused the caption strip to be hidden in an empty
+    // sub-region.
+    const w = parseInt(svg!.getAttribute('width') || '0', 10);
+    const h = parseInt(svg!.getAttribute('height') || '0', 10);
+    expect(w).toBeGreaterThan(0);
+    expect(Math.abs(h - Math.round(w * 1.5))).toBeLessThanOrEqual(1);
     const svgStyle = (svg as SVGSVGElement).style;
-    expect(svgStyle.width).toBe('100%');
-    expect(svgStyle.height).toBe('100%');
+    // Inline style must NOT pin width/height to 100% -- the SVG
+    // renders at its intrinsic attribute size.
+    expect(svgStyle.width).toBe('');
+    expect(svgStyle.height).toBe('');
   });
 
   it('the polaroid renders the market title in its caption strip (NOT just the photo + scale)', () => {
