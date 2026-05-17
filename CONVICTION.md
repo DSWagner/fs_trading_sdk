@@ -469,9 +469,11 @@ Critically, this happens *automatically*. Because the receipt page always calls 
 
 ---
 
-## Five flagship features (2026-05-14 afternoon ship)
+## Four flagship features (2026-05-14 afternoon ship)
 
-Each of the five features below is a self-contained module: a pure-function file under `demo-app/src/conviction/`, a UI component that consumes it, and a dedicated test file. None of them depend on the others; failing or unsupporting any one of them never affects the rest of the receipt flow.
+Each of the four features below is a self-contained module: a pure-function file under `demo-app/src/conviction/`, a UI component that consumes it, and a dedicated test file. None of them depend on the others; failing or unsupporting any one of them never affects the rest of the receipt flow.
+
+(A fifth widget, the Convex-Hull Frontier on Discover, briefly shipped alongside these four. It was removed on 2026-05-17 after user feedback that the empty / sparse states felt like a dead surface and the visualisation did not communicate clearly enough to keep. The math module and all of its dedicated tests were deleted at the same time.)
 
 ### 1. Conviction Streak Halo · `streak.ts` + `components/StreakHalo.tsx`
 
@@ -481,15 +483,11 @@ A concentric SVG ornament rendered around the user's handle in the NavBar. The c
 
 A "Challenge this call →" button renders on someone else's receipt when the viewer is signed in and the market is still open. Clicking it builds `/m/:marketId?challenge=<base64>` with the original payload, navigates there, and the BetFlow page decodes the param and pre-fills the form: prediction = mirror reflection across consensus (clamped to bounds), reasoning = Markdown blockquote of the original author, conviction = 0.5 (neutral), shape = original's shape. An eyebrow flips from `STAKE A CONVICTION` to `CHALLENGE @author` so the challenger knows what mode they're in. Malformed payloads decode to null and BetFlow falls back to default seeding.
 
-### 3. Convex Hull Frontier · `convexHull.ts` + `components/ConvexHullFrontier.tsx`
-
-A new section on Discover that plots every live trade across the top 5 markets as a `(prediction, log-normalised-stake)` point and overlays the convex hull as a dashed editorial frontier (Andrew's monotone chain algorithm, O(n log n)). Hull vertices are by construction the boldest contrarians and the heaviest stakes; each is a clickable link to its source market. Interior points render at smaller radius. Empty trade lists collapse to an editorial empty state; collinear points render the dots without a hull. The same `useMarkets` + `useTradeHistory` SDK plumbing that powers The Wire is reused for free.
-
-### 4. Live Calibration Leaderboard · `calibration.ts` + `pages/Leaderboard.tsx`
+### 3. Live Calibration Leaderboard · `calibration.ts` + `pages/Leaderboard.tsx`
 
 A new `/leaderboard` route ranks every author whose bets have settled by `calibration = 1 - mean(|conviction - accuracy|)`. Data sources combine localStorage history (cross-referenced with `useMarkets` resolutions for outcome data) plus the demo galleries' baked-in `__demoOutcome` values, so the page is never empty even on a clean install. Sort order is score DESC, sample-count DESC, username ASC for stable rankings. Each row links to `/u/<handle>`. The choice of metric (mean absolute calibration error, rather than Brier or log-loss) is the simplest one that works for continuous accuracy values without thresholding.
 
-### 5. Receipt-as-NFT (no chain) · `receiptNft.ts` + `components/VerifiedReceiptBadge.tsx`
+### 4. Receipt-as-NFT (no chain) · `receiptNft.ts` + `components/VerifiedReceiptBadge.tsx`
 
 Every conviction the user posts is signed at bet time with a per-device Ed25519 keypair stored in localStorage. The signature covers a canonical fingerprint of the receipt (marketId, positionId, username, prediction, conviction, collateral, spread, shape, reasoning, createdAt — keys sorted alphabetically, floats rounded to 6 decimals to dodge cross-browser drift). The Receipt page re-derives the live fingerprint on render and verifies it against the stored signature, surfacing one of five verdicts: `verified` (jade pill + 8-char fingerprint), `tampered` (rose pill — fields changed since sign), `invalid` (rose pill — signature failed Ed25519 verify entirely), `unsigned` (muted pill — older receipts or hosts without Ed25519), `unsupported` (muted pill — host doesn't expose Ed25519 in Web Crypto). The signing pipeline is purely additive: signing failure short-circuits to "no signature recorded" without affecting the rest of the bet flow.
 
@@ -792,7 +790,7 @@ The previous passes shipped product. This pass shipped *eligibility*. Two compli
 
 - `npx tsc --noEmit` (demo-app): clean
 - `npx vite build`: clean (713 KB JS, 207 KB gzipped)
-- `npx vitest run` (full SDK + Conviction suite): **884 / 884 tests pass**
+- `npx vitest run tests/conviction` (Conviction suite): **476 / 476 tests pass across 37 files**. The full repo suite (`npx vitest run`) also runs 812 SDK tests cleanly; only `tests/client-auth.test.ts` (3 tests, requires localhost:8000 with password auth) and `tests/api-integration.test.ts` (requires `FS_TEST_USERNAME` / `FS_TEST_PASSWORD` env) need credentials the competition does not use.
 - Dev server: confirmed binding to `http://localhost:3000/` and returning HTTP 200
 
 **What the human still has to do** (per the setup guide and competition rules):
@@ -888,7 +886,7 @@ Honest backlog. Everything from the previous version, with status flags.
 - ✅ OG / Twitter meta tags, favicon, 1200x630 share card SVG.
 - ✅ Live consensus-disagreement indicator on the BetFlow page.
 - ✅ Download-as-PNG button on the Receipt page (pure client-side).
-- ✅ Real test suite (479 conviction-specific tests across 39 files: pure functions, render, achievement math, error-boundary class behaviour, share-kit fallbacks, replay animation, comparison-pair moments analysis + render, polaroid `predictionLabel` regression, profile section ordering, receipt share-panel placement, live data integrations, plus the five 2026-05-14 flagships: streak math + halo render, Receipt-for-Receipt challenge plumbing + button visibility, Andrew's monotone-chain convex hull + frontier widget, calibration score + leaderboard aggregation + render, Ed25519 receipt-NFT sign/verify roundtrip + tamper detection + verify-badge render. Plus live API smoke).
+- ✅ Real test suite (476 conviction-specific tests across 37 files: pure functions, render, achievement math, error-boundary class behaviour, share-kit fallbacks, replay animation, comparison-pair moments analysis + render, polaroid `predictionLabel` regression, polaroid back-hill PDF normalization, polaroid receipt-frame sizing contract, profile section ordering, receipt share-panel placement, live data integrations, plus the four 2026-05-14 flagships still in the build: streak math + halo render, Receipt-for-Receipt challenge plumbing + button visibility, calibration score + leaderboard aggregation + render, Ed25519 receipt-NFT sign/verify roundtrip + tamper detection + verify-badge render. Plus live API smoke. The Convex-Hull-Frontier widget that briefly shipped alongside these flagships was removed on 2026-05-17 after user feedback; its 14 dedicated tests were deleted at the same time.)
 - ✅ Readable Polaroid: numeric scale strip with bounds, prediction value, outcome value; sentence-style footer (`X → Y · off by Z%`); regression test for the empty-filter bug that used to blank the developed state.
 - ✅ Submission readiness: `SUBMISSION.md` form package, `vercel.json` and `netlify.toml` one-click deploy configs, public README leads with Conviction, custom auth widget swapped for `PasswordlessAuthWidget` (compliance), dev port pinned to 3000 (compliance).
 
@@ -1223,7 +1221,7 @@ The Receipt and Embed pages read both, prefer the local record, and fall back to
 | `tests/conviction/markdown-receipt.test.ts` (rarity section) | 4 | Rarity line absent for unresolved / no-consensus / common; rarity line present and contains tier name for uncommon-or-higher. |
 | `scripts/verify-conviction/verify-rarity.mjs` | Playwright | Real-browser: 6 tier cells on landing, at least one hero polaroid carries a rarity stamp in the DOM, the live RarityHint card escalates from `common` to a higher tier when the prediction slider is dragged to the extreme. |
 
-**Total Conviction tests: 217 passing locally** (rarity + polaroid + storage + hash + markdown + editorial + bet-journey + polaroid-render + live-engine). Plus 15+ Playwright real-browser checks across three verification scripts.
+**Total Conviction tests: 476 passing locally across 37 files** (rarity + polaroid + storage + hash + markdown + editorial + bet-journey + polaroid-render + polaroid-rarity + polaroid-aurora + live-engine + cashout + cashed-out-stamp + live-portfolio + the-wire + drift-sparkline + receipt-fallback + comparison-pair + achievements + achievements-strip + error-boundary + share-kit + streak + streak-halo-render + challenge + challenge-button-render + calibration + leaderboard-render + receipt-nft + verified-receipt-badge-render + demo-galleries + develop-demo-calibration + cashout-storage + live-consensus-card). Plus 15+ Playwright real-browser checks across three verification scripts.
 
 ### Why this raises the ceiling
 
