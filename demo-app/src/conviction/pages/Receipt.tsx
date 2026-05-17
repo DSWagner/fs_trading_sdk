@@ -480,18 +480,14 @@ function ReceiptView({
           upperBound={merged.upperBound ?? 1}
           resolutionState={marketResolutionState}
           resolvedOutcome={resolvedOutcome}
-          width={polaroidWidth}
+          width={polaroidPixelWidth}
           animateDevelop
           consensusAtBet={merged.consensusAtBet ?? null}
           expiresAt={(merged as any).expiresAt ?? null}
-          // Inline-fill the wrapper's measured pixel box. See the
-          // wrapper sizing comment above and the `fillParent` prop
-          // doc on Polaroid.tsx for the full rationale.
-          fillParent
         />
         {showCashedStamp && cashedOut && (
           <CashedOutStamp
-            polaroidWidth={polaroidWidth}
+            polaroidWidth={polaroidPixelWidth}
             realizedPnl={cashedOut.realizedPnl}
             animateLanding={landingPending}
           />

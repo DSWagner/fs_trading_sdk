@@ -329,7 +329,32 @@ describe('Receipt page: graceful market fallback', () => {
     expect(style.position).toBe('relative');
   });
 
-  it('the polaroid SVG inline-fills the wrapper via absolute-positioning (cannot be overridden by global CSS, build minification, or flex layout quirks)', () => {
+  // ════════════════════════════════════════════════════════════════════
+  // VALIDATION TEST -- the user explicitly demanded this.
+  //
+  //   "WRITE A VALIDATION TEST WHERE YOU WILL ALWAYS TRY WHETHER THE
+  //    IMAGE SIZE AND POLAROID FRAME ARE THE SAME SIZE"
+  //
+  // The polaroid SVG and its wrapper frame must be EXACTLY the same
+  // pixel dimensions at every render. Any deviation means the SVG
+  // is being CSS-stretched / letterboxed / clipped relative to its
+  // wrapper, which is the root cause of every "polaroid is the wrong
+  // shape, caption is missing, photo is cropped" report we got.
+  //
+  // Contract:
+  //   * Wrapper carries explicit pixel `width` and `height` inline
+  //     styles (set by JS via ResizeObserver on the parent column).
+  //   * Polaroid SVG carries `width="<wrapperWidth>"` and
+  //     `height="<wrapperHeight>"` HTML attributes equal to the
+  //     wrapper's pixel dimensions (because we pass
+  //     `polaroidPixelWidth` directly to the Polaroid component).
+  //   * The SVG's viewBox is `0 0 <wrapperWidth> <wrapperHeight>`
+  //     so the coordinate space matches the rendered pixels 1:1.
+  //   * Height is exactly round(width * 1.5), the polaroid's 2:3
+  //     portrait ratio.
+  // ════════════════════════════════════════════════════════════════════
+
+  it('VALIDATION: the polaroid SVG and the wrapper frame are EXACTLY the same pixel size (image size === frame size)', () => {
     useMarketMock.mockReturnValue({
       market: null,
       loading: false,
@@ -339,31 +364,58 @@ describe('Receipt page: graceful market fallback', () => {
     });
     recordBet(localBet);
     const { container } = renderReceipt('archived-market', 'pos-1');
+
+    const frame = container.querySelector(
+      '[data-testid="receipt-polaroid-frame"]',
+    ) as HTMLElement | null;
+    expect(frame).not.toBeNull();
+
     const svg = container.querySelector(
       '[data-testid="receipt-polaroid-frame"] svg[role="img"][aria-label^="Polaroid receipt"]',
     ) as SVGSVGElement | null;
     expect(svg).not.toBeNull();
-    // Intrinsic width/height attributes are still present (PNG
-    // export and off-screen renders rely on them); they encode the
-    // SVG's viewBox basis, not its rendered size.
-    const w = parseInt(svg!.getAttribute('width') || '0', 10);
-    const h = parseInt(svg!.getAttribute('height') || '0', 10);
-    expect(w).toBeGreaterThan(0);
-    expect(Math.abs(h - Math.round(w * 1.5))).toBeLessThanOrEqual(1);
+
+    // Wrapper pixel dimensions (from inline style).
+    const frameW = parseInt(frame!.style.width, 10);
+    const frameH = parseInt(frame!.style.height, 10);
+    expect(frameW).toBeGreaterThan(0);
+    expect(frameH).toBeGreaterThan(0);
+
+    // SVG pixel dimensions (from HTML attributes).
+    const svgW = parseInt(svg!.getAttribute('width') || '0', 10);
+    const svgH = parseInt(svg!.getAttribute('height') || '0', 10);
+    expect(svgW).toBeGreaterThan(0);
+    expect(svgH).toBeGreaterThan(0);
+
+    // ── THE CORE INVARIANT ──
+    // Image size === Frame size. If this ever fails, the polaroid
+    // is rendering at a different shape than its wrapper, which
+    // visually manifests as a cropped / stretched / letterboxed
+    // polaroid with missing caption text, exactly the bug the user
+    // kept reporting.
+    expect(svgW).toBe(frameW);
+    expect(svgH).toBe(frameH);
+
+    // Both the wrapper and the SVG must be the polaroid's 2:3
+    // portrait aspect ratio (height = 1.5 * width).
+    expect(frameH).toBe(Math.round(frameW * 1.5));
+    expect(svgH).toBe(Math.round(svgW * 1.5));
+
+    // The SVG's viewBox must use the same coordinate space as the
+    // rendered pixels so every internal layout calculation
+    // (photoSize, scaleStripY, captionY) lands at the right pixel
+    // position. A mismatched viewBox would render a 480x720
+    // composition stretched into a smaller box, which is exactly
+    // the prior bug.
     const viewBox = svg!.getAttribute('viewBox') || '';
-    expect(viewBox).toBe(`0 0 ${w} ${h}`);
-    // CRITICAL: the SVG carries the inline-style absolute-fill
-    // contract on the SVG element itself. Inline styles trump
-    // every other CSS path, so this is the path that finally
-    // survived production layout regressions.
+    expect(viewBox).toBe(`0 0 ${svgW} ${svgH}`);
+
+    // The SVG must NOT carry any CSS stretch / letterbox contract.
+    // It renders at its intrinsic numeric pixel size, full stop.
     const style = (svg as SVGSVGElement).style;
-    expect(style.position).toBe('absolute');
-    expect(style.width).toBe('100%');
-    expect(style.height).toBe('100%');
-    expect(style.top).toBe('0px');
-    expect(style.left).toBe('0px');
-    expect(style.right).toBe('0px');
-    expect(style.bottom).toBe('0px');
+    expect(style.position).not.toBe('absolute');
+    expect(style.width).toBe('');
+    expect(style.height).toBe('');
   });
 
   // ────────────────────────────────────────────────────────────────────
