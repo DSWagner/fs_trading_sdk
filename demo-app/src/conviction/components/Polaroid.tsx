@@ -496,8 +496,15 @@ function PolaroidImpl(props: PolaroidProps) {
             receipt actually has a consensusAtBet snapshot). */}
         {photo.consensusFill && (
           <linearGradient id={consensusGradientId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={photo.consensusFill.top} stopOpacity="0.55" />
-            <stop offset="100%" stopColor={photo.consensusFill.bottom} stopOpacity="0.85" />
+            {/* Stop opacities bumped from 0.55 / 0.85 to 0.85 / 1.00 so
+                the now-darker back-hill colour actually shows through
+                instead of being half-erased by translucency. The path
+                opacity below stays at 0.95 (was 0.85) so the back hill
+                still reads as one tonal step lighter than the
+                foreground silhouette but is no longer "almost
+                invisible" the way the user described. */}
+            <stop offset="0%" stopColor={photo.consensusFill.top} stopOpacity="0.85" />
+            <stop offset="100%" stopColor={photo.consensusFill.bottom} stopOpacity="1.0" />
           </linearGradient>
         )}
         <radialGradient id={sunGradientId} cx="50%" cy="50%" r="50%">
@@ -812,14 +819,14 @@ function PolaroidImpl(props: PolaroidProps) {
               d={photo.consensusSilhouettePath(photoX, photoY, photoSize)}
               fill={`url(#${consensusGradientId})`}
               filter={photoFilter}
-              opacity="0.85"
+              opacity="0.95"
             />
             <path
               d={photo.consensusSilhouettePath(photoX, photoY, photoSize)}
               fill="none"
               stroke={photo.consensusFill.line}
-              strokeWidth="0.5"
-              opacity="0.45"
+              strokeWidth="0.8"
+              opacity="0.7"
               filter={photoFilter}
             />
           </>
@@ -1850,15 +1857,21 @@ function buildPhoto(opts: {
       return d;
     };
 
-    // Atmospheric fill: a midpoint between the ground colours and the
-    // sky-bottom colour gives the back hill the dust-haze tint of
-    // landscape paintings. The line colour is the same midpoint
-    // pushed slightly darker so the ridge crest reads as a soft edge
-    // rather than a stamped outline.
+    // Back-hill fill: stays mostly in the ground colour family, with a
+    // small lift toward the sky-bottom colour so it reads as "the same
+    // mountain seen from one valley further back" rather than the
+    // foreground hill twin-stamped. The previous mix factors of
+    // 0.55 / 0.45 / 0.40 (more than half-way to the sky colour)
+    // washed the back hill out so far that the user reported it as
+    // "almost invisible." Tightening the mix to ~0.20 keeps the
+    // distance cue (distant objects pick up a tiny bit of sky tint)
+    // but lands the back hill clearly in the ground-tone family --
+    // visibly a shade lighter than the user's silhouette without
+    // dissolving into the sky.
     consensusFill = {
-      top: mix(palettes.ground.top, palettes.sky.bottom, 0.55),
-      bottom: mix(palettes.ground.bottom, palettes.sky.bottom, 0.45),
-      line: mix(palettes.ground.line, palettes.sky.bottom, 0.40),
+      top: mix(palettes.ground.top, palettes.sky.bottom, 0.22),
+      bottom: mix(palettes.ground.bottom, palettes.sky.bottom, 0.18),
+      line: mix(palettes.ground.line, palettes.sky.bottom, 0.15),
     };
   }
 
