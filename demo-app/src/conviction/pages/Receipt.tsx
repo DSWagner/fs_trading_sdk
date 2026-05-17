@@ -330,11 +330,32 @@ function ReceiptView({
     </div>
   );
 
+  // The polaroid SVG is intrinsically 2:3 (height = width * 1.5). We
+  // PIN both axes on the wrapper div in CSS pixels so the SVG cannot
+  // collapse vertically inside the receipt page's grid + flex layout.
+  // Two earlier attempts at this -- a global `aspect-ratio: 2/3 +
+  // height: auto` rule on `svg[role="img"][aria-label^="Polaroid
+  // receipt"]`, and a `display: inline-block` wrapper -- proved
+  // brittle in production: the user reported the same clipping bug
+  // multiple times, with the caption strip (italic title + footer +
+  // date) silently disappearing while the photo + numeric scale
+  // remained. Anchoring explicit pixel dimensions on the wrapper is
+  // bulletproof: whatever flex / grid sizing happens around it, the
+  // wrapper hosts the polaroid in a 2:3 box and the SVG fills it.
+  // `flexShrink: 0` prevents the parent flex column from squishing
+  // it on narrow viewports.
+  const polaroidHeight = Math.round(polaroidWidth * 1.5);
+
   const polaroidNode = (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
       <div
         ref={polaroidRef}
-        style={{ position: 'relative', display: 'inline-block' }}
+        style={{
+          position: 'relative',
+          width: polaroidWidth,
+          height: polaroidHeight,
+          flexShrink: 0,
+        }}
         data-testid="receipt-polaroid-frame"
       >
         <Polaroid
