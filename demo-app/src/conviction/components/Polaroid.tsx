@@ -455,18 +455,18 @@ function PolaroidImpl(props: PolaroidProps) {
       preserveAspectRatio="xMidYMid meet"
       style={{
         // The SVG paints into a `viewBox="0 0 <width> <height>"`
-        // coordinate system, so its internal layout (photo, scale
-        // strip, caption) is always relative to <width> x <height>.
-        // We render at the SVG's intrinsic pixel size (driven by
-        // the `width=` and `height=` attributes above), which is
-        // the size every other page in the app already expects --
-        // StyleGallery, Landing, BetFlow's preview pair,
-        // ComparisonPair, etc. all hand the polaroid an explicit
-        // numeric `width` prop and want the SVG to render at
-        // exactly that pixel size with the caller deciding what to
-        // do with it. The Receipt page additionally pins its
-        // wrapper to `polaroidWidth x polaroidHeight` so the
-        // wrapper box and the SVG box agree by construction.
+        // coordinate system. We render at the SVG's intrinsic
+        // pixel size (width/height attributes above), which every
+        // caller already passes as a numeric prop. The Receipt
+        // page additionally adds a global rule
+        // `[data-testid="receipt-polaroid-frame"] > svg { width:
+        // 100%; height: 100%; }` so the SVG can stretch to fill
+        // its wrapper when a narrow grid cell shrinks the wrapper
+        // below the intrinsic pixel size -- without that rule
+        // CSS happily makes the wrapper smaller than the SVG and
+        // the SVG bleeds into the next column or, worse, the
+        // wrapper stays at its intrinsic height while the SVG
+        // shrinks (clipping the caption strip).
         display: 'block',
         filter: developFilter,
         transition: developTransition,
@@ -496,14 +496,20 @@ function PolaroidImpl(props: PolaroidProps) {
             receipt actually has a consensusAtBet snapshot). */}
         {photo.consensusFill && (
           <linearGradient id={consensusGradientId} x1="0" y1="0" x2="0" y2="1">
-            {/* Stop opacities bumped from 0.55 / 0.85 to 0.85 / 1.00 so
-                the now-darker back-hill colour actually shows through
-                instead of being half-erased by translucency. The path
-                opacity below stays at 0.95 (was 0.85) so the back hill
-                still reads as one tonal step lighter than the
-                foreground silhouette but is no longer "almost
-                invisible" the way the user described. */}
-            <stop offset="0%" stopColor={photo.consensusFill.top} stopOpacity="0.85" />
+            {/* Both gradient stops are now FULLY opaque. Combined
+                with the deep mix factors in `consensusFill` (0.08 /
+                0.06 / 0.05 -- almost identical to the prediction
+                hill's pure ground colour), the back hill paints
+                into the photo at full saturation so the user sees
+                two clearly distinct mountain layers rather than a
+                ghost behind the foreground. Atmospheric-perspective
+                separation now comes from the slightly higher
+                consensus horizon line (back hill peeks out above
+                the foreground hill) instead of from translucency
+                or colour wash, which is what the user explicitly
+                asked for: "as dark as our own prediction curve,
+                slightly brighter but almost as dark." */}
+            <stop offset="0%" stopColor={photo.consensusFill.top} stopOpacity="1.0" />
             <stop offset="100%" stopColor={photo.consensusFill.bottom} stopOpacity="1.0" />
           </linearGradient>
         )}
@@ -819,14 +825,14 @@ function PolaroidImpl(props: PolaroidProps) {
               d={photo.consensusSilhouettePath(photoX, photoY, photoSize)}
               fill={`url(#${consensusGradientId})`}
               filter={photoFilter}
-              opacity="0.95"
+              opacity="1.0"
             />
             <path
               d={photo.consensusSilhouettePath(photoX, photoY, photoSize)}
               fill="none"
               stroke={photo.consensusFill.line}
-              strokeWidth="0.8"
-              opacity="0.7"
+              strokeWidth="1.2"
+              opacity="0.95"
               filter={photoFilter}
             />
           </>
@@ -1857,21 +1863,33 @@ function buildPhoto(opts: {
       return d;
     };
 
-    // Back-hill fill: stays mostly in the ground colour family, with a
-    // small lift toward the sky-bottom colour so it reads as "the same
-    // mountain seen from one valley further back" rather than the
-    // foreground hill twin-stamped. The previous mix factors of
-    // 0.55 / 0.45 / 0.40 (more than half-way to the sky colour)
-    // washed the back hill out so far that the user reported it as
-    // "almost invisible." Tightening the mix to ~0.20 keeps the
-    // distance cue (distant objects pick up a tiny bit of sky tint)
-    // but lands the back hill clearly in the ground-tone family --
-    // visibly a shade lighter than the user's silhouette without
-    // dissolving into the sky.
+    // Back-hill fill: pinned to the ground colour family with the
+    // tiniest possible atmospheric-perspective tint toward the sky.
+    //
+    // Tuning history:
+    //   0.55 / 0.45 / 0.40 -- "almost invisible" per the user
+    //   0.22 / 0.18 / 0.15 -- still too washed out, the user said
+    //                         it should be "a lot darker, almost
+    //                         as dark as our own prediction curve"
+    //   0.08 / 0.06 / 0.05 -- current. Almost identical to the
+    //                         prediction hill at mix=0 with just
+    //                         a hairline of sky-warm shifting it
+    //                         into the "back layer of the same
+    //                         range" optical band.
+    //
+    // The 3D depth cue now comes overwhelmingly from the
+    // consensusHorizonY offset (the back hill sits above the
+    // foreground hill on the canvas, so its silhouette pokes out
+    // BEHIND the prediction hill instead of sharing its base
+    // line) rather than from colour saturation. Painters call
+    // this aerial perspective "by elevation, not by hue" and it
+    // is the look the user described: prediction hill at the
+    // front, consensus hill behind it, both clearly readable
+    // mountains rather than the back one fading to mist.
     consensusFill = {
-      top: mix(palettes.ground.top, palettes.sky.bottom, 0.22),
-      bottom: mix(palettes.ground.bottom, palettes.sky.bottom, 0.18),
-      line: mix(palettes.ground.line, palettes.sky.bottom, 0.15),
+      top: mix(palettes.ground.top, palettes.sky.bottom, 0.08),
+      bottom: mix(palettes.ground.bottom, palettes.sky.bottom, 0.06),
+      line: mix(palettes.ground.line, palettes.sky.bottom, 0.05),
     };
   }
 

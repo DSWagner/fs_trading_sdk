@@ -266,25 +266,32 @@ describe('Receipt page: graceful market fallback', () => {
   // ────────────────────────────────────────────────────────────────────
   // POLAROID FRAME GEOMETRY  -- pins the wrapper-locks-the-box contract.
   //
-  // Regression for "the polaroid sits inside a much taller frame with
-  // empty space below it and the caption strip is barely visible".
-  // The previous "wrapper has only width, height comes from the SVG"
-  // contract relied on flex/grid layout settling the SVG's intrinsic
-  // height through block flow before the wrapper resolved its own
-  // height -- in practice, on the live receipt page that meant the
-  // wrapper sometimes inherited the grid cell's stretched height (a
-  // taller box than the SVG) and the artifact ended up floating in a
-  // visibly empty frame. The current contract pins the wrapper to the
-  // exact pixel box of the polaroid:
-  //   - wrapper has explicit width AND height (= width * 1.5)
-  //   - wrapper has flexShrink:0 + display:block to neutralise any
-  //     parent flex/grid shrinking
-  //   - SVG renders at its intrinsic pixel size (width x width*1.5)
-  //     via the SVG element's width/height attributes; the wrapper
-  //     and the SVG agree by construction
+  // Regression history:
+  //   v1: "wrapper has only width, height comes from SVG" -- the
+  //       wrapper sometimes inherited the grid cell's stretched height
+  //       (taller than the SVG) and the artifact floated in an empty
+  //       frame.
+  //   v2: "wrapper has explicit numeric width AND height" -- broke on
+  //       narrow viewports (e.g. ~1024 px window with the receipt
+  //       page's 1fr/1fr grid -- right column was ~460 px, but the
+  //       wrapper was pinned to width:480/height:720). Browsers
+  //       clipped the wrapper width to fit the cell while leaving the
+  //       height pinned, the SVG inside (with global CSS
+  //       max-width:100%; height:auto; aspect-ratio:2/3) sized to
+  //       460x690, and 30 px of empty matte appeared at the bottom of
+  //       the wrapper -- the exact "polaroid is cut off, the caption
+  //       is missing" bug the user kept reporting.
+  //   v3 (current): the wrapper expresses size as a UPPER BOUND
+  //       (width:100%; maxWidth:<polaroidWidth>) with HEIGHT DERIVED
+  //       (aspectRatio:'2 / 3'). When the grid cell shrinks the
+  //       wrapper, BOTH dimensions shrink in lockstep; when the cell
+  //       has plenty of room, the wrapper grows up to polaroidWidth
+  //       and stops. The SVG inside fills the wrapper exactly via a
+  //       targeted CSS rule keyed on `[data-testid="receipt-polaroid-
+  //       frame"] > svg`, and the caption strip is always visible.
   // ────────────────────────────────────────────────────────────────────
 
-  it('the polaroid frame wrapper pins both width and height (the wrapper IS the artifact box)', () => {
+  it('the polaroid frame wrapper sizes itself with maxWidth + aspectRatio so the SVG content always fills the box', () => {
     useMarketMock.mockReturnValue({
       market: null,
       loading: false,
@@ -299,24 +306,29 @@ describe('Receipt page: graceful market fallback', () => {
     ) as HTMLElement | null;
     expect(frame).not.toBeNull();
     const style = (frame as HTMLElement).style;
-    const w = parseInt(style.width, 10);
-    const h = parseInt(style.height, 10);
-    expect(w).toBeGreaterThan(0);
-    expect(h).toBeGreaterThan(0);
-    // The wrapper IS the artifact box -- height tracks width at
-    // exactly the polaroid's 2:3 portrait aspect ratio (height ==
-    // round(width * 1.5)). No more "SVG intrinsic height drives the
-    // wrapper through block flow" indirection.
-    expect(Math.abs(h - Math.round(w * 1.5))).toBeLessThanOrEqual(1);
-    // flex-shrink must be 0 so a narrow flex column does not squish.
+    // Width is expressed as 100% so the wrapper expands to fill its
+    // grid cell up to the maxWidth cap.
+    expect(style.width).toBe('100%');
+    // maxWidth pins the upper bound at the polaroid's editorial size.
+    // Any positive numeric pixel value is acceptable here; we only
+    // require it to be set so the wrapper can never grow indefinitely.
+    const maxW = parseInt(style.maxWidth, 10);
+    expect(maxW).toBeGreaterThan(0);
+    // aspectRatio derives the wrapper's height from its width at the
+    // polaroid's portrait ratio. Browsers normalise '2 / 3' to
+    // '2 / 3' or '0.66...'; we accept any '2 / 3' or '2/3' form.
+    const ar = style.aspectRatio.replace(/\s+/g, '');
+    expect(ar === '2/3' || ar === '0.6666666666666666').toBe(true);
+    // flex-shrink must be 0 so a narrow flex column does not squish
+    // BELOW the natural width=100%/maxWidth resolution.
     expect(style.flexShrink).toBe('0');
-    // No aspectRatio property: explicit width+height is the contract.
-    // (If aspectRatio were also set it would be redundant at best and
-    // create a competing constraint at worst.)
-    expect(style.aspectRatio).toBe('');
+    // The wrapper must NOT pin an explicit numeric height. That was
+    // the v2 bug: a height pin combined with grid-cell width
+    // clamping created an empty matte band below the SVG.
+    expect(style.height).toBe('');
   });
 
-  it('the polaroid SVG declares explicit width and height attributes matching its 2:3 intrinsic size', () => {
+  it('the polaroid SVG keeps its viewBox-driven intrinsic attributes; the receipt-frame CSS rule stretches it to fill the wrapper', () => {
     useMarketMock.mockReturnValue({
       market: null,
       loading: false,
@@ -330,21 +342,21 @@ describe('Receipt page: graceful market fallback', () => {
       '[data-testid="receipt-polaroid-frame"] svg[role="img"][aria-label^="Polaroid receipt"]',
     ) as SVGSVGElement | null;
     expect(svg).not.toBeNull();
-    // The SVG must carry explicit numeric width/height attributes so
-    // its intrinsic size is the full 2:3 box. The inline style must
-    // NOT set width:100%/height:100% because that combination
-    // interacted badly with the wrapper's aspect-ratio in some
-    // browsers and caused the caption strip to be hidden in an empty
-    // sub-region.
+    // The SVG must still carry numeric width/height attributes for
+    // intrinsic-size fallbacks (PNG export, off-screen renders, share-
+    // image generation). They are the SVG's own viewBox basis.
     const w = parseInt(svg!.getAttribute('width') || '0', 10);
     const h = parseInt(svg!.getAttribute('height') || '0', 10);
     expect(w).toBeGreaterThan(0);
     expect(Math.abs(h - Math.round(w * 1.5))).toBeLessThanOrEqual(1);
-    const svgStyle = (svg as SVGSVGElement).style;
-    // Inline style must NOT pin width/height to 100% -- the SVG
-    // renders at its intrinsic attribute size.
-    expect(svgStyle.width).toBe('');
-    expect(svgStyle.height).toBe('');
+    // The viewBox must agree with the width/height attributes so the
+    // CSS-driven stretch (width:100%; height:100% via the targeted
+    // [data-testid="receipt-polaroid-frame"] > svg selector) keeps
+    // the same coordinate space. preserveAspectRatio defaults to
+    // xMidYMid meet so the photo, scale strip, and caption never
+    // distort even when the wrapper has a slightly different aspect.
+    const viewBox = svg!.getAttribute('viewBox') || '';
+    expect(viewBox).toBe(`0 0 ${w} ${h}`);
   });
 
   // ────────────────────────────────────────────────────────────────────

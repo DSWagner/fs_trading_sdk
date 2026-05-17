@@ -293,24 +293,33 @@ function ReceiptView({
 
   // Receipt page polaroid sizing.
   //
-  // On desktop the receipt is rendered in the right cell of a
-  // 1fr 1fr grid inside a `maxWidth: 1120` container with
-  // `gap: 56` and `padding: 0 24`. The right column therefore
-  // tops out at  (1120 - 48 - 56) / 2 = 508 px. The previous
-  // 420 px polaroid filled only 82% of that column, leaving
-  // visible empty space on either side of the artifact and
-  // shrinking the caption strip's title to 21 px (a font size
-  // that is technically rendering but hard to read at this
-  // distance from the screen and easy to mistake for "the
-  // caption is missing"). 480 px fills 95% of the column,
-  // bumps the title to 24 px and the footer to 13 px, and
-  // keeps a comfortable ~14 px breathing margin on each side
-  // so the polaroid still reads as a discrete object rather
-  // than a full-bleed banner. Mobile keeps 300 px because the
-  // grid collapses to a single column there and 300 already
-  // dominates the viewport.
+  // Polaroid sizing.
+  //
+  // The receipt page renders inside a `maxWidth: 1120` container with
+  // `padding: 0 24` (so the content area is at most 1072 px), then
+  // inside a `1fr 1fr` grid with `gap: 56`. The right column on a
+  // 1120-wide-or-larger viewport tops out at (1120 - 48 - 56) / 2 =
+  // 508 px. On NARROWER viewports (e.g. a 1024-wide window like the
+  // user's screenshot), the right column shrinks to (1024 - 48 - 56)
+  // / 2 = 460 px -- which is LESS than our desired 480 px polaroid.
+  //
+  // Previous attempt: pin the wrapper to `width: 480, height: 720`.
+  // That broke on the 1024-wide viewport because the grid cell
+  // capped the wrapper's WIDTH at ~460 px (grid items can't push
+  // their cell wider than `1fr` allows) but the wrapper's HEIGHT
+  // stayed pinned at 720 px. The SVG inside, with the global CSS
+  // rule `max-width: 100%; height: auto; aspect-ratio: 2/3`, then
+  // sized down to 460 x 690, leaving 30 px of empty matte at the
+  // bottom of the wrapper -- exactly the "polaroid is cut off, the
+  // caption is missing" bug the user kept reporting.
+  //
+  // The fix: the wrapper expresses width as a UPPER BOUND
+  // (`maxWidth: polaroidWidth`) and height as a derived property
+  // (`aspectRatio: '2/3'`). When the grid cell shrinks the
+  // wrapper, BOTH dimensions shrink in lockstep, the SVG inside
+  // (also `width: 100%, height: 100%`) tracks them exactly, and
+  // the caption strip stays visible at every viewport.
   const polaroidWidth = isMobile ? 300 : 480;
-  const polaroidHeight = Math.round(polaroidWidth * 1.5);
   const isOwner = user?.username === merged.username;
   const isOpen = marketResolutionState !== 'resolved' && marketResolutionState !== 'voided';
   const showCashOutPanel = isOwner && isOpen && cashedOut == null;
@@ -377,28 +386,36 @@ function ReceiptView({
     </div>
   );
 
-  // Pin the wrapper to the polaroid's exact pixel box. The wrapper
-  // is the absolute-positioning context for the `CashedOutStamp`
-  // overlay and the `ShareKit` PNG-export ref, and it doubles as
-  // the visual "frame" the user perceives around the artifact.
-  // Locking BOTH width and height (rather than relying on the SVG
-  // child's intrinsic size to dictate the wrapper's height through
-  // block flow) eliminates an entire class of layout drift -- the
-  // user kept seeing the polaroid sit inside a taller column with
-  // empty space below it because the wrapper was inheriting the
-  // grid cell's stretched height before the SVG had painted its
-  // intrinsic dimensions. With explicit width + height, the box is
-  // exactly polaroidWidth x polaroidHeight from the first frame.
-  // The `display: 'block'` is defensive: it neutralises any flex /
-  // grid-item shrinking the wrapper would otherwise inherit.
+  // The wrapper is the absolute-positioning context for the
+  // `CashedOutStamp` overlay and the `ShareKit` PNG-export ref. It
+  // doubles as the visual "frame" the user perceives around the
+  // artifact. The sizing contract:
+  //
+  //   - `width: 100%` so the wrapper expands to fill its grid cell
+  //     all the way up to `maxWidth` (no orphan whitespace on
+  //     wide viewports).
+  //   - `maxWidth: polaroidWidth` so the wrapper never grows past
+  //     the editorial size (480 desktop / 300 mobile).
+  //   - `aspectRatio: '2 / 3'` so HEIGHT TRACKS WIDTH at the
+  //     polaroid's portrait ratio. When the grid cell shrinks the
+  //     wrapper on narrower viewports, the height shrinks with it
+  //     instead of staying pinned at the fully-wide height
+  //     (which left empty matte at the bottom and clipped the
+  //     caption strip from view).
+  //
+  // The `<Polaroid>` SVG inside uses `width: 100%, height: 100%`
+  // (set in `Polaroid.tsx`) so its viewBox content fills the
+  // wrapper exactly at every viewport, regardless of the SVG's
+  // intrinsic 480 x 720 attribute size.
   const polaroidNode = (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
       <div
         ref={polaroidRef}
         style={{
           position: 'relative',
-          width: polaroidWidth,
-          height: polaroidHeight,
+          width: '100%',
+          maxWidth: polaroidWidth,
+          aspectRatio: '2 / 3',
           flexShrink: 0,
           display: 'block',
         }}

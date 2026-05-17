@@ -205,35 +205,35 @@ html {
   min-height: 100vh;
 }
 
-/* SVG polaroids must never extend past their container's width AND
- * must always render at the full 2:3 aspect ratio so the caption strip
- * (italic market title + @handle + predicted/stake/date footer) is
- * visible under the photo. Without `height: auto` + `aspect-ratio`,
- * browsers honour the SVG's explicit `width` attribute, get clamped
- * by `max-width: 100%`, and then leave the explicit `height`
- * attribute alone -- which produces a SVG element that's narrower
- * than the original yet still uses the original height in CSS
- * pixels. With `preserveAspectRatio="xMidYMid meet"` (the SVG
- * default), the viewBox content is then scale-to-fit centred inside
- * the new (narrower, but full-original-height) box, which renders
- * the photo + scale strip at the top, the caption strip at the
- * bottom, and a HUGE empty band of matte in between -- exactly the
- * "polaroid shows photo and scale but the title and footer are
- * missing" bug the user reported.
- *
- * The fix is to let HEIGHT track WIDTH. With `aspect-ratio: 2/3` +
- * `height: auto`, a clamped width pulls the height down
- * proportionally; the viewBox content fills the box exactly, and
- * the caption strip stays visible. Pages that host the polaroid in
- * a flex/grid cell still set their own polaroidWidth so the
- * intrinsic size is normally a perfect match for the container --
- * this rule is the safety net for browser zoom and narrow
- * viewports. */
+/* Default polaroid SVG behaviour: always block, never overflow its
+ * parent. Most callsites (Landing, BetFlow, StyleGallery,
+ * ComparisonPair, Profile thumbnails, etc.) pass an explicit numeric
+ * `width` prop and want the SVG to render at exactly those pixels.
+ * The previous attempt to pin `aspect-ratio: 2/3` here was the root
+ * cause of "the polaroid shows the photo and scale strip but the
+ * caption is missing" -- when the wrapper happened to be wider than
+ * the SVG (e.g. flex stretch in a wide cell), the SVG sized its
+ * width to its intrinsic attribute and then DERIVED its own height
+ * via the aspect-ratio rule, leaving a band of empty matte at the
+ * bottom of the wrapper that visually clipped the caption. */
 svg[role="img"][aria-label^="Polaroid receipt"] {
   display: block;
   max-width: 100%;
-  height: auto;
-  aspect-ratio: 2 / 3;
+}
+
+/* Receipt page wrapper: the wrapper itself is sized as
+ * `width: 100%; maxWidth: <polaroidWidth>; aspectRatio: 2 / 3` so
+ * BOTH dimensions track the available column width in lockstep.
+ * This rule makes the SVG inside ALSO fill the wrapper exactly
+ * (overriding the SVG's intrinsic 480x720 attributes) so the
+ * viewBox content fills the wrapper at every viewport, with the
+ * caption strip always visible at the bottom. Scoped to the
+ * receipt wrapper only so other polaroid hosts (ComparisonPair,
+ * Profile, BetFlow preview pair, Landing develop demo, gallery
+ * thumbnails) keep rendering at their intrinsic pixel sizes. */
+[data-testid="receipt-polaroid-frame"] > svg[role="img"][aria-label^="Polaroid receipt"] {
+  width: 100%;
+  height: 100%;
 }
 
 a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible {
