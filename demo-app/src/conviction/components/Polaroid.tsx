@@ -452,21 +452,21 @@ function PolaroidImpl(props: PolaroidProps) {
       height={height}
       viewBox={`0 0 ${width} ${height}`}
       xmlns="http://www.w3.org/2000/svg"
+      preserveAspectRatio="xMidYMid meet"
       style={{
-        // The SVG renders at its INTRINSIC pixel size (set via the
-        // width/height attributes above). We deliberately do NOT
-        // set width:100%/height:100% here -- empirical testing
-        // showed that combination interacted badly with the
-        // wrapper's aspect-ratio under some browser zoom levels,
-        // causing the SVG content to scale-to-fit inside a square
-        // sub-region and leaving the lower 25% of the polaroid
-        // (the caption strip with market title + handle + date)
-        // empty. Letting the SVG size from its attributes is the
-        // simpler, more reliable choice; responsiveness is handled
-        // by the index.css global rule (max-width:100% +
-        // height:auto + aspect-ratio:2/3) for the rare case the
-        // container is narrower than the polaroid's intrinsic
-        // width.
+        // The SVG paints into a `viewBox="0 0 <width> <height>"`
+        // coordinate system, so its internal layout (photo, scale
+        // strip, caption) is always relative to <width> x <height>.
+        // We render at the SVG's intrinsic pixel size (driven by
+        // the `width=` and `height=` attributes above), which is
+        // the size every other page in the app already expects --
+        // StyleGallery, Landing, BetFlow's preview pair,
+        // ComparisonPair, etc. all hand the polaroid an explicit
+        // numeric `width` prop and want the SVG to render at
+        // exactly that pixel size with the caller deciding what to
+        // do with it. The Receipt page additionally pins its
+        // wrapper to `polaroidWidth x polaroidHeight` so the
+        // wrapper box and the SVG box agree by construction.
         display: 'block',
         filter: developFilter,
         transition: developTransition,

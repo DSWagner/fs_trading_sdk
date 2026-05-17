@@ -264,23 +264,27 @@ describe('Receipt page: graceful market fallback', () => {
   });
 
   // ────────────────────────────────────────────────────────────────────
-  // POLAROID FRAME GEOMETRY  -- pins the simple, reliable contract.
+  // POLAROID FRAME GEOMETRY  -- pins the wrapper-locks-the-box contract.
   //
-  // Regression for "the polaroid is cropped and missing the caption
-  // strip" -- the wrapper used to set width + height + aspectRatio
-  // simultaneously, which interacted badly with the SVG's viewBox
-  // scaling under some browser zoom levels (the SVG content rendered
-  // inside a square sub-region, leaving the lower 25% of the polaroid
-  // empty). The current contract is the simplest possible:
-  //   - wrapper has explicit width and flexShrink:0, no height
+  // Regression for "the polaroid sits inside a much taller frame with
+  // empty space below it and the caption strip is barely visible".
+  // The previous "wrapper has only width, height comes from the SVG"
+  // contract relied on flex/grid layout settling the SVG's intrinsic
+  // height through block flow before the wrapper resolved its own
+  // height -- in practice, on the live receipt page that meant the
+  // wrapper sometimes inherited the grid cell's stretched height (a
+  // taller box than the SVG) and the artifact ended up floating in a
+  // visibly empty frame. The current contract pins the wrapper to the
+  // exact pixel box of the polaroid:
+  //   - wrapper has explicit width AND height (= width * 1.5)
+  //   - wrapper has flexShrink:0 + display:block to neutralise any
+  //     parent flex/grid shrinking
   //   - SVG renders at its intrinsic pixel size (width x width*1.5)
-  //     via the SVG element's width/height attributes
-  //   - the global CSS rule scales the SVG proportionally if the
-  //     container ever gets narrower than the polaroid's intrinsic
-  //     width (height:auto + aspect-ratio:2/3)
+  //     via the SVG element's width/height attributes; the wrapper
+  //     and the SVG agree by construction
   // ────────────────────────────────────────────────────────────────────
 
-  it('the polaroid frame wrapper sets width and flexShrink (height comes from the SVG)', () => {
+  it('the polaroid frame wrapper pins both width and height (the wrapper IS the artifact box)', () => {
     useMarketMock.mockReturnValue({
       market: null,
       loading: false,
@@ -296,13 +300,19 @@ describe('Receipt page: graceful market fallback', () => {
     expect(frame).not.toBeNull();
     const style = (frame as HTMLElement).style;
     const w = parseInt(style.width, 10);
+    const h = parseInt(style.height, 10);
     expect(w).toBeGreaterThan(0);
+    expect(h).toBeGreaterThan(0);
+    // The wrapper IS the artifact box -- height tracks width at
+    // exactly the polaroid's 2:3 portrait aspect ratio (height ==
+    // round(width * 1.5)). No more "SVG intrinsic height drives the
+    // wrapper through block flow" indirection.
+    expect(Math.abs(h - Math.round(w * 1.5))).toBeLessThanOrEqual(1);
     // flex-shrink must be 0 so a narrow flex column does not squish.
     expect(style.flexShrink).toBe('0');
-    // The wrapper deliberately does NOT set height/minHeight/
-    // aspectRatio -- those caused regressions where the SVG content
-    // collapsed into a square sub-region. Height comes from the SVG.
-    expect(style.height).toBe('');
+    // No aspectRatio property: explicit width+height is the contract.
+    // (If aspectRatio were also set it would be redundant at best and
+    // create a competing constraint at worst.)
     expect(style.aspectRatio).toBe('');
   });
 

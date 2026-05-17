@@ -263,7 +263,26 @@ function ReceiptView({
     setTimeout(() => setCopyState('idle'), 2000);
   };
 
-  const polaroidWidth = isMobile ? 300 : 420;
+  // Receipt page polaroid sizing.
+  //
+  // On desktop the receipt is rendered in the right cell of a
+  // 1fr 1fr grid inside a `maxWidth: 1120` container with
+  // `gap: 56` and `padding: 0 24`. The right column therefore
+  // tops out at  (1120 - 48 - 56) / 2 = 508 px. The previous
+  // 420 px polaroid filled only 82% of that column, leaving
+  // visible empty space on either side of the artifact and
+  // shrinking the caption strip's title to 21 px (a font size
+  // that is technically rendering but hard to read at this
+  // distance from the screen and easy to mistake for "the
+  // caption is missing"). 480 px fills 95% of the column,
+  // bumps the title to 24 px and the footer to 13 px, and
+  // keeps a comfortable ~14 px breathing margin on each side
+  // so the polaroid still reads as a discrete object rather
+  // than a full-bleed banner. Mobile keeps 300 px because the
+  // grid collapses to a single column there and 300 already
+  // dominates the viewport.
+  const polaroidWidth = isMobile ? 300 : 480;
+  const polaroidHeight = Math.round(polaroidWidth * 1.5);
   const isOwner = user?.username === merged.username;
   const isOpen = marketResolutionState !== 'resolved' && marketResolutionState !== 'voided';
   const showCashOutPanel = isOwner && isOpen && cashedOut == null;
@@ -330,21 +349,20 @@ function ReceiptView({
     </div>
   );
 
-  // The polaroid SVG renders at its INTRINSIC pixel size (set via
-  // width/height attributes inside the Polaroid component). The
-  // wrapper provides positioning context for the cashed-out stamp
-  // overlay and the share-kit ref target -- it deliberately uses
-  // ONLY width/flexShrink, no explicit height or aspect-ratio,
-  // because empirical testing showed that combining wrapper
-  // aspect-ratio with the SVG's viewBox-based scaling caused some
-  // browsers to render the SVG content inside a square sub-region
-  // (leaving the lower 25% of the polaroid -- the caption strip with
-  // market title + handle + date -- empty). Letting the SVG dictate
-  // the wrapper's height through normal block flow is the simpler,
-  // more reliable approach. `flexShrink: 0` keeps the polaroid from
-  // being squished on narrow viewports; responsive scaling for very
-  // narrow containers is handled by the global CSS rule in
-  // index.css (max-width:100% + height:auto + aspect-ratio:2/3).
+  // Pin the wrapper to the polaroid's exact pixel box. The wrapper
+  // is the absolute-positioning context for the `CashedOutStamp`
+  // overlay and the `ShareKit` PNG-export ref, and it doubles as
+  // the visual "frame" the user perceives around the artifact.
+  // Locking BOTH width and height (rather than relying on the SVG
+  // child's intrinsic size to dictate the wrapper's height through
+  // block flow) eliminates an entire class of layout drift -- the
+  // user kept seeing the polaroid sit inside a taller column with
+  // empty space below it because the wrapper was inheriting the
+  // grid cell's stretched height before the SVG had painted its
+  // intrinsic dimensions. With explicit width + height, the box is
+  // exactly polaroidWidth x polaroidHeight from the first frame.
+  // The `display: 'block'` is defensive: it neutralises any flex /
+  // grid-item shrinking the wrapper would otherwise inherit.
   const polaroidNode = (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
       <div
@@ -352,7 +370,9 @@ function ReceiptView({
         style={{
           position: 'relative',
           width: polaroidWidth,
+          height: polaroidHeight,
           flexShrink: 0,
+          display: 'block',
         }}
         data-testid="receipt-polaroid-frame"
       >
