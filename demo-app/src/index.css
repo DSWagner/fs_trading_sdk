@@ -221,17 +221,34 @@ svg[role="img"][aria-label^="Polaroid receipt"] {
   max-width: 100%;
 }
 
-/* Receipt page wrapper: the wrapper itself is sized as
- * `width: 100%; maxWidth: <polaroidWidth>; aspectRatio: 2 / 3` so
- * BOTH dimensions track the available column width in lockstep.
- * This rule makes the SVG inside ALSO fill the wrapper exactly
- * (overriding the SVG's intrinsic 480x720 attributes) so the
- * viewBox content fills the wrapper at every viewport, with the
- * caption strip always visible at the bottom. Scoped to the
- * receipt wrapper only so other polaroid hosts (ComparisonPair,
- * Profile, BetFlow preview pair, Landing develop demo, gallery
- * thumbnails) keep rendering at their intrinsic pixel sizes. */
+/* Receipt page wrapper: the wrapper itself is sized via the
+ * classic padding-bottom aspect-ratio hack
+ * (`width: 100%; max-width: <polaroidWidth>; height: 0;
+ * padding-bottom: 150%`). That makes the wrapper a zero-content-
+ * height box whose 150% bottom padding is computed against its
+ * OWN WIDTH (CSS rule for percentage padding) -- so the wrapper's
+ * total box height equals 1.5x its own width at every viewport,
+ * the polaroid's 2:3 portrait ratio, with no `aspect-ratio`
+ * dependency and no path that lets content min-height push the
+ * wrapper taller.
+ *
+ * The SVG inside is absolute-positioned so it FILLS that
+ * padding-derived box exactly (top-left corner of the wrapper's
+ * padding box, full width, full height). `inset: 0` anchors the
+ * SVG to all four edges; `width / height: 100%` is the
+ * width-and-height-of-containing-block expansion that makes the
+ * viewBox content scale to the box's pixel dimensions. The result
+ * is a polaroid SVG that paints from the wrapper's top-left to its
+ * bottom-right corner, with the caption strip ALWAYS visible at
+ * the bottom edge regardless of viewport width or browser zoom.
+ *
+ * Scoped to the receipt wrapper only so other polaroid hosts
+ * (ComparisonPair, Profile, BetFlow preview pair, Landing develop
+ * demo, gallery thumbnails) keep rendering at their intrinsic
+ * pixel sizes. */
 [data-testid="receipt-polaroid-frame"] > svg[role="img"][aria-label^="Polaroid receipt"] {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
 }

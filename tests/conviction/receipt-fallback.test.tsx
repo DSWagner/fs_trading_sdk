@@ -274,24 +274,27 @@ describe('Receipt page: graceful market fallback', () => {
   //   v2: "wrapper has explicit numeric width AND height" -- broke on
   //       narrow viewports (e.g. ~1024 px window with the receipt
   //       page's 1fr/1fr grid -- right column was ~460 px, but the
-  //       wrapper was pinned to width:480/height:720). Browsers
-  //       clipped the wrapper width to fit the cell while leaving the
-  //       height pinned, the SVG inside (with global CSS
-  //       max-width:100%; height:auto; aspect-ratio:2/3) sized to
-  //       460x690, and 30 px of empty matte appeared at the bottom of
-  //       the wrapper -- the exact "polaroid is cut off, the caption
-  //       is missing" bug the user kept reporting.
-  //   v3 (current): the wrapper expresses size as a UPPER BOUND
-  //       (width:100%; maxWidth:<polaroidWidth>) with HEIGHT DERIVED
-  //       (aspectRatio:'2 / 3'). When the grid cell shrinks the
-  //       wrapper, BOTH dimensions shrink in lockstep; when the cell
-  //       has plenty of room, the wrapper grows up to polaroidWidth
-  //       and stops. The SVG inside fills the wrapper exactly via a
-  //       targeted CSS rule keyed on `[data-testid="receipt-polaroid-
-  //       frame"] > svg`, and the caption strip is always visible.
+  //       wrapper was pinned to width:480/height:720).
+  //   v3: "width:100%; maxWidth:<n>; aspect-ratio:2/3". Should have
+  //       worked, but the user reported the wrapper rendering taller
+  //       than 2:3 in production at desktop ratios -- the caption
+  //       strip dropped into a band of empty matte below the SVG.
+  //       `aspect-ratio` is a "preferred" sizing hint that yields to
+  //       content min-height, flex-item sizing, and (per user
+  //       reports) at least one browser layout path on the live
+  //       receipt grid.
+  //   v4 (current): use the classic padding-bottom aspect-ratio hack
+  //       (`width:100%; maxWidth:<n>; height:0; padding-bottom:150%`).
+  //       Percentage padding resolves against the wrapper's OWN
+  //       width per CSS 2.1 §8.4 -- 150% of width is the wrapper's
+  //       full height, enforced by the box model with zero failure
+  //       modes since 2008. The SVG inside is absolute-positioned
+  //       (via the targeted CSS rule) so it fills the padding-derived
+  //       box edge-to-edge, and the caption strip is ALWAYS visible
+  //       at the bottom regardless of viewport, browser, or zoom.
   // ────────────────────────────────────────────────────────────────────
 
-  it('the polaroid frame wrapper sizes itself with maxWidth + aspectRatio so the SVG content always fills the box', () => {
+  it('the polaroid frame wrapper uses the padding-bottom aspect-ratio hack to lock height = 1.5x width at every viewport', () => {
     useMarketMock.mockReturnValue({
       market: null,
       loading: false,
@@ -310,22 +313,20 @@ describe('Receipt page: graceful market fallback', () => {
     // grid cell up to the maxWidth cap.
     expect(style.width).toBe('100%');
     // maxWidth pins the upper bound at the polaroid's editorial size.
-    // Any positive numeric pixel value is acceptable here; we only
-    // require it to be set so the wrapper can never grow indefinitely.
     const maxW = parseInt(style.maxWidth, 10);
     expect(maxW).toBeGreaterThan(0);
-    // aspectRatio derives the wrapper's height from its width at the
-    // polaroid's portrait ratio. Browsers normalise '2 / 3' to
-    // '2 / 3' or '0.66...'; we accept any '2 / 3' or '2/3' form.
-    const ar = style.aspectRatio.replace(/\s+/g, '');
-    expect(ar === '2/3' || ar === '0.6666666666666666').toBe(true);
+    // The padding-bottom aspect-ratio hack: explicit `height: 0` AND
+    // `padding-bottom: 150%`. This is the bulletproof aspect-ratio
+    // contract that has worked since CSS 2.1 (2008). `height: 0`
+    // ensures the wrapper has zero CONTENT height, and the 150%
+    // bottom padding (computed against the wrapper's OWN WIDTH per
+    // CSS 2.1 §8.4 percentage padding rule) becomes the entire box
+    // height = 1.5 * width = the polaroid's 2:3 portrait ratio.
+    expect(style.height).toBe('0px');
+    expect(style.paddingBottom).toBe('150%');
     // flex-shrink must be 0 so a narrow flex column does not squish
     // BELOW the natural width=100%/maxWidth resolution.
     expect(style.flexShrink).toBe('0');
-    // The wrapper must NOT pin an explicit numeric height. That was
-    // the v2 bug: a height pin combined with grid-cell width
-    // clamping created an empty matte band below the SVG.
-    expect(style.height).toBe('');
   });
 
   it('the polaroid SVG keeps its viewBox-driven intrinsic attributes; the receipt-frame CSS rule stretches it to fill the wrapper', () => {

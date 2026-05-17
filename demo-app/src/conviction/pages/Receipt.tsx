@@ -399,24 +399,39 @@ function ReceiptView({
   // The wrapper is the absolute-positioning context for the
   // `CashedOutStamp` overlay and the `ShareKit` PNG-export ref. It
   // doubles as the visual "frame" the user perceives around the
-  // artifact. The sizing contract:
+  // artifact. The sizing contract uses the CLASSIC PADDING-BOTTOM
+  // ASPECT-RATIO HACK (aka the "%-padding box"):
   //
   //   - `width: 100%` so the wrapper expands to fill its grid cell
   //     all the way up to `maxWidth` (no orphan whitespace on
   //     wide viewports).
   //   - `maxWidth: polaroidWidth` so the wrapper never grows past
   //     the editorial size (480 desktop / 300 mobile).
-  //   - `aspectRatio: '2 / 3'` so HEIGHT TRACKS WIDTH at the
-  //     polaroid's portrait ratio. When the grid cell shrinks the
-  //     wrapper on narrower viewports, the height shrinks with it
-  //     instead of staying pinned at the fully-wide height
-  //     (which left empty matte at the bottom and clipped the
-  //     caption strip from view).
+  //   - `paddingBottom: '150%'` so the wrapper's HEIGHT is pinned
+  //     to 1.5x of its WIDTH at every viewport (% padding resolves
+  //     against the containing block's WIDTH, not its height -- so
+  //     `padding-bottom: 150%` always means "1.5 times my own
+  //     width", which is exactly the polaroid's 2:3 portrait
+  //     aspect ratio).
+  //   - `height: 0` so the wrapper has zero content height; the
+  //     150% padding becomes the entire box height.
   //
-  // The `<Polaroid>` SVG inside uses `width: 100%, height: 100%`
-  // (set in `Polaroid.tsx`) so its viewBox content fills the
-  // wrapper exactly at every viewport, regardless of the SVG's
-  // intrinsic 480 x 720 attribute size.
+  // Why not `aspect-ratio: 2 / 3`? In production the user reported
+  // the wrapper rendering taller than 2:3 on desktop, leaving the
+  // caption strip dropped into a band of empty matte at the bottom.
+  // `aspect-ratio` is a "preferred" sizing hint that CAN be
+  // overridden by content min-height, flex-item sizing, browser
+  // bugs, or CSS specificity collisions with global rules; the
+  // padding-bottom trick is enforced by the box model itself and
+  // has worked in every browser since CSS 2.1 (2008), with zero
+  // failure modes.
+  //
+  // The `<Polaroid>` SVG inside is then absolute-positioned (via
+  // the global CSS rule `[data-testid="receipt-polaroid-frame"] >
+  // svg { position: absolute; inset: 0; width: 100%; height: 100%
+  // }`) so it fills the padding-derived box exactly. The CashedOut-
+  // Stamp overlay continues to absolute-position itself against
+  // the wrapper as its containing block.
   const polaroidNode = (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
       <div
@@ -425,7 +440,8 @@ function ReceiptView({
           position: 'relative',
           width: '100%',
           maxWidth: polaroidWidth,
-          aspectRatio: '2 / 3',
+          height: 0,
+          paddingBottom: '150%',
           flexShrink: 0,
           display: 'block',
         }}
