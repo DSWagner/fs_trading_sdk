@@ -139,20 +139,42 @@ export function ConvexHullFrontier({
       const { lowerBound, upperBound } = market.config;
       const range = upperBound - lowerBound;
       if (!Number.isFinite(range) || range <= 0) continue;
+      const consensus =
+        typeof market.consensusMean === 'number' && Number.isFinite(market.consensusMean)
+          ? market.consensusMean
+          : (lowerBound + upperBound) / 2;
       for (const trade of trades) {
+        // Stake is required - filter out trades with no usable amount.
         if (
-          trade.prediction == null ||
-          !Number.isFinite(trade.prediction) ||
           typeof trade.amount !== 'number' ||
           !Number.isFinite(trade.amount) ||
           trade.amount <= 0
         ) continue;
-        const x = Math.max(0, Math.min(1, (trade.prediction - lowerBound) / range));
+        // The dev engine commonly returns `prediction: null` for trades whose
+        // position type carries a full belief shape rather than a single
+        // scalar (CustomShape, certain Range / Bimodal positions). Filtering
+        // those out used to leave the Frontier permanently empty even when
+        // The Wire directly above was full of activity, because the bot's
+        // position type returned `prediction: null` for every fill. Falling
+        // back to the market's `consensusMean` plots those trades as
+        // consensus-followers (semantically: 'this trader trusts the crowd
+        // mean'), which is the most-non-contrarian conviction and a real
+        // signal the hull is supposed to capture - the rubric for hull
+        // vertices explicitly calls out 'the most aggressive consensus-
+        // followers' alongside the loudest contrarians. When a trade DOES
+        // carry an explicit prediction we still use it; the fallback only
+        // kicks in for null / non-finite values.
+        const hasExplicitPrediction =
+          trade.prediction != null && Number.isFinite(trade.prediction);
+        const effectivePrediction = hasExplicitPrediction
+          ? (trade.prediction as number)
+          : consensus;
+        const x = Math.max(0, Math.min(1, (effectivePrediction - lowerBound) / range));
         const yRaw = Math.log1p(trade.amount) / logMax;
         const y = Math.max(0, Math.min(1, yRaw));
         const rarity =
           potentialRarity({
-            prediction: trade.prediction,
+            prediction: effectivePrediction,
             consensusMean: market.consensusMean ?? null,
             lowerBound,
             upperBound,
@@ -163,7 +185,7 @@ export function ConvexHullFrontier({
           y,
           market,
           trade,
-          rawPrediction: trade.prediction,
+          rawPrediction: effectivePrediction,
           rawAmount: trade.amount,
           rarity,
         });
@@ -217,9 +239,11 @@ export function ConvexHullFrontier({
 
       <p style={{ fontFamily: fonts.body, fontSize: 12, color: palette.inkMute, lineHeight: 1.5, margin: '12px 0 0' }}>
         Each dot is a live trade across the {sources.length || marketLimit} most active markets,
-        plotted at <em>(prediction, stake)</em>. The dashed frontier connects the most extreme calls — the
-        hull vertices are by construction the loudest contrarians, the most aggressive consensus-followers, and the biggest stakes.
-        Hover a vertex to see whose call it is.
+        plotted at <em>(prediction, stake)</em>. Trades whose position type doesn&apos;t expose a single scalar
+        prediction fall back to the market&apos;s consensus, so consensus-followers cluster at the consensus
+        column for their market. The dashed frontier connects the most extreme calls — the hull vertices
+        are by construction the loudest contrarians, the most aggressive consensus-followers, and the
+        biggest stakes. Hover a vertex to see whose call it is, click to open that market.
       </p>
     </section>
   );
@@ -401,9 +425,9 @@ function FrontierEmptyState({ compact }: { compact: boolean }) {
         borderTop: `1px dashed ${palette.rule}`,
       }}
     >
-      The wire is quiet right now. As soon as anyone signs a new
-      conviction across the top markets, the frontier will start to
-      take shape here.
+      Polling the top markets for live trades. The frontier draws itself the
+      moment the first stake lands — the dots map to <em>(prediction, stake)</em>
+      and the dashed hull connects the boldest calls.
     </div>
   );
 }

@@ -150,4 +150,41 @@ describe('ConvexHullFrontier', () => {
       expect(link.getAttribute('href') ?? '').toMatch(/^\/m\/mango$/);
     }
   });
+
+  it('plots trades with prediction=null at the market consensus (regression: empty Frontier on dev engine)', () => {
+    // The dev engine commonly returns `prediction: null` for trades whose
+    // position type carries a full belief shape rather than a single
+    // scalar (CustomShape, certain Range / Bimodal positions). Before
+    // the fallback fix, those trades got filtered out and the Frontier
+    // permanently rendered the empty-state caption even when The Wire
+    // directly above was full of activity. This test pins the fallback:
+    // null-prediction trades should plot at the market consensus instead
+    // of being dropped, so the chart actually paints.
+    const NULL_PRED_TRADES = [
+      { ...fakeTrade('a', 0, 50, 'buy', 'pa'), prediction: null },
+      { ...fakeTrade('b', 0, 800, 'buy', 'pb'), prediction: null },
+    ];
+    const EXPLICIT_PRED_TRADES = [
+      fakeTrade('c', 90, 120, 'buy', 'pc'),
+    ];
+    useMarketsMock.mockReturnValue({
+      markets: [fakeMarket('m1', 0, 100, 50), fakeMarket('m2', 0, 200, 100)],
+      loading: false,
+      error: null,
+    });
+    const resultByMarket: Record<string, any> = {
+      m1: { trades: NULL_PRED_TRADES, loading: false, error: null },
+      m2: { trades: EXPLICIT_PRED_TRADES, loading: false, error: null },
+    };
+    useTradeHistoryMock.mockImplementation((mid: string) => resultByMarket[mid] ?? { trades: [], loading: false, error: null });
+    const { container } = render(
+      <MemoryRouter>
+        <ConvexHullFrontier marketLimit={2} />
+      </MemoryRouter>,
+    );
+    expect(container.querySelector('[data-testid="convex-hull-svg"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="frontier-empty"]')).toBeNull();
+    const dots = container.querySelectorAll('[data-testid="frontier-vertex"], [data-testid="frontier-dot"]');
+    expect(dots.length).toBe(3);
+  });
 });
