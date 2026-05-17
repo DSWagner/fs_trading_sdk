@@ -142,13 +142,27 @@ export const ACHIEVEMENT_DEFINITIONS: AchievementDefinition[] = [
     caption: 'You landed within 5% of the truth on at least one call.',
     predicate: (ctx) => ctx.resolved.some((b) => (b.accuracy ?? 0) >= 0.95),
   },
+  // The three "First <tier>" badges use STRICT-TIER predicates: each
+  // unlocks only when an actual receipt of that exact tier exists in
+  // the user's ledger. Earlier the predicates were cumulative (Mythic
+  // also satisfied "First Epic" because Mythic >= Epic on the rarity
+  // ladder), but Conviction's rarity isn't a level progression -- each
+  // bet rolls its tier independently from disagreement x accuracy, so
+  // a single Mythic does NOT imply you ever earned an Epic. The
+  // cumulative version contradicted the rarity ledger directly above
+  // the achievements wall: a user with one Mythic and zero Epics saw
+  // "Epic: 0" in the ledger but "First Epic UNLOCKED" in the wall,
+  // which read as a bug. Strict-tier matches the captions ("a sky-
+  // purple sun", "the gold sky") and the on-screen ledger numbers.
+  // Monotonicity is preserved: tierCounts can only grow as bets are
+  // added, so once a tier is hit it stays unlocked forever.
   {
     id: 'first-epic',
     label: 'First Epic',
     tier: 'silver',
     hint: 'Earn an Epic-tier receipt.',
     caption: 'Your first Epic receipt — a sky-purple sun, hard-earned.',
-    predicate: (ctx) => ctx.tierCounts.epic + ctx.tierCounts.legendary + ctx.tierCounts.mythic >= 1,
+    predicate: (ctx) => ctx.tierCounts.epic >= 1,
   },
   {
     id: 'first-legendary',
@@ -156,7 +170,7 @@ export const ACHIEVEMENT_DEFINITIONS: AchievementDefinition[] = [
     tier: 'gold',
     hint: 'Earn a Legendary-tier receipt.',
     caption: 'The gold sky landed for you. A Legendary receipt is on the wall.',
-    predicate: (ctx) => ctx.tierCounts.legendary + ctx.tierCounts.mythic >= 1,
+    predicate: (ctx) => ctx.tierCounts.legendary >= 1,
   },
   {
     id: 'first-mythic',

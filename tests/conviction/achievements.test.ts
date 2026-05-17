@@ -149,24 +149,28 @@ describe('evaluateAchievements: silver tier unlocks', () => {
     expect(sharp?.unlocked).toBe(true);
   });
 
-  it('unlocks first-epic on any epic/legendary/mythic receipt', () => {
+  it('unlocks first-epic ONLY on an actual Epic receipt (strict-tier; a single Mythic does not satisfy First Epic)', () => {
+    // Strict-tier predicate: First Epic needs an Epic-rarity bet,
+    // not just "any rarity >= Epic". A Mythic-only ledger leaves
+    // First Epic LOCKED, matching the rarity ledger directly above
+    // the achievements wall in the UI ('Epic: 0').
     const epicOnly = evaluateAchievements([bet({ rarity: 'epic' })]).find((a) => a.id === 'first-epic');
     expect(epicOnly?.unlocked).toBe(true);
     const legOnly = evaluateAchievements([bet({ rarity: 'legendary' })]).find((a) => a.id === 'first-epic');
-    expect(legOnly?.unlocked).toBe(true);
+    expect(legOnly?.unlocked).toBe(false);
     const mythicOnly = evaluateAchievements([bet({ rarity: 'mythic' })]).find((a) => a.id === 'first-epic');
-    expect(mythicOnly?.unlocked).toBe(true);
+    expect(mythicOnly?.unlocked).toBe(false);
     const rareOnly = evaluateAchievements([bet({ rarity: 'rare' })]).find((a) => a.id === 'first-epic');
     expect(rareOnly?.unlocked).toBe(false);
   });
 });
 
 describe('evaluateAchievements: gold tier unlocks', () => {
-  it('unlocks first-legendary on any legendary/mythic receipt', () => {
+  it('unlocks first-legendary ONLY on an actual Legendary receipt (strict-tier)', () => {
     const legOnly = evaluateAchievements([bet({ rarity: 'legendary' })]).find((a) => a.id === 'first-legendary');
     expect(legOnly?.unlocked).toBe(true);
     const mythicOnly = evaluateAchievements([bet({ rarity: 'mythic' })]).find((a) => a.id === 'first-legendary');
-    expect(mythicOnly?.unlocked).toBe(true);
+    expect(mythicOnly?.unlocked).toBe(false);
     const epicOnly = evaluateAchievements([bet({ rarity: 'epic' })]).find((a) => a.id === 'first-legendary');
     expect(epicOnly?.unlocked).toBe(false);
   });
@@ -176,6 +180,22 @@ describe('evaluateAchievements: gold tier unlocks', () => {
     expect(m?.unlocked).toBe(true);
     const leg = evaluateAchievements([bet({ rarity: 'legendary' })]).find((a) => a.id === 'first-mythic');
     expect(leg?.unlocked).toBe(false);
+  });
+
+  it('regression: a single Mythic-only ledger unlocks First Mythic but NOT First Epic / First Legendary', () => {
+    // The @critic_at_large demo gallery has exactly one Mythic bet.
+    // The rarity ledger renders Epic: 0, Legendary: 0, Mythic: 1.
+    // The achievements wall must agree: First Mythic unlocked, but
+    // First Epic and First Legendary stay locked.
+    const results = evaluateAchievements([
+      bet({ rarity: 'mythic', resolutionState: 'resolved', accuracy: 1, conviction: 0.9 }),
+    ]);
+    const epic = results.find((a) => a.id === 'first-epic');
+    const legendary = results.find((a) => a.id === 'first-legendary');
+    const mythic = results.find((a) => a.id === 'first-mythic');
+    expect(epic?.unlocked).toBe(false);
+    expect(legendary?.unlocked).toBe(false);
+    expect(mythic?.unlocked).toBe(true);
   });
 
   it('unlocks calibrator only with >=5 resolved AND mean accuracy >= 0.7', () => {
