@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useMarket, useAuth } from '@functionspace/react';
 import { palette, fonts } from '../theme';
@@ -399,30 +399,48 @@ function ReceiptView({
   // The wrapper is the absolute-positioning context for the
   // `CashedOutStamp` overlay and the `ShareKit` PNG-export ref. It
   // doubles as the visual "frame" the user perceives around the
-  // artifact. The sizing contract is now intentionally minimal:
+  // artifact.
   //
-  //   - `position: relative` so the CashedOutStamp and any other
-  //     overlay can absolute-position against the wrapper.
-  //   - `width: 100%` so the wrapper grows to fill its grid cell.
-  //   - `maxWidth: polaroidWidth` so the wrapper never exceeds the
-  //     editorial size (480 desktop / 300 mobile).
-  //   - NO explicit height, NO padding-bottom hack, NO
-  //     aspect-ratio CSS. The wrapper's height is derived in
-  //     normal flow from the SVG inside it, which has the global
-  //     `max-width: 100%; height: auto` pair applied (the standard
-  //     responsive-image idiom) and therefore renders at exactly
-  //     `wrapper-width × (wrapper-width × 720/480)` -- a perfect
-  //     2:3 portrait at every viewport, with no failure mode where
-  //     the wrapper becomes a different shape from the SVG.
+  // The wrapper's WIDTH is set in CSS (`width: 100%; maxWidth:
+  // polaroidWidth`) so it tracks its grid cell up to the editorial
+  // size (480 desktop / 300 mobile). The wrapper's HEIGHT is set
+  // in PIXELS via JS, measured from the wrapper's actual rendered
+  // width inside a synchronous `useLayoutEffect` and re-measured
+  // every time the wrapper resizes (window resize, devtools open,
+  // mobile orientation change, etc.) via a ResizeObserver. The
+  // height is always exactly `measured-width * 1.5`, which is the
+  // polaroid's 2:3 portrait ratio.
   //
-  // This rewrite was forced by repeated production reports of "the
-  // polaroid is rendered too small / not the same shape as its
-  // wrapper" on the receipt page. Every prior fix (aspect-ratio,
-  // explicit height, padding-bottom + absolute SVG, fillParent
-  // inline styles) introduced its own failure mode under one
-  // browser/zoom/grid-cell combination. Sizing the SVG with the
-  // standard responsive-image idiom and letting the wrapper track
-  // it in normal flow eliminates ALL of them at once.
+  // The Polaroid SVG inside is then rendered with `fillParent`,
+  // which adds INLINE
+  // `position: absolute; inset: 0; width: 100%; height: 100%` to
+  // the SVG element. The SVG fills the wrapper's concrete pixel
+  // rectangle to the pixel, with no CSS layout path involved.
+  //
+  // This is the contract that survived "for a tiny fraction of a
+  // second I see it correctly but then it breaks". Every prior
+  // attempt (aspect-ratio CSS, padding-bottom hack, responsive-
+  // image idiom on the SVG, fillParent over a padding-derived box)
+  // had at least one render path on the live receipt grid where
+  // the wrapper and the SVG ended up disagreeing on shape and the
+  // caption strip dropped into empty matte. Putting the wrapper
+  // height into JS as measured pixels eliminates every CSS layout
+  // path that bug ever used.
+  const [wrapperHeight, setWrapperHeight] = useState<number>(() => Math.round(polaroidWidth * 1.5));
+  useLayoutEffect(() => {
+    const el = polaroidRef.current;
+    if (!el) return;
+    const compute = () => {
+      const w = el.clientWidth;
+      if (w > 0) setWrapperHeight(Math.round(w * 1.5));
+    };
+    compute();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(compute);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [polaroidWidth]);
+
   const polaroidNode = (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
       <div
@@ -431,6 +449,7 @@ function ReceiptView({
           position: 'relative',
           width: '100%',
           maxWidth: polaroidWidth,
+          height: wrapperHeight,
           flexShrink: 0,
         }}
         data-testid="receipt-polaroid-frame"
@@ -457,6 +476,10 @@ function ReceiptView({
           animateDevelop
           consensusAtBet={merged.consensusAtBet ?? null}
           expiresAt={(merged as any).expiresAt ?? null}
+          // Inline-fill the wrapper's measured pixel box. See the
+          // wrapper sizing comment above and the `fillParent` prop
+          // doc on Polaroid.tsx for the full rationale.
+          fillParent
         />
         {showCashedStamp && cashedOut && (
           <CashedOutStamp

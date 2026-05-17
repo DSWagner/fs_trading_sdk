@@ -105,6 +105,34 @@ export interface PolaroidProps {
    * misleading "you · 38.45" on the crowd column.
    */
   predictionLabel?: string;
+  /**
+   * When true, the SVG renders with INLINE
+   * `position: absolute; inset: 0; width: 100%; height: 100%` so it
+   * fills its parent positioning context to the pixel, regardless of
+   * what global CSS, browser zoom paths, or build minification do.
+   *
+   * Used by the Receipt page in tandem with a ResizeObserver-driven
+   * explicit pixel height on the wrapper -- the wrapper's width is
+   * set in CSS (width:100%; maxWidth:polaroidWidth), the wrapper's
+   * height is set in JS (measured-width * 1.5) inside a synchronous
+   * `useLayoutEffect`, and the SVG inline-fills that explicit pixel
+   * box. NO CSS hack is in the load-bearing path: the wrapper is a
+   * concrete pixel rectangle, the SVG is inline-styled to fill it,
+   * and there is nowhere a stylesheet rule, browser layout path, or
+   * flex quirk can intervene.
+   *
+   * This is the contract that finally survived "for a tiny fraction
+   * of a second I see it correctly but then it breaks" -- the
+   * earlier responsive-image idiom (max-width:100%; height:auto)
+   * worked on initial paint but was beaten by something in the live
+   * stack on a follow-up React render. Inline styles + measured
+   * pixel dimensions remove every degree of freedom that bug used.
+   *
+   * Other callers (Landing, BetFlow preview pair, ComparisonPair,
+   * gallery thumbnails, Profile cards, etc.) leave this off and the
+   * SVG renders at its intrinsic numeric width/height attributes.
+   */
+  fillParent?: boolean;
 }
 
 // Internal implementation; the exported `Polaroid` below wraps this in
@@ -137,6 +165,7 @@ function PolaroidImpl(props: PolaroidProps) {
     animateDevelop = false,
     consensusAtBet = null,
     predictionLabel = 'you',
+    fillParent = false,
   } = props;
 
   const developed = resolutionState === 'resolved';
@@ -475,14 +504,32 @@ function PolaroidImpl(props: PolaroidProps) {
       style={{
         // The SVG renders at its intrinsic pixel size (the
         // width/height attributes above) by default. The global
-        // CSS rule `svg[role="img"][aria-label^="Polaroid receipt"]
-        // { display: block; max-width: 100%; height: auto; }` makes
-        // the SVG shrink proportionally inside any narrower wrapper
-        // (the standard responsive-image idiom), so every caller
-        // -- Landing, Receipt, BetFlow preview pair, ComparisonPair,
-        // gallery tiles, Profile cards -- gets a 2:3 portrait at
-        // exactly the rendered width with no caller-side gymnastics.
+        // CSS rule on this SVG (`max-width: 100%; height: auto`)
+        // is a safety net for callers that DON'T pass `fillParent`,
+        // shrinking the SVG proportionally if the wrapper happens
+        // to be narrower than its intrinsic width.
+        //
+        // When `fillParent` is set (Receipt page only), we layer
+        // an INLINE `position: absolute; inset: 0; width: 100%;
+        // height: 100%` contract on top of that, so the SVG
+        // ignores the responsive-image idiom and instead absolute-
+        // fills its parent positioning context to the pixel.
+        // Inline styles trump every other CSS path, and the
+        // Receipt wrapper sets its own height in pixels via
+        // ResizeObserver + useLayoutEffect, so the SVG always
+        // paints into a concrete known-good pixel box.
         display: 'block',
+        ...(fillParent
+          ? {
+              position: 'absolute' as const,
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              width: '100%',
+              height: '100%',
+            }
+          : null),
         filter: developFilter,
         transition: developTransition,
         cursor: interactive ? 'pointer' : 'default',

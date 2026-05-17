@@ -206,30 +206,23 @@ html {
 }
 
 /* Default polaroid SVG behaviour: always block, never overflow its
- * parent, and ALWAYS preserve its intrinsic 2:3 portrait ratio.
+ * parent, and (for callers that don't opt into `fillParent`)
+ * preserve its intrinsic 2:3 portrait ratio when shrunk by a
+ * narrow wrapper.
  *
- *   - `display: block` so the SVG never gets the inline-baseline
- *     gap (4-5 px of phantom whitespace) that breaks our flush-fit
- *     wrappers.
- *   - `max-width: 100%` so a too-narrow column shrinks the SVG to
- *     fit instead of letting it overflow and break the page layout.
- *   - `height: auto` is THE critical line. SVG elements with both
- *     `width` and `height` HTML attributes render at those intrinsic
- *     pixels by default -- but as soon as `max-width: 100%` shrinks
- *     the rendered width, the height stays pinned at the intrinsic
- *     720, which DISTORTS the SVG (everything below the photo zone
- *     gets squashed and the caption disappears off the bottom of
- *     the visible scaled area). `height: auto` lets the SVG derive
- *     its rendered height from `width / aspect-ratio-of-viewBox`
- *     so it stays a perfect 2:3 portrait at every viewport.
+ * The Receipt page's polaroid uses a different mechanism --
+ * `fillParent` adds an inline `position: absolute; inset: 0;
+ * width: 100%; height: 100%` to the SVG, and the wrapper's height
+ * is set in pixels via JS / ResizeObserver. So this rule is just
+ * a defensive safety net for the OTHER callers (Landing, BetFlow
+ * preview pair, ComparisonPair, gallery thumbnails, Profile cards,
+ * etc.) that pass an explicit numeric `width` prop and want the
+ * SVG to render at exactly those intrinsic pixels.
  *
- * This pair (`max-width: 100%; height: auto`) is the
- * standard responsive-image idiom adapted to SVG, and it lets the
- * Receipt wrapper just be `width: 100%; max-width: polaroidWidth`
- * (with auto height) -- the wrapper's height tracks the SVG's
- * rendered height in normal flow, no padding-bottom hack, no
- * aspect-ratio CSS, no global selectors trying to absolute-fill
- * the SVG into a zero-content-height padding box. */
+ * `max-width: 100%; height: auto` is the standard responsive-image
+ * idiom adapted to SVG. If a caller's wrapper is narrower than the
+ * polaroid's intrinsic width, the SVG shrinks to fit and the height
+ * shrinks proportionally to preserve the 2:3 ratio. */
 svg[role="img"][aria-label^="Polaroid receipt"] {
   display: block;
   max-width: 100%;
