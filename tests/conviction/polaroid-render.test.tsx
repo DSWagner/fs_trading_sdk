@@ -678,3 +678,58 @@ describe('Polaroid: end-to-end resolved bet (every visible element)', () => {
     }
   });
 });
+
+describe('Polaroid: crowd consensus back hill (parallax depth)', () => {
+  // The consensus hill is the second silhouette layer added to give
+  // the photo 3D depth: it traces a synthetic Gaussian centred on the
+  // crowd's `consensusAtBet` mean and sits BEHIND the user's hill.
+  // These tests pin (a) the graceful-degradation contract -- legacy
+  // receipts without consensus snapshots must keep rendering
+  // unchanged, no extra path -- and (b) the presence + uniqueness of
+  // the back hill once consensus is provided.
+
+  it('omits the consensus silhouette when consensusAtBet is null (graceful degradation)', () => {
+    const { container } = renderPolaroid({ consensusAtBet: null });
+    expect(container.querySelector('[data-testid="polaroid-consensus-silhouette"]')).toBeNull();
+    // The user's silhouette must still render -- removing the back
+    // hill should never affect the foreground composition.
+    expect(container.querySelector('[data-testid="polaroid-user-silhouette"]')).not.toBeNull();
+  });
+
+  it('omits the consensus silhouette when consensusAtBet is out of range', () => {
+    const { container } = renderPolaroid({ consensusAtBet: 9999 });
+    expect(container.querySelector('[data-testid="polaroid-consensus-silhouette"]')).toBeNull();
+  });
+
+  it('renders the consensus silhouette when consensusAtBet is provided in range', () => {
+    const { container } = renderPolaroid({ consensusAtBet: 50 });
+    expect(container.querySelector('[data-testid="polaroid-consensus-silhouette"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="polaroid-user-silhouette"]')).not.toBeNull();
+  });
+
+  it('paints the consensus silhouette BEFORE the user silhouette so the user reads as foreground', () => {
+    const { container } = renderPolaroid({ consensusAtBet: 50 });
+    const back = container.querySelector('[data-testid="polaroid-consensus-silhouette"]') as Element | null;
+    const front = container.querySelector('[data-testid="polaroid-user-silhouette"]') as Element | null;
+    expect(back).not.toBeNull();
+    expect(front).not.toBeNull();
+    // DOCUMENT_POSITION_FOLLOWING (4) means `back` precedes `front` in source order,
+    // i.e. the SVG paints the back hill first and the user's hill on top.
+    const rel = (back as Element).compareDocumentPosition(front as Element);
+    expect(rel & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('the back hill traces a different silhouette than the user hill when prediction != consensus', () => {
+    const { container } = renderPolaroid({ prediction: 20, consensusAtBet: 80 });
+    const back = container.querySelector('[data-testid="polaroid-consensus-silhouette"]');
+    const front = container.querySelector('[data-testid="polaroid-user-silhouette"]');
+    const backD = back?.getAttribute('d') ?? '';
+    const frontD = front?.getAttribute('d') ?? '';
+    // Both paths must exist and trace meaningful geometry...
+    expect(backD.length).toBeGreaterThan(50);
+    expect(frontD.length).toBeGreaterThan(50);
+    // ...but they MUST differ -- if they were the same path, the depth
+    // illusion would collapse to a single hill drawn twice.
+    expect(backD).not.toBe(frontD);
+  });
+});

@@ -288,6 +288,10 @@ function PolaroidImpl(props: PolaroidProps) {
         // prediction. Resolved bets still use their actual rarity (the
         // two converge once consensusAtBet + outcome are both known).
         rarity: effectiveRarity,
+        // Pass the crowd consensus mean through so the photo composer
+        // can paint a second hill behind the user's silhouette - the
+        // contrarian-vs-consensus story rendered as parallax depth.
+        consensusAtBet,
       }),
     [
       width,
@@ -303,6 +307,7 @@ function PolaroidImpl(props: PolaroidProps) {
       progress,
       resolvedOutcome,
       effectiveRarity,
+      consensusAtBet,
     ],
   );
 
@@ -337,6 +342,7 @@ function PolaroidImpl(props: PolaroidProps) {
   const grainId = `grain-${seed}`;
   const skyGradientId = `sky-${seed}`;
   const groundGradientId = `ground-${seed}`;
+  const consensusGradientId = `consensus-${seed}`;
   const sunGradientId = `sun-${seed}`;
   const photoClipId = `photoclip-${seed}`;
   const captionClipId = `capclip-${seed}`;
@@ -468,6 +474,18 @@ function PolaroidImpl(props: PolaroidProps) {
           <stop offset="0%" stopColor={photo.ground.top} />
           <stop offset="100%" stopColor={photo.ground.bottom} />
         </linearGradient>
+        {/* Atmospheric-perspective gradient for the crowd consensus
+            hill. Sits BEHIND the user's silhouette and dissolves into
+            the sky-bottom colour at its crest, the same trick
+            landscape painters use to push terrain into the distance.
+            Only emitted when consensusFill is non-null (i.e. when the
+            receipt actually has a consensusAtBet snapshot). */}
+        {photo.consensusFill && (
+          <linearGradient id={consensusGradientId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={photo.consensusFill.top} stopOpacity="0.55" />
+            <stop offset="100%" stopColor={photo.consensusFill.bottom} stopOpacity="0.85" />
+          </linearGradient>
+        )}
         <radialGradient id={sunGradientId} cx="50%" cy="50%" r="50%">
           {/* The shared glow gradient is keyed to the primary sun's core
               and the rarity accent's glow. Companion suns reuse this
@@ -766,7 +784,34 @@ function PolaroidImpl(props: PolaroidProps) {
             />
           </g>
         ))}
+        {/* Crowd-consensus back hill (atmospheric perspective). Drawn
+            BEFORE the user's silhouette so the user's mountain mass
+            paints over it where they overlap; the only places the
+            back hill remains visible are the off-axis flanks, which
+            is exactly where the contrarian-vs-consensus story lives.
+            Renders nothing on legacy receipts that lack a consensus
+            snapshot - graceful degradation, no layout shift. */}
+        {photo.consensusSilhouettePath && photo.consensusFill && (
+          <>
+            <path
+              data-testid="polaroid-consensus-silhouette"
+              d={photo.consensusSilhouettePath(photoX, photoY, photoSize)}
+              fill={`url(#${consensusGradientId})`}
+              filter={photoFilter}
+              opacity="0.85"
+            />
+            <path
+              d={photo.consensusSilhouettePath(photoX, photoY, photoSize)}
+              fill="none"
+              stroke={photo.consensusFill.line}
+              strokeWidth="0.5"
+              opacity="0.45"
+              filter={photoFilter}
+            />
+          </>
+        )}
         <path
+          data-testid="polaroid-user-silhouette"
           d={photo.silhouettePath(photoX, photoY, photoSize)}
           fill={`url(#${groundGradientId})`}
           filter={photoFilter}
@@ -1331,6 +1376,23 @@ interface PhotoSpec {
   /** Hex for the rarity accent — used by ornament ticks and a sprinkle of accent stars. */
   accentColor: string;
   grainFreq: number;
+  /**
+   * Crowd-consensus silhouette. A second hill drawn BEHIND the user's
+   * mountain to give the photo depth: same densityAt() math but
+   * centred on `consensusAtBet` with a wider synthetic spread, lifted
+   * up the photo by ~4% (so it peeks behind the user's peak), and a
+   * smaller peak lift (~60%) so it reads as further away. Returns
+   * null when `consensusAtBet` is missing -- the polaroid then falls
+   * back to a single-hill composition unchanged.
+   */
+  consensusSilhouettePath: ((px: number, py: number, ps: number) => string) | null;
+  /**
+   * Atmospheric-perspective fill for the consensus silhouette. Tuned
+   * to sit BETWEEN the sky-bottom and the ground-top so the back hill
+   * dissolves into haze where it meets the sky. Null when the
+   * consensus hill isn't drawn.
+   */
+  consensusFill: { top: string; bottom: string; line: string } | null;
 }
 
 function buildPhoto(opts: {
@@ -1349,6 +1411,13 @@ function buildPhoto(opts: {
   progress: number;
   resolvedOutcome: number | null;
   rarity: Rarity | null;
+  /**
+   * Crowd consensus mean at bet time. When provided, the photo gets a
+   * second hill behind the user's silhouette centred on this value --
+   * the contrarian-vs-consensus story made visible in the artwork.
+   * Null falls back to the original single-hill composition.
+   */
+  consensusAtBet: number | null;
 }): PhotoSpec {
   const range = opts.upperBound - opts.lowerBound;
   const rng = mulberry32(opts.seed);
@@ -1633,6 +1702,118 @@ function buildPhoto(opts: {
   };
 
   // ────────────────────────────────────────────────────────────────────
+  // CROWD CONSENSUS HILL  (atmospheric perspective / parallax depth)
+  //
+  // A second silhouette traced over a synthetic Gaussian centred on the
+  // crowd's consensus mean at bet time. Drawn BEHIND the user's
+  // mountain in the SVG paint order so the user's belief reads as the
+  // foreground and the crowd's belief recedes into haze.
+  //
+  // Three landscape-painting techniques give the hill its "further
+  // away" feeling without any extra geometry:
+  //
+  //   1. Higher Y baseline. Distant ridges sit higher in the visual
+  //      field due to perspective; we lift the back hill's horizon by
+  //      4% of photo height so the peak peeks above the user's
+  //      foreground horizon.
+  //   2. Smaller peak lift. Vertical scale compresses with distance,
+  //      so the back hill's peak is only ~60% as tall as the user's.
+  //   3. Sky-tinted fill. Atmospheric haze blends distant terrain
+  //      toward the sky's hue; the consensusFill is computed as a
+  //      midpoint between the ground and the sky-bottom (see palette
+  //      derivation below) so the back hill literally dissolves into
+  //      the air where it meets the sky.
+  //
+  // The consensus hill jitters with a different seed than the user's
+  // hill (so two ridges with the same shape don't become collinear),
+  // and uses a wider synthetic spread (1.3x the user's, with a 5%-of-
+  // range floor) because crowd opinion is by definition more diffuse
+  // than any individual bet.
+  //
+  // Graceful degradation: if `consensusAtBet` is null (legacy receipts
+  // captured before consensus snapshotting, or contexts where it just
+  // isn't known), `consensusSilhouettePath` is null and the photo
+  // renders the original single-hill composition unchanged.
+  //
+  // Ordering note: the consensus hill is INDEPENDENT of resolution, so
+  // it stays put after the bet resolves. Combined with the dashed
+  // `actual` outcome thread, a developed receipt now paints THREE
+  // signals at once: where the crowd thought truth lay, where the user
+  // bet, and where it actually landed -- the entire conviction story
+  // on one polaroid.
+  // ────────────────────────────────────────────────────────────────────
+  const consensusInRange =
+    opts.consensusAtBet != null &&
+    Number.isFinite(opts.consensusAtBet) &&
+    opts.consensusAtBet >= opts.lowerBound &&
+    opts.consensusAtBet <= opts.upperBound;
+
+  let consensusSilhouettePath: ((px: number, py: number, ps: number) => string) | null = null;
+  let consensusFill: { top: string; bottom: string; line: string } | null = null;
+
+  if (consensusInRange) {
+    const consensusMean = opts.consensusAtBet as number;
+    // Crowd hill is a Gaussian regardless of the user's shape: the
+    // engine only exposes a scalar consensusMean so we don't have a
+    // crowd shape to honour. A wider sigma reads as "the crowd's
+    // belief has more uncertainty than any individual" which is true
+    // by construction.
+    const consensusSpread = Math.max(opts.spread * 1.3, range * 0.05);
+    // Independent jitter stream so the back ridge has a slightly
+    // different micro-profile from the foreground hill even when
+    // their peaks coincide. The xor key is arbitrary but stable.
+    const consensusJitterRng = mulberry32(opts.seed ^ 0xa11_face);
+    const consensusJitters = Array.from(
+      { length: 96 },
+      () => (consensusJitterRng() - 0.5) * 0.018,
+    );
+    // Lift the back-hill horizon up the photo so its peak appears to
+    // emerge from "behind" the user's foreground horizon. Capped so a
+    // very low foreground horizon (low conviction) doesn't push the
+    // back hill into the suns/aurora layer.
+    const consensusHorizonY = Math.max(0.30, horizonY - 0.04);
+    const consensusPeakLift = (0.15 + opts.conviction * 0.18) * 0.6;
+
+    consensusSilhouettePath = (px: number, py: number, ps: number) => {
+      const points: Array<[number, number]> = [];
+      let maxRaw = 0;
+      const raw: number[] = new Array(numSamples);
+      for (let i = 0; i < numSamples; i++) {
+        const t = i / (numSamples - 1);
+        const x = opts.lowerBound + t * range;
+        const v = gaussian(x, consensusMean, consensusSpread);
+        raw[i] = v;
+        if (v > maxRaw) maxRaw = v;
+      }
+      for (let i = 0; i < numSamples; i++) {
+        const t = i / (numSamples - 1);
+        const norm = maxRaw > 0 ? raw[i] / maxRaw : 0;
+        const y = consensusHorizonY - norm * consensusPeakLift + consensusJitters[i];
+        points.push([t, y]);
+      }
+      let d = `M ${px} ${py + ps}`;
+      d += ` L ${px} ${py + consensusHorizonY * ps}`;
+      for (const [t, y] of points) {
+        d += ` L ${px + t * ps} ${py + y * ps}`;
+      }
+      d += ` L ${px + ps} ${py + consensusHorizonY * ps}`;
+      d += ` L ${px + ps} ${py + ps} Z`;
+      return d;
+    };
+
+    // Atmospheric fill: a midpoint between the ground colours and the
+    // sky-bottom colour gives the back hill the dust-haze tint of
+    // landscape paintings. The line colour is the same midpoint
+    // pushed slightly darker so the ridge crest reads as a soft edge
+    // rather than a stamped outline.
+    consensusFill = {
+      top: mix(palettes.ground.top, palettes.sky.bottom, 0.55),
+      bottom: mix(palettes.ground.bottom, palettes.sky.bottom, 0.45),
+      line: mix(palettes.ground.line, palettes.sky.bottom, 0.40),
+    };
+  }
+
+  // ────────────────────────────────────────────────────────────────────
   // CELESTIAL EVENTS - tier-gated, monotonically richer with rarity.
   //
   // Each layer is deterministic via a dedicated RNG stream forked from
@@ -1817,6 +1998,8 @@ function buildPhoto(opts: {
     // differs receipt-to-receipt. Range chosen so the dot pattern is
     // dense enough to feel like film grain at every polaroid width.
     grainFreq: 0.7 + r1 * 0.6,
+    consensusSilhouettePath,
+    consensusFill,
   };
 }
 
