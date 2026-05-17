@@ -329,7 +329,24 @@ function ReceiptView({
   // wrapper, BOTH dimensions shrink in lockstep, the SVG inside
   // (also `width: 100%, height: 100%`) tracks them exactly, and
   // the caption strip stays visible at every viewport.
-  const polaroidWidth = isMobile ? 300 : 480;
+  // Polaroid editorial size on the receipt page.
+  //
+  // The polaroid renders at a 2:3 portrait ratio, so the rendered
+  // height is `width * 1.5`. We size the polaroid so the WHOLE
+  // artifact (photo + scale strip + caption with title, handle,
+  // footer line, and date) fits inside a single typical viewport
+  // WITHOUT scrolling, on both desktop and mobile.
+  //
+  // Desktop: 380 wide / 570 tall. With ~80 px navbar + ~40 px page
+  //   padding above, the polaroid bottom lands at ~690 px, well
+  //   inside the ubiquitous 768 px viewport height. The earlier
+  //   480 / 720 size pushed the caption below the fold on every
+  //   1024x768 / 1280x720 screen and looked like a cropped polaroid
+  //   with "missing text" - the live receipts users kept reporting.
+  // Mobile: 280 wide / 420 tall. Fits inside iPhone SE (320 wide)
+  //   with 20 px slack on each side, and inside any phone viewport
+  //   in portrait without needing to pinch-zoom.
+  const polaroidWidth = isMobile ? 280 : 380;
   const isOwner = user?.username === merged.username;
   const isOpen = marketResolutionState !== 'resolved' && marketResolutionState !== 'voided';
   const showCashOutPanel = isOwner && isOpen && cashedOut == null;

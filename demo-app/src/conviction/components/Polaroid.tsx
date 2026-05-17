@@ -1722,9 +1722,18 @@ function buildPhoto(opts: {
   // Silhouette — driven by spread AND seed. Spread controls how wide the
   // mountain mass is; seed adds a small per-receipt jitter so two users
   // with identical spread numbers still get distinguishable horizons.
+  //
+  // Jitter amplitude was reduced from 0.02 -> 0.004 (~5x smaller) so
+  // the polaroid hill silhouettes read as smooth gaussian curves that
+  // visually match the bottom-of-page Probability Density chart's
+  // curves. The previous amplitude added ±9 px of texture on a 448 px
+  // photo, which made the hills look like noisy ridges instead of
+  // smooth probability humps. The remaining ±1.8 px of jitter is just
+  // enough to keep two receipts with identical inputs distinguishable
+  // without breaking the "polaroid hills ARE the chart curves" read.
   const jitterSeed = opts.seed ^ 0xdef456;
   const jitterRng = mulberry32(jitterSeed);
-  const jitters = Array.from({ length: 96 }, () => (jitterRng() - 0.5) * 0.02);
+  const jitters = Array.from({ length: 96 }, () => (jitterRng() - 0.5) * 0.004);
 
   // ────────────────────────────────────────────────────────────────────
   // SILHOUETTES  (user belief + crowd consensus, PDF-normalised)
@@ -1834,10 +1843,14 @@ function buildPhoto(opts: {
     // Independent jitter stream so the back ridge has a slightly
     // different micro-profile from the foreground hill even when
     // their peaks coincide. The xor key is arbitrary but stable.
+    //
+    // Amplitude reduced from 0.018 -> 0.0035 (matches the user-side
+    // 0.004 reduction) so the back hill is also a smooth gaussian
+    // visually matching the chart's consensus curve.
     const consensusJitterRng = mulberry32(opts.seed ^ 0xa11_face);
     consensusJitters = Array.from(
       { length: numSamples },
-      () => (consensusJitterRng() - 0.5) * 0.018,
+      () => (consensusJitterRng() - 0.5) * 0.0035,
     );
   }
 
