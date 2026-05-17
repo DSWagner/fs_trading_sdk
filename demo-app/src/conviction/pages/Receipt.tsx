@@ -469,6 +469,16 @@ function ReceiptView({
           animateDevelop
           consensusAtBet={merged.consensusAtBet ?? null}
           expiresAt={(merged as any).expiresAt ?? null}
+          // The wrapper above uses the padding-bottom aspect-ratio
+          // hack (`height: 0; padding-bottom: 150%`) so its content
+          // height is zero. The polaroid SVG MUST absolutely fill
+          // the wrapper's padding box for the caption strip to be
+          // visible at every viewport / browser zoom -- `fillParent`
+          // applies the inline `position: absolute; inset: 0;
+          // width: 100%; height: 100%` contract that delivers
+          // exactly that, in inline style so no CSS-specificity or
+          // build-minification path can override it.
+          fillParent
         />
         {showCashedStamp && cashedOut && (
           <CashedOutStamp

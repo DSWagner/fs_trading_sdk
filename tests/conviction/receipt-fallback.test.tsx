@@ -329,7 +329,7 @@ describe('Receipt page: graceful market fallback', () => {
     expect(style.flexShrink).toBe('0');
   });
 
-  it('the polaroid SVG keeps its viewBox-driven intrinsic attributes; the receipt-frame CSS rule stretches it to fill the wrapper', () => {
+  it('the polaroid SVG keeps its viewBox-driven intrinsic attributes; INLINE styles stretch it to fill the wrapper', () => {
     useMarketMock.mockReturnValue({
       market: null,
       loading: false,
@@ -344,20 +344,32 @@ describe('Receipt page: graceful market fallback', () => {
     ) as SVGSVGElement | null;
     expect(svg).not.toBeNull();
     // The SVG must still carry numeric width/height attributes for
-    // intrinsic-size fallbacks (PNG export, off-screen renders, share-
-    // image generation). They are the SVG's own viewBox basis.
+    // intrinsic-size fallbacks (PNG export, off-screen renders,
+    // share-image generation). They are the SVG's own viewBox basis.
     const w = parseInt(svg!.getAttribute('width') || '0', 10);
     const h = parseInt(svg!.getAttribute('height') || '0', 10);
     expect(w).toBeGreaterThan(0);
     expect(Math.abs(h - Math.round(w * 1.5))).toBeLessThanOrEqual(1);
-    // The viewBox must agree with the width/height attributes so the
-    // CSS-driven stretch (width:100%; height:100% via the targeted
-    // [data-testid="receipt-polaroid-frame"] > svg selector) keeps
-    // the same coordinate space. preserveAspectRatio defaults to
-    // xMidYMid meet so the photo, scale strip, and caption never
-    // distort even when the wrapper has a slightly different aspect.
+    // The viewBox agrees with the width/height attributes so the
+    // inline-style stretch (width:100%; height:100% via the
+    // `fillParent` prop) keeps the same coordinate space.
     const viewBox = svg!.getAttribute('viewBox') || '';
     expect(viewBox).toBe(`0 0 ${w} ${h}`);
+    // CRITICAL: the SVG carries the inline-style contract that
+    // makes it fill the wrapper's padding-derived box. Inline
+    // styles can't be overridden by build-time CSS minification or
+    // selector-specificity paths, so every receipt render is
+    // guaranteed to absolute-fill its wrapper, no caption clipping.
+    const style = (svg as SVGSVGElement).style;
+    expect(style.position).toBe('absolute');
+    expect(style.width).toBe('100%');
+    expect(style.height).toBe('100%');
+    // `inset: 0` is implemented as four separate longhand
+    // properties so jsdom can read them back deterministically.
+    expect(style.top).toBe('0px');
+    expect(style.left).toBe('0px');
+    expect(style.right).toBe('0px');
+    expect(style.bottom).toBe('0px');
   });
 
   // ────────────────────────────────────────────────────────────────────

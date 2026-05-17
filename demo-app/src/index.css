@@ -221,37 +221,21 @@ svg[role="img"][aria-label^="Polaroid receipt"] {
   max-width: 100%;
 }
 
-/* Receipt page wrapper: the wrapper itself is sized via the
- * classic padding-bottom aspect-ratio hack
- * (`width: 100%; max-width: <polaroidWidth>; height: 0;
- * padding-bottom: 150%`). That makes the wrapper a zero-content-
- * height box whose 150% bottom padding is computed against its
- * OWN WIDTH (CSS rule for percentage padding) -- so the wrapper's
- * total box height equals 1.5x its own width at every viewport,
- * the polaroid's 2:3 portrait ratio, with no `aspect-ratio`
- * dependency and no path that lets content min-height push the
- * wrapper taller.
+/* The Receipt page's polaroid SVG is positioned via an INLINE-STYLE
+ * contract on the SVG element (`fillParent` prop on Polaroid.tsx).
+ * Inline styles are immune to global-rule specificity, build-time
+ * CSS minification quirks, and browser zoom layout paths -- which
+ * is why we threaded the wrapper-fill behaviour through a prop
+ * instead of through a global CSS rule like this:
  *
- * The SVG inside is absolute-positioned so it FILLS that
- * padding-derived box exactly (top-left corner of the wrapper's
- * padding box, full width, full height). `inset: 0` anchors the
- * SVG to all four edges; `width / height: 100%` is the
- * width-and-height-of-containing-block expansion that makes the
- * viewBox content scale to the box's pixel dimensions. The result
- * is a polaroid SVG that paints from the wrapper's top-left to its
- * bottom-right corner, with the caption strip ALWAYS visible at
- * the bottom edge regardless of viewport width or browser zoom.
+ *   [data-testid="receipt-polaroid-frame"] > svg[role="img"]... {
+ *     position: absolute; inset: 0; width: 100%; height: 100%;
+ *   }
  *
- * Scoped to the receipt wrapper only so other polaroid hosts
- * (ComparisonPair, Profile, BetFlow preview pair, Landing develop
- * demo, gallery thumbnails) keep rendering at their intrinsic
- * pixel sizes. */
-[data-testid="receipt-polaroid-frame"] > svg[role="img"][aria-label^="Polaroid receipt"] {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
+ * The previous global rule above LOOKED correct but in production
+ * it kept losing to something on the deployed CSS bundle (still
+ * under investigation, but suspect minification reordering). The
+ * inline-style contract eliminates the entire failure mode. */
 
 a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible {
   outline: 2px solid var(--c-ember);

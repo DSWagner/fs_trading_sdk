@@ -105,6 +105,28 @@ export interface PolaroidProps {
    * misleading "you · 38.45" on the crowd column.
    */
   predictionLabel?: string;
+  /**
+   * When true, the SVG is rendered with inline
+   * `position: absolute; inset: 0; width: 100%; height: 100%` so it
+   * FILLS its parent positioning context exactly. Used by the Receipt
+   * page where the wrapper uses the padding-bottom aspect-ratio hack
+   * (`height: 0; padding-bottom: 150%`); the wrapper's own content
+   * height is zero, so the SVG can only fill the wrapper's box if
+   * it's absolutely positioned inside it.
+   *
+   * Inline styles trump every other CSS path (global rule
+   * specificity, selector mismatches, browser zoom paths, build-time
+   * CSS minification quirks), so threading this contract through a
+   * prop instead of relying on a global rule eliminates an entire
+   * class of "the polaroid renders too small inside the padding box"
+   * regressions the user kept reporting.
+   *
+   * Other callers (Landing, BetFlow preview pair, ComparisonPair,
+   * gallery thumbnails, Profile cards, etc.) leave this off and the
+   * SVG renders at its intrinsic numeric width/height attributes,
+   * unchanged.
+   */
+  fillParent?: boolean;
 }
 
 // Internal implementation; the exported `Polaroid` below wraps this in
@@ -137,6 +159,7 @@ function PolaroidImpl(props: PolaroidProps) {
     animateDevelop = false,
     consensusAtBet = null,
     predictionLabel = 'you',
+    fillParent = false,
   } = props;
 
   const developed = resolutionState === 'resolved';
@@ -474,19 +497,36 @@ function PolaroidImpl(props: PolaroidProps) {
       preserveAspectRatio="xMidYMid meet"
       style={{
         // The SVG paints into a `viewBox="0 0 <width> <height>"`
-        // coordinate system. We render at the SVG's intrinsic
-        // pixel size (width/height attributes above), which every
-        // caller already passes as a numeric prop. The Receipt
-        // page additionally adds a global rule
-        // `[data-testid="receipt-polaroid-frame"] > svg { width:
-        // 100%; height: 100%; }` so the SVG can stretch to fill
-        // its wrapper when a narrow grid cell shrinks the wrapper
-        // below the intrinsic pixel size -- without that rule
-        // CSS happily makes the wrapper smaller than the SVG and
-        // the SVG bleeds into the next column or, worse, the
-        // wrapper stays at its intrinsic height while the SVG
-        // shrinks (clipping the caption strip).
+        // coordinate system. By default we render at the SVG's
+        // intrinsic pixel size (the width/height attributes above),
+        // which every caller already passes as a numeric prop -- so
+        // gallery tiles, profile cards, BetFlow preview pairs,
+        // ComparisonPair, etc. all render at exactly the pixels
+        // they asked for.
+        //
+        // When `fillParent` is set (Receipt page only), we instead
+        // render the SVG INLINE-STYLED to absolute-fill its parent
+        // positioning context. The Receipt wrapper uses the
+        // padding-bottom aspect-ratio hack so its content height is
+        // 0; the SVG must be absolutely positioned (with inset: 0)
+        // to occupy the wrapper's padding box. Inline styles win
+        // over every other CSS path (global selectors, build-time
+        // minification, browser zoom layout paths), so this is the
+        // bulletproof contract that survives the entire chain of
+        // "the polaroid still renders too small inside the wrapper"
+        // regressions the user kept hitting.
         display: 'block',
+        ...(fillParent
+          ? {
+              position: 'absolute' as const,
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              width: '100%',
+              height: '100%',
+            }
+          : null),
         filter: developFilter,
         transition: developTransition,
         cursor: interactive ? 'pointer' : 'default',
