@@ -264,37 +264,58 @@ describe('Receipt page: graceful market fallback', () => {
   });
 
   // ────────────────────────────────────────────────────────────────────
-  // POLAROID FRAME GEOMETRY  -- pins the wrapper-locks-the-box contract.
+  // POLAROID FRAME GEOMETRY -- pins the wrapper / SVG sizing contract.
   //
-  // Regression history:
-  //   v1: "wrapper has only width, height comes from SVG" -- the
-  //       wrapper sometimes inherited the grid cell's stretched height
-  //       (taller than the SVG) and the artifact floated in an empty
-  //       frame.
+  // Regression history (the user reported each of these visually):
+  //   v1: "wrapper has only width, height comes from SVG" -- worked
+  //       in dev but the user reported the wrapper inheriting flex
+  //       stretch on some browser/viewport combinations.
   //   v2: "wrapper has explicit numeric width AND height" -- broke on
-  //       narrow viewports (e.g. ~1024 px window with the receipt
-  //       page's 1fr/1fr grid -- right column was ~460 px, but the
-  //       wrapper was pinned to width:480/height:720).
-  //   v3: "width:100%; maxWidth:<n>; aspect-ratio:2/3". Should have
-  //       worked, but the user reported the wrapper rendering taller
-  //       than 2:3 in production at desktop ratios -- the caption
-  //       strip dropped into a band of empty matte below the SVG.
-  //       `aspect-ratio` is a "preferred" sizing hint that yields to
-  //       content min-height, flex-item sizing, and (per user
-  //       reports) at least one browser layout path on the live
-  //       receipt grid.
-  //   v4 (current): use the classic padding-bottom aspect-ratio hack
-  //       (`width:100%; maxWidth:<n>; height:0; padding-bottom:150%`).
-  //       Percentage padding resolves against the wrapper's OWN
-  //       width per CSS 2.1 §8.4 -- 150% of width is the wrapper's
-  //       full height, enforced by the box model with zero failure
-  //       modes since 2008. The SVG inside is absolute-positioned
-  //       (via the targeted CSS rule) so it fills the padding-derived
-  //       box edge-to-edge, and the caption strip is ALWAYS visible
-  //       at the bottom regardless of viewport, browser, or zoom.
+  //       narrow viewports (1024 px window, 1fr/1fr grid -- right
+  //       column was ~460 px, wrapper pinned to 480 px → overflow).
+  //   v3: "width:100%; maxWidth:<n>; aspect-ratio:2/3" -- the user
+  //       reported the wrapper rendering taller than 2:3 on desktop,
+  //       caption dropped into empty matte. `aspect-ratio` yields to
+  //       content min-height, flex-item sizing, and at least one
+  //       browser path on the live receipt grid.
+  //   v4: "padding-bottom hack (height:0; paddingBottom:150%) +
+  //       absolute SVG via global CSS rule" -- the user reported
+  //       the wrapper rendering as a square, with the SVG cropped
+  //       and the caption missing. The SVG was failing to absolute-
+  //       fill the wrapper because the global selector was losing
+  //       in production (selector specificity, build-time CSS
+  //       reordering, or browser zoom layout path).
+  //   v5: "padding-bottom hack + inline `fillParent` style on SVG"
+  //       -- the wrapper still rendered as a square because
+  //       `padding-bottom: 150%` was somehow not landing on the
+  //       wrapper in production (suspected: a flex-item path that
+  //       collapses zero-content-height boxes when their max-width
+  //       caps the wrapper below the flex container's cross-axis
+  //       size).
+  //   v6 (current): the simplest possible contract.
+  //       * Wrapper = `position:relative; width:100%;
+  //         maxWidth:<polaroidWidth>; flexShrink:0` -- NO explicit
+  //         height, NO padding-bottom, NO aspect-ratio CSS, NO
+  //         absolute-positioned SVG.
+  //       * Polaroid SVG keeps its INTRINSIC numeric width/height
+  //         attributes (the prop the caller passes -- 480 desktop,
+  //         300 mobile -- and 1.5x that for height).
+  //       * Global CSS gives EVERY polaroid SVG the standard
+  //         responsive-image idiom: `display:block;
+  //         max-width:100%; height:auto`. So when a narrower
+  //         wrapper shrinks the SVG via max-width, the SVG height
+  //         shrinks proportionally via height:auto, preserving 2:3.
+  //       * Wrapper height is derived in normal flow from the SVG
+  //         (auto), so the wrapper IS the SVG, dimensionally.
+  //       Failure mode: none. The responsive-image idiom is the
+  //       most well-trodden path on the web; every browser since
+  //       SVG 1.1 (2003) honors `max-width:100%; height:auto` on
+  //       SVG with viewBox. There is no zero-content-height
+  //       collapse, no aspect-ratio yielding, no
+  //       absolute-positioning interplay.
   // ────────────────────────────────────────────────────────────────────
 
-  it('the polaroid frame wrapper uses the padding-bottom aspect-ratio hack to lock height = 1.5x width at every viewport', () => {
+  it('the polaroid frame wrapper sizes by content (no fixed height, no padding-bottom hack); width grows to maxWidth in normal flow', () => {
     useMarketMock.mockReturnValue({
       market: null,
       loading: false,
@@ -315,21 +336,25 @@ describe('Receipt page: graceful market fallback', () => {
     // maxWidth pins the upper bound at the polaroid's editorial size.
     const maxW = parseInt(style.maxWidth, 10);
     expect(maxW).toBeGreaterThan(0);
-    // The padding-bottom aspect-ratio hack: explicit `height: 0` AND
-    // `padding-bottom: 150%`. This is the bulletproof aspect-ratio
-    // contract that has worked since CSS 2.1 (2008). `height: 0`
-    // ensures the wrapper has zero CONTENT height, and the 150%
-    // bottom padding (computed against the wrapper's OWN WIDTH per
-    // CSS 2.1 §8.4 percentage padding rule) becomes the entire box
-    // height = 1.5 * width = the polaroid's 2:3 portrait ratio.
-    expect(style.height).toBe('0px');
-    expect(style.paddingBottom).toBe('150%');
-    // flex-shrink must be 0 so a narrow flex column does not squish
-    // BELOW the natural width=100%/maxWidth resolution.
+    // CRITICAL: the wrapper must NOT carry an inline height, an
+    // inline padding-bottom, or an inline aspect-ratio. Each of
+    // those was a previous attempt at locking the wrapper to 2:3,
+    // and each one introduced a regression where the wrapper
+    // ended up the wrong shape relative to the SVG. The current
+    // contract is "the SVG drives the wrapper height in normal
+    // flow", so all three must be empty.
+    expect(style.height).toBe('');
+    expect(style.paddingBottom).toBe('');
+    expect(style.aspectRatio).toBe('');
+    // flex-shrink must be 0 so a narrow flex column does not
+    // squish BELOW the natural width=100%/maxWidth resolution.
     expect(style.flexShrink).toBe('0');
+    // position: relative so the CashedOutStamp absolute-overlay
+    // anchors against the wrapper as its containing block.
+    expect(style.position).toBe('relative');
   });
 
-  it('the polaroid SVG keeps its viewBox-driven intrinsic attributes; INLINE styles stretch it to fill the wrapper', () => {
+  it('the polaroid SVG renders at its intrinsic 2:3 size; width is the polaroidWidth prop, height is exactly 1.5x that', () => {
     useMarketMock.mockReturnValue({
       market: null,
       loading: false,
@@ -343,33 +368,25 @@ describe('Receipt page: graceful market fallback', () => {
       '[data-testid="receipt-polaroid-frame"] svg[role="img"][aria-label^="Polaroid receipt"]',
     ) as SVGSVGElement | null;
     expect(svg).not.toBeNull();
-    // The SVG must still carry numeric width/height attributes for
-    // intrinsic-size fallbacks (PNG export, off-screen renders,
-    // share-image generation). They are the SVG's own viewBox basis.
+    // The SVG carries numeric width/height attributes so it has
+    // an intrinsic pixel size (PNG export and offscreen renders
+    // both rely on this), and the global CSS rule
+    // `max-width:100%; height:auto` makes it shrink proportionally
+    // when the wrapper happens to be narrower.
     const w = parseInt(svg!.getAttribute('width') || '0', 10);
     const h = parseInt(svg!.getAttribute('height') || '0', 10);
     expect(w).toBeGreaterThan(0);
     expect(Math.abs(h - Math.round(w * 1.5))).toBeLessThanOrEqual(1);
-    // The viewBox agrees with the width/height attributes so the
-    // inline-style stretch (width:100%; height:100% via the
-    // `fillParent` prop) keeps the same coordinate space.
+    // viewBox must agree with the intrinsic attributes so the
+    // CSS-driven shrink keeps the same coordinate space.
     const viewBox = svg!.getAttribute('viewBox') || '';
     expect(viewBox).toBe(`0 0 ${w} ${h}`);
-    // CRITICAL: the SVG carries the inline-style contract that
-    // makes it fill the wrapper's padding-derived box. Inline
-    // styles can't be overridden by build-time CSS minification or
-    // selector-specificity paths, so every receipt render is
-    // guaranteed to absolute-fill its wrapper, no caption clipping.
+    // No absolute-positioning gymnastics on the SVG element
+    // itself. The SVG is in the wrapper's normal flow.
     const style = (svg as SVGSVGElement).style;
-    expect(style.position).toBe('absolute');
-    expect(style.width).toBe('100%');
-    expect(style.height).toBe('100%');
-    // `inset: 0` is implemented as four separate longhand
-    // properties so jsdom can read them back deterministically.
-    expect(style.top).toBe('0px');
-    expect(style.left).toBe('0px');
-    expect(style.right).toBe('0px');
-    expect(style.bottom).toBe('0px');
+    expect(style.position).not.toBe('absolute');
+    expect(style.width).toBe('');
+    expect(style.height).toBe('');
   });
 
   // ────────────────────────────────────────────────────────────────────

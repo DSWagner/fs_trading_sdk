@@ -206,36 +206,35 @@ html {
 }
 
 /* Default polaroid SVG behaviour: always block, never overflow its
- * parent. Most callsites (Landing, BetFlow, StyleGallery,
- * ComparisonPair, Profile thumbnails, etc.) pass an explicit numeric
- * `width` prop and want the SVG to render at exactly those pixels.
- * The previous attempt to pin `aspect-ratio: 2/3` here was the root
- * cause of "the polaroid shows the photo and scale strip but the
- * caption is missing" -- when the wrapper happened to be wider than
- * the SVG (e.g. flex stretch in a wide cell), the SVG sized its
- * width to its intrinsic attribute and then DERIVED its own height
- * via the aspect-ratio rule, leaving a band of empty matte at the
- * bottom of the wrapper that visually clipped the caption. */
+ * parent, and ALWAYS preserve its intrinsic 2:3 portrait ratio.
+ *
+ *   - `display: block` so the SVG never gets the inline-baseline
+ *     gap (4-5 px of phantom whitespace) that breaks our flush-fit
+ *     wrappers.
+ *   - `max-width: 100%` so a too-narrow column shrinks the SVG to
+ *     fit instead of letting it overflow and break the page layout.
+ *   - `height: auto` is THE critical line. SVG elements with both
+ *     `width` and `height` HTML attributes render at those intrinsic
+ *     pixels by default -- but as soon as `max-width: 100%` shrinks
+ *     the rendered width, the height stays pinned at the intrinsic
+ *     720, which DISTORTS the SVG (everything below the photo zone
+ *     gets squashed and the caption disappears off the bottom of
+ *     the visible scaled area). `height: auto` lets the SVG derive
+ *     its rendered height from `width / aspect-ratio-of-viewBox`
+ *     so it stays a perfect 2:3 portrait at every viewport.
+ *
+ * This pair (`max-width: 100%; height: auto`) is the
+ * standard responsive-image idiom adapted to SVG, and it lets the
+ * Receipt wrapper just be `width: 100%; max-width: polaroidWidth`
+ * (with auto height) -- the wrapper's height tracks the SVG's
+ * rendered height in normal flow, no padding-bottom hack, no
+ * aspect-ratio CSS, no global selectors trying to absolute-fill
+ * the SVG into a zero-content-height padding box. */
 svg[role="img"][aria-label^="Polaroid receipt"] {
   display: block;
   max-width: 100%;
+  height: auto;
 }
-
-/* The Receipt page's polaroid SVG is positioned via an INLINE-STYLE
- * contract on the SVG element (`fillParent` prop on Polaroid.tsx).
- * Inline styles are immune to global-rule specificity, build-time
- * CSS minification quirks, and browser zoom layout paths -- which
- * is why we threaded the wrapper-fill behaviour through a prop
- * instead of through a global CSS rule like this:
- *
- *   [data-testid="receipt-polaroid-frame"] > svg[role="img"]... {
- *     position: absolute; inset: 0; width: 100%; height: 100%;
- *   }
- *
- * The previous global rule above LOOKED correct but in production
- * it kept losing to something on the deployed CSS bundle (still
- * under investigation, but suspect minification reordering). The
- * inline-style contract eliminates the entire failure mode. */
 
 a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible {
   outline: 2px solid var(--c-ember);

@@ -399,39 +399,30 @@ function ReceiptView({
   // The wrapper is the absolute-positioning context for the
   // `CashedOutStamp` overlay and the `ShareKit` PNG-export ref. It
   // doubles as the visual "frame" the user perceives around the
-  // artifact. The sizing contract uses the CLASSIC PADDING-BOTTOM
-  // ASPECT-RATIO HACK (aka the "%-padding box"):
+  // artifact. The sizing contract is now intentionally minimal:
   //
-  //   - `width: 100%` so the wrapper expands to fill its grid cell
-  //     all the way up to `maxWidth` (no orphan whitespace on
-  //     wide viewports).
-  //   - `maxWidth: polaroidWidth` so the wrapper never grows past
-  //     the editorial size (480 desktop / 300 mobile).
-  //   - `paddingBottom: '150%'` so the wrapper's HEIGHT is pinned
-  //     to 1.5x of its WIDTH at every viewport (% padding resolves
-  //     against the containing block's WIDTH, not its height -- so
-  //     `padding-bottom: 150%` always means "1.5 times my own
-  //     width", which is exactly the polaroid's 2:3 portrait
-  //     aspect ratio).
-  //   - `height: 0` so the wrapper has zero content height; the
-  //     150% padding becomes the entire box height.
+  //   - `position: relative` so the CashedOutStamp and any other
+  //     overlay can absolute-position against the wrapper.
+  //   - `width: 100%` so the wrapper grows to fill its grid cell.
+  //   - `maxWidth: polaroidWidth` so the wrapper never exceeds the
+  //     editorial size (480 desktop / 300 mobile).
+  //   - NO explicit height, NO padding-bottom hack, NO
+  //     aspect-ratio CSS. The wrapper's height is derived in
+  //     normal flow from the SVG inside it, which has the global
+  //     `max-width: 100%; height: auto` pair applied (the standard
+  //     responsive-image idiom) and therefore renders at exactly
+  //     `wrapper-width × (wrapper-width × 720/480)` -- a perfect
+  //     2:3 portrait at every viewport, with no failure mode where
+  //     the wrapper becomes a different shape from the SVG.
   //
-  // Why not `aspect-ratio: 2 / 3`? In production the user reported
-  // the wrapper rendering taller than 2:3 on desktop, leaving the
-  // caption strip dropped into a band of empty matte at the bottom.
-  // `aspect-ratio` is a "preferred" sizing hint that CAN be
-  // overridden by content min-height, flex-item sizing, browser
-  // bugs, or CSS specificity collisions with global rules; the
-  // padding-bottom trick is enforced by the box model itself and
-  // has worked in every browser since CSS 2.1 (2008), with zero
-  // failure modes.
-  //
-  // The `<Polaroid>` SVG inside is then absolute-positioned (via
-  // the global CSS rule `[data-testid="receipt-polaroid-frame"] >
-  // svg { position: absolute; inset: 0; width: 100%; height: 100%
-  // }`) so it fills the padding-derived box exactly. The CashedOut-
-  // Stamp overlay continues to absolute-position itself against
-  // the wrapper as its containing block.
+  // This rewrite was forced by repeated production reports of "the
+  // polaroid is rendered too small / not the same shape as its
+  // wrapper" on the receipt page. Every prior fix (aspect-ratio,
+  // explicit height, padding-bottom + absolute SVG, fillParent
+  // inline styles) introduced its own failure mode under one
+  // browser/zoom/grid-cell combination. Sizing the SVG with the
+  // standard responsive-image idiom and letting the wrapper track
+  // it in normal flow eliminates ALL of them at once.
   const polaroidNode = (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
       <div
@@ -440,10 +431,7 @@ function ReceiptView({
           position: 'relative',
           width: '100%',
           maxWidth: polaroidWidth,
-          height: 0,
-          paddingBottom: '150%',
           flexShrink: 0,
-          display: 'block',
         }}
         data-testid="receipt-polaroid-frame"
       >
@@ -469,16 +457,6 @@ function ReceiptView({
           animateDevelop
           consensusAtBet={merged.consensusAtBet ?? null}
           expiresAt={(merged as any).expiresAt ?? null}
-          // The wrapper above uses the padding-bottom aspect-ratio
-          // hack (`height: 0; padding-bottom: 150%`) so its content
-          // height is zero. The polaroid SVG MUST absolutely fill
-          // the wrapper's padding box for the caption strip to be
-          // visible at every viewport / browser zoom -- `fillParent`
-          // applies the inline `position: absolute; inset: 0;
-          // width: 100%; height: 100%` contract that delivers
-          // exactly that, in inline style so no CSS-specificity or
-          // build-minification path can override it.
-          fillParent
         />
         {showCashedStamp && cashedOut && (
           <CashedOutStamp
