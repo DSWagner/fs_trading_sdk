@@ -732,4 +732,83 @@ describe('Polaroid: crowd consensus back hill (parallax depth)', () => {
     // illusion would collapse to a single hill drawn twice.
     expect(backD).not.toBe(frontD);
   });
+
+  // Regression: shared PDF normalisation. The bottom-of-page chart and
+  // the polaroid's two hills MUST tell the same story -- when the user
+  // holds a tightly-spread belief and the crowd's consensus is broad,
+  // the chart's user curve peaks higher than the crowd's curve, and so
+  // the foreground hill in the polaroid must peak higher than the back
+  // hill. Before the PDF-normalisation rewrite, each hill was
+  // normalised to its own max and then the back hill was shrunk by an
+  // arbitrary 0.6 multiplier -- which "happened to" make the back
+  // shorter, but in a way that lied about scale (a wider user belief
+  // was indistinguishable from a narrower one). This test pins the
+  // truthful behaviour: the foreground crest is HIGHER UP the photo
+  // (smaller Y in SVG coordinates, where Y grows downward) than the
+  // back crest when the user is concentrated and the crowd is broad.
+  it('shared PDF normalisation: tight user + diffuse crowd => foreground peaks higher than back', () => {
+    // Tight user (spread 4 over a 0..100 range) vs the crowd's
+    // synthetic spread which is max(spread*1.3, range*0.05) = 5.2.
+    // The user PDF peak is ~1/(4*sqrt(2pi)) ~ 0.0997, the crowd PDF
+    // peak is ~1/(5.2*sqrt(2pi)) ~ 0.0767, ratio ~ 1.30. So the
+    // foreground crest must lift ~30% higher than the back crest.
+    const { container } = renderPolaroid({
+      prediction: 50,
+      consensusAtBet: 50,  // co-located peaks make the height delta easy to read
+      spread: 4,
+      shape: 'gaussian',
+    });
+    const back = container.querySelector('[data-testid="polaroid-consensus-silhouette"]');
+    const front = container.querySelector('[data-testid="polaroid-user-silhouette"]');
+    const backD = back?.getAttribute('d') ?? '';
+    const frontD = front?.getAttribute('d') ?? '';
+    // Extract every Y coordinate from the path string. SVG path data
+    // is a series of "L x y" commands; we strip the initial M/L
+    // letters with a regex and pull every numeric pair.
+    const yValues = (d: string): number[] => {
+      const ys: number[] = [];
+      const re = /[ML]\s*([-\d.]+)\s+([-\d.]+)/g;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(d)) !== null) {
+        ys.push(parseFloat(m[2]));
+      }
+      return ys;
+    };
+    const frontMinY = Math.min(...yValues(frontD));
+    const backMinY = Math.min(...yValues(backD));
+    // Smaller Y == higher up the photo. Foreground crest must be
+    // strictly higher than back crest. A small absolute tolerance
+    // (~2% of photo size) absorbs the per-hill jitter noise.
+    const photoSize = 320 - 32;  // default Polaroid width 320 px - 16 px padding * 2
+    expect(frontMinY).toBeLessThan(backMinY - photoSize * 0.005);
+  });
+
+  // Regression for the user's original observation: "the polaroid hill
+  // matches the Trade Preview, but the back hill is invisible." With
+  // shared PDF normalisation the back hill should now have measurable
+  // presence -- the lift from the back-hill horizon to its crest is at
+  // least a few percent of photo height -- not collapsed to a flat
+  // line.
+  it('shared PDF normalisation: back hill has visible peak lift, not collapsed to flat', () => {
+    const { container } = renderPolaroid({
+      prediction: 30,
+      consensusAtBet: 70,
+      spread: 8,
+      shape: 'gaussian',
+    });
+    const back = container.querySelector('[data-testid="polaroid-consensus-silhouette"]');
+    const backD = back?.getAttribute('d') ?? '';
+    expect(backD.length).toBeGreaterThan(50);
+    const yValues: number[] = [];
+    const re = /[ML]\s*([-\d.]+)\s+([-\d.]+)/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(backD)) !== null) yValues.push(parseFloat(m[2]));
+    const photoSize = 320 - 32;
+    const minY = Math.min(...yValues);
+    const maxY = Math.max(...yValues);
+    // Back hill must lift its crest measurably above its baseline.
+    // 5% of photo size is the lower bound for "visibly a hill, not a
+    // flat strip". Real renders are typically 8-15%.
+    expect(maxY - minY).toBeGreaterThan(photoSize * 0.05);
+  });
 });

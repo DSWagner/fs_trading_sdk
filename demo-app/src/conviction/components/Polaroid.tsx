@@ -1672,22 +1672,132 @@ function buildPhoto(opts: {
   const jitterRng = mulberry32(jitterSeed);
   const jitters = Array.from({ length: 96 }, () => (jitterRng() - 0.5) * 0.02);
 
+  // ────────────────────────────────────────────────────────────────────
+  // SILHOUETTES  (user belief + crowd consensus, PDF-normalised)
+  //
+  // Both hills share a single normalisation factor so the relative
+  // peak heights in the photo correspond to the actual concentration
+  // of each belief over the market range. Without a shared factor a
+  // wide diffuse Gaussian and a narrow peaked one would both render
+  // at full height, erasing the contrarian-vs-consensus signal that
+  // the photo is meant to carry.
+  //
+  // The recipe (mirrors the bottom-of-page Probability Density chart):
+  //
+  //   1. Sample each density curve at 96 evenly-spaced X positions.
+  //   2. Numerically integrate ( sum * dx ) to get the total mass of
+  //      each curve over the plotted [lowerBound, upperBound] band.
+  //   3. Divide every sample by its mass -- now both curves are
+  //      proper PDFs that integrate to 1, and their peak heights
+  //      truthfully represent "where mass is concentrated".
+  //   4. Find the SHARED max across both PDFs.
+  //   5. Lift each silhouette by `peakLift * (sample / sharedMax)`,
+  //      using the SAME peakLift for both -- the relative heights
+  //      come out of the math, not an arbitrary multiplier.
+  //
+  // Net effect: a tightly held conviction in a wide market produces
+  // a tall narrow foreground hill and a short wide back hill, just
+  // like the bottom chart. A diffuse user belief produces hills of
+  // similar height. The polaroid stops "lying about scale".
+  //
+  // Graceful degradation: if `consensusAtBet` is null (legacy
+  // receipts captured before consensus snapshotting, or contexts
+  // where it just isn't known), `consensusSilhouettePath` is null
+  // and the photo renders the original single-hill composition with
+  // the user's PDF normalised against itself, unchanged in shape.
+  // ────────────────────────────────────────────────────────────────────
   const numSamples = 96;
-  const silhouettePath = (px: number, py: number, ps: number) => {
-    const points: Array<[number, number]> = [];
-    let maxRaw = 0;
-    const raw: number[] = new Array(numSamples);
+  const dx = range / Math.max(1, numSamples - 1);
+  const peakLift = 0.15 + opts.conviction * 0.18;
+
+  const userRaw: number[] = new Array(numSamples);
+  let userMass = 0;
+  for (let i = 0; i < numSamples; i++) {
+    const t = i / (numSamples - 1);
+    const x = opts.lowerBound + t * range;
+    const v = densityAt(x, opts);
+    userRaw[i] = v;
+    userMass += v;
+  }
+  userMass *= dx;
+  let userPdfMax = 0;
+  if (userMass > 1e-9) {
+    for (let i = 0; i < numSamples; i++) {
+      userRaw[i] = userRaw[i] / userMass;
+      if (userRaw[i] > userPdfMax) userPdfMax = userRaw[i];
+    }
+  } else {
+    // Pathological case: user mass collapsed to ~0 (e.g. range=0). Fall
+    // back to per-sample normalisation against the raw max so we still
+    // render a meaningful silhouette instead of a flat line.
+    let m = 0;
+    for (const v of userRaw) if (v > m) m = v;
+    if (m > 0) for (let i = 0; i < numSamples; i++) userRaw[i] = userRaw[i] / m;
+    userPdfMax = userRaw.reduce((a, b) => Math.max(a, b), 0);
+  }
+
+  const consensusInRange =
+    opts.consensusAtBet != null &&
+    Number.isFinite(opts.consensusAtBet) &&
+    opts.consensusAtBet >= opts.lowerBound &&
+    opts.consensusAtBet <= opts.upperBound;
+
+  let consensusRaw: number[] | null = null;
+  let consensusPdfMax = 0;
+  let consensusHorizonY = horizonY;
+  let consensusJitters: number[] | null = null;
+
+  if (consensusInRange) {
+    const consensusMean = opts.consensusAtBet as number;
+    // Crowd hill is a Gaussian regardless of the user's shape: the
+    // engine only exposes a scalar consensusMean so we don't have a
+    // crowd shape to honour. A wider sigma reads as "the crowd's
+    // belief has more uncertainty than any individual" which is true
+    // by construction.
+    const consensusSpread = Math.max(opts.spread * 1.3, range * 0.05);
+    consensusRaw = new Array(numSamples);
+    let consensusMass = 0;
     for (let i = 0; i < numSamples; i++) {
       const t = i / (numSamples - 1);
       const x = opts.lowerBound + t * range;
-      const v = densityAt(x, opts);
-      raw[i] = v;
-      if (v > maxRaw) maxRaw = v;
+      const v = gaussian(x, consensusMean, consensusSpread);
+      consensusRaw[i] = v;
+      consensusMass += v;
     }
-    const peakLift = 0.15 + opts.conviction * 0.18;
+    consensusMass *= dx;
+    if (consensusMass > 1e-9) {
+      for (let i = 0; i < numSamples; i++) {
+        consensusRaw[i] = consensusRaw[i] / consensusMass;
+        if (consensusRaw[i] > consensusPdfMax) consensusPdfMax = consensusRaw[i];
+      }
+    }
+    // Lift the back-hill horizon up the photo so its peak appears to
+    // emerge from "behind" the user's foreground horizon. Capped so a
+    // very low foreground horizon (low conviction) doesn't push the
+    // back hill into the suns/aurora layer. This is the ONLY trick we
+    // still use for parallax depth -- height is now honest.
+    consensusHorizonY = Math.max(0.30, horizonY - 0.04);
+    // Independent jitter stream so the back ridge has a slightly
+    // different micro-profile from the foreground hill even when
+    // their peaks coincide. The xor key is arbitrary but stable.
+    const consensusJitterRng = mulberry32(opts.seed ^ 0xa11_face);
+    consensusJitters = Array.from(
+      { length: numSamples },
+      () => (consensusJitterRng() - 0.5) * 0.018,
+    );
+  }
+
+  // SHARED normalisation factor across both PDFs. Both hills lift in
+  // proportion to the same denominator, so their relative peak heights
+  // directly reflect the ratio of crowd-peak / user-peak densities --
+  // exactly what the bottom-of-page chart shows numerically.
+  const sharedPdfMax = Math.max(userPdfMax, consensusPdfMax);
+
+  const silhouettePath = (px: number, py: number, ps: number) => {
+    const points: Array<[number, number]> = [];
     for (let i = 0; i < numSamples; i++) {
       const t = i / (numSamples - 1);
-      const norm = maxRaw > 0 ? raw[i] / maxRaw : 0;
+      const norm = sharedPdfMax > 0 ? userRaw[i] / sharedPdfMax : 0;
       const y = horizonY - norm * peakLift + jitters[i];
       points.push([t, y]);
     }
@@ -1701,102 +1811,27 @@ function buildPhoto(opts: {
     return d;
   };
 
-  // ────────────────────────────────────────────────────────────────────
-  // CROWD CONSENSUS HILL  (atmospheric perspective / parallax depth)
-  //
-  // A second silhouette traced over a synthetic Gaussian centred on the
-  // crowd's consensus mean at bet time. Drawn BEHIND the user's
-  // mountain in the SVG paint order so the user's belief reads as the
-  // foreground and the crowd's belief recedes into haze.
-  //
-  // Three landscape-painting techniques give the hill its "further
-  // away" feeling without any extra geometry:
-  //
-  //   1. Higher Y baseline. Distant ridges sit higher in the visual
-  //      field due to perspective; we lift the back hill's horizon by
-  //      4% of photo height so the peak peeks above the user's
-  //      foreground horizon.
-  //   2. Smaller peak lift. Vertical scale compresses with distance,
-  //      so the back hill's peak is only ~60% as tall as the user's.
-  //   3. Sky-tinted fill. Atmospheric haze blends distant terrain
-  //      toward the sky's hue; the consensusFill is computed as a
-  //      midpoint between the ground and the sky-bottom (see palette
-  //      derivation below) so the back hill literally dissolves into
-  //      the air where it meets the sky.
-  //
-  // The consensus hill jitters with a different seed than the user's
-  // hill (so two ridges with the same shape don't become collinear),
-  // and uses a wider synthetic spread (1.3x the user's, with a 5%-of-
-  // range floor) because crowd opinion is by definition more diffuse
-  // than any individual bet.
-  //
-  // Graceful degradation: if `consensusAtBet` is null (legacy receipts
-  // captured before consensus snapshotting, or contexts where it just
-  // isn't known), `consensusSilhouettePath` is null and the photo
-  // renders the original single-hill composition unchanged.
-  //
-  // Ordering note: the consensus hill is INDEPENDENT of resolution, so
-  // it stays put after the bet resolves. Combined with the dashed
-  // `actual` outcome thread, a developed receipt now paints THREE
-  // signals at once: where the crowd thought truth lay, where the user
-  // bet, and where it actually landed -- the entire conviction story
-  // on one polaroid.
-  // ────────────────────────────────────────────────────────────────────
-  const consensusInRange =
-    opts.consensusAtBet != null &&
-    Number.isFinite(opts.consensusAtBet) &&
-    opts.consensusAtBet >= opts.lowerBound &&
-    opts.consensusAtBet <= opts.upperBound;
-
   let consensusSilhouettePath: ((px: number, py: number, ps: number) => string) | null = null;
   let consensusFill: { top: string; bottom: string; line: string } | null = null;
 
-  if (consensusInRange) {
-    const consensusMean = opts.consensusAtBet as number;
-    // Crowd hill is a Gaussian regardless of the user's shape: the
-    // engine only exposes a scalar consensusMean so we don't have a
-    // crowd shape to honour. A wider sigma reads as "the crowd's
-    // belief has more uncertainty than any individual" which is true
-    // by construction.
-    const consensusSpread = Math.max(opts.spread * 1.3, range * 0.05);
-    // Independent jitter stream so the back ridge has a slightly
-    // different micro-profile from the foreground hill even when
-    // their peaks coincide. The xor key is arbitrary but stable.
-    const consensusJitterRng = mulberry32(opts.seed ^ 0xa11_face);
-    const consensusJitters = Array.from(
-      { length: 96 },
-      () => (consensusJitterRng() - 0.5) * 0.018,
-    );
-    // Lift the back-hill horizon up the photo so its peak appears to
-    // emerge from "behind" the user's foreground horizon. Capped so a
-    // very low foreground horizon (low conviction) doesn't push the
-    // back hill into the suns/aurora layer.
-    const consensusHorizonY = Math.max(0.30, horizonY - 0.04);
-    const consensusPeakLift = (0.15 + opts.conviction * 0.18) * 0.6;
-
+  if (consensusInRange && consensusRaw && consensusJitters) {
+    const cRaw = consensusRaw;
+    const cJ = consensusJitters;
+    const cHorizonY = consensusHorizonY;
     consensusSilhouettePath = (px: number, py: number, ps: number) => {
       const points: Array<[number, number]> = [];
-      let maxRaw = 0;
-      const raw: number[] = new Array(numSamples);
       for (let i = 0; i < numSamples; i++) {
         const t = i / (numSamples - 1);
-        const x = opts.lowerBound + t * range;
-        const v = gaussian(x, consensusMean, consensusSpread);
-        raw[i] = v;
-        if (v > maxRaw) maxRaw = v;
-      }
-      for (let i = 0; i < numSamples; i++) {
-        const t = i / (numSamples - 1);
-        const norm = maxRaw > 0 ? raw[i] / maxRaw : 0;
-        const y = consensusHorizonY - norm * consensusPeakLift + consensusJitters[i];
+        const norm = sharedPdfMax > 0 ? cRaw[i] / sharedPdfMax : 0;
+        const y = cHorizonY - norm * peakLift + cJ[i];
         points.push([t, y]);
       }
       let d = `M ${px} ${py + ps}`;
-      d += ` L ${px} ${py + consensusHorizonY * ps}`;
+      d += ` L ${px} ${py + cHorizonY * ps}`;
       for (const [t, y] of points) {
         d += ` L ${px + t * ps} ${py + y * ps}`;
       }
-      d += ` L ${px + ps} ${py + consensusHorizonY * ps}`;
+      d += ` L ${px + ps} ${py + cHorizonY * ps}`;
       d += ` L ${px + ps} ${py + ps} Z`;
       return d;
     };
