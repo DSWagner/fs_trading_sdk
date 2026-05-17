@@ -10,7 +10,7 @@ import { CashOutPanel } from '../components/CashOutPanel';
 import { CashedOutStamp } from '../components/CashedOutStamp';
 import { ShareKit } from '../components/ShareKit';
 import { getBet, getCashOut, type CashOutRecord, type BetRecord } from '../storage';
-import { getDemoBet } from '../demoGalleries';
+import { getDemoBet, isDemoMarketId } from '../demoGalleries';
 import { buildEmbedUrl, buildShareUrl, readShareFromHash } from '../hash';
 import { buildChallengeUrl } from '../challenge';
 import { VerifiedReceiptBadge } from '../components/VerifiedReceiptBadge';
@@ -35,6 +35,24 @@ export function ReceiptPage() {
   const marketId = decodeURIComponent(rawMarket);
   const positionId = decodeURIComponent(rawPos);
 
+  // Curated demo bets (the Studio Pick galleries) ship with synthetic
+  // market IDs (e.g. `demo-gpt-release`) that are not real engine
+  // markets. Hitting the SDK with these IDs returns `422 Unprocessable
+  // Content` on every fetch, every poll, and every focus event, which
+  //   (a) floods the console with errors when the user views a Pick,
+  //   (b) leaves the live-consensus card stuck in a loading skeleton,
+  //   (c) shows "Could not load history right now" for the drift
+  //       sparkline,
+  //   (d) flashes a comparison-pair skeleton that never resolves.
+  //
+  // We detect demo markets up front and pass `enabled: false` through
+  // every SDK hook tied to a demo ID. The hooks still mount (rules of
+  // hooks), but they never fetch and never subscribe to a poll. The
+  // Receipt then renders entirely from the demo bet payload, which
+  // already carries everything needed (bounds, consensus snapshot,
+  // pre-baked outcome, units, title).
+  const isDemo = useMemo(() => isDemoMarketId(marketId), [marketId]);
+
   // Poll the market every 5 seconds while the receipt is open. This is
   // the magic that turns the polaroid from a frozen snapshot into a
   // living object: the SDK cache (`useMarket` -> `useCacheSubscription`)
@@ -52,7 +70,8 @@ export function ReceiptPage() {
   // card and cash-out panel quietly degrade when the engine has
   // nothing fresh to add.
   const { market, loading: marketLoading, error: marketError } = useMarket(marketId, {
-    pollInterval: 5_000,
+    pollInterval: isDemo ? 0 : 5_000,
+    enabled: !isDemo,
   });
 
   const local = useMemo(() => getBet(marketId, positionId), [marketId, positionId]);
@@ -177,6 +196,15 @@ function ReceiptView({
   const polaroidRef = useRef<HTMLDivElement | null>(null);
   const isMobile = useIsMobile();
   const { user, isAuthenticated } = useAuth();
+  // Curated Studio Pick galleries ship with synthetic market IDs that
+  // are not real engine markets. Hitting the SDK with these IDs yields
+  // 422s on every fetch + every poll + every focus event, which floods
+  // the console and pins the live drift / sparkline / comparison cards
+  // in their loading skeletons. We compute `isDemo` once from the
+  // merged record's marketId and pass `enabled={!isDemo}` through to
+  // every SDK-bound child here so the demo path stays silent and the
+  // page renders entirely from the demo bet's pre-baked payload.
+  const isDemo = useMemo(() => isDemoMarketId(String(merged.marketId)), [merged.marketId]);
 
   // Cash-out state: starts from localStorage so the stamp survives a
   // page reload before the SDK cache surfaces the position as sold.
@@ -538,6 +566,52 @@ function ReceiptView({
             />
           </div>
 
+          {/* Demo-bet notice. Curated Studio Pick galleries ship with
+              synthetic market IDs that are not on the engine, so the
+              live drift / drift-sparkline / crowd-comparison blocks are
+              suppressed (they would 422 forever). We show a single
+              honest editorial line in their place so the column doesn't
+              read as broken. */}
+          {isDemo && (
+            <div
+              data-testid="receipt-demo-notice"
+              style={{
+                marginBottom: 16,
+                padding: '14px 16px',
+                background: palette.card,
+                border: `1px dashed ${palette.rule}`,
+                borderRadius: 12,
+              }}
+            >
+              <div
+                style={{
+                  fontFamily: fonts.mono,
+                  fontSize: 10.5,
+                  letterSpacing: 1.6,
+                  color: palette.ember,
+                  fontWeight: 600,
+                }}
+              >
+                STUDIO PICK · CURATED DEMO
+              </div>
+              <div
+                style={{
+                  fontFamily: fonts.body,
+                  fontSize: 12.5,
+                  color: palette.inkMute,
+                  marginTop: 6,
+                  lineHeight: 1.5,
+                }}
+              >
+                This is a hand-curated example receipt. Live drift,
+                history sparkline, and crowd comparison are disabled —
+                this market doesn't exist on the live engine. The
+                polaroid still reflects the original conviction exactly
+                as it was signed.
+              </div>
+            </div>
+          )}
+
           {/* Live consensus drift card. Drives the "this receipt is a
               living object" feel by polling the market every 5 seconds
               and showing where the crowd has moved since the user
@@ -554,6 +628,7 @@ function ReceiptView({
               lowerBound={merged.lowerBound ?? 0}
               upperBound={merged.upperBound ?? 1}
               marketUnits={merged.marketUnits ?? ''}
+              enabled={!isDemo}
             />
           </div>
 
@@ -615,6 +690,7 @@ function ReceiptView({
             resolvedOutcome={resolvedOutcome}
             width={isMobile ? 260 : 320}
             isMobile={isMobile}
+            enabled={!isDemo}
           />
 
           {/* Macro-historical consensus drift sparkline. Pulls the
@@ -633,6 +709,7 @@ function ReceiptView({
             marketUnits={merged.marketUnits ?? ''}
             createdAt={merged.createdAt}
             compact={isMobile}
+            enabled={!isDemo}
           />
 
           {/* Cash-out panel. Visible only to the bet author while the

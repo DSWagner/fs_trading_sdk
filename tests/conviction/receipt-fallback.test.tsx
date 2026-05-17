@@ -347,6 +347,113 @@ describe('Receipt page: graceful market fallback', () => {
     expect(svgStyle.height).toBe('');
   });
 
+  // ────────────────────────────────────────────────────────────────────
+  // DEMO MARKET GATE -- pin the contract that curated Studio Pick
+  // galleries DO NOT pound the engine with their synthetic market IDs.
+  //
+  // Regression for the "I open someone else's polaroid and the page
+  // floods 422s while pinning a perma-loading skeleton on the live
+  // drift card and 'Could not load history right now' on the drift
+  // sparkline" bug. Demo galleries ship marketIds like
+  // `demo-gpt-release` that are not real engine markets. When the
+  // Receipt page mounts, every SDK hook on those IDs has to be
+  // disabled (`enabled: false`) so neither the initial fetch nor the
+  // polling timer ever fires.
+  //
+  // Strategy: mount the receipt with a demo bet and assert that
+  //   - all three SDK hooks were invoked with `enabled: false`
+  //   - the live drift card / drift sparkline / comparison pair
+  //     leave NO trace in the DOM (each returns null when disabled)
+  //   - the editorial "STUDIO PICK · CURATED DEMO" notice IS shown so
+  //     the column does not read as broken empty space.
+  // ────────────────────────────────────────────────────────────────────
+
+  it('demo bets pass enabled:false to every SDK hook tied to the market', () => {
+    useMarketMock.mockReturnValue({
+      market: null,
+      loading: false,
+      isFetching: false,
+      error: null,
+      refetch: () => {},
+    });
+    const { container } = renderReceipt('demo-best-picture', 'critic-1');
+    expect(container.querySelector('[data-testid="receipt-polaroid-frame"]')).not.toBeNull();
+
+    // Every recorded call to useMarket / useMarketHistory / useConsensus
+    // for a demo bet MUST carry enabled:false. We accept both the
+    // top-level call site (in ReceiptPage) and the child cards
+    // (LiveConsensusCard / ComparisonPair / ConsensusDriftSparkline)
+    // as long as none of them silently re-enable.
+    const allMarketCalls = useMarketMock.mock.calls;
+    expect(allMarketCalls.length).toBeGreaterThan(0);
+    for (const [, options] of allMarketCalls) {
+      expect(options?.enabled).toBe(false);
+    }
+
+    const allHistoryCalls = useMarketHistoryMock.mock.calls;
+    // useMarketHistory is only called from ConsensusDriftSparkline,
+    // so we expect at least one call all of which must be disabled.
+    expect(allHistoryCalls.length).toBeGreaterThan(0);
+    for (const [, options] of allHistoryCalls) {
+      expect(options?.enabled).toBe(false);
+    }
+
+    const allConsensusCalls = useConsensusMock.mock.calls;
+    expect(allConsensusCalls.length).toBeGreaterThan(0);
+    for (const args of allConsensusCalls) {
+      // useConsensus signature: (marketId, numPoints?, options?).
+      // The Receipt-page call passes (marketId, undefined, { enabled }).
+      const options = args[2];
+      expect(options?.enabled).toBe(false);
+    }
+  });
+
+  it('demo bets render the STUDIO PICK notice and SUPPRESS the live drift card', () => {
+    useMarketMock.mockReturnValue({
+      market: null,
+      loading: false,
+      isFetching: false,
+      error: null,
+      refetch: () => {},
+    });
+    const { container } = renderReceipt('demo-best-picture', 'critic-1');
+    // The editorial notice fills the space the live cards would have
+    // occupied so the left column does not look broken.
+    expect(container.querySelector('[data-testid="receipt-demo-notice"]')).not.toBeNull();
+    expect(container.textContent).toMatch(/STUDIO PICK/);
+    expect(container.textContent).toMatch(/Live drift, history sparkline, and crowd comparison are disabled/);
+    // The live drift card is mounted but its entire render path
+    // returns null when enabled=false, so the inner skeleton/card
+    // must not appear. The wrapping div with the testid still exists
+    // (it's the page's slot), but it has NO live-consensus subtree.
+    const liveDrift = container.querySelector('[data-testid="receipt-live-drift"]');
+    expect(liveDrift).not.toBeNull();
+    expect(liveDrift!.querySelector('[data-testid="live-consensus-card-loading"]')).toBeNull();
+    expect(liveDrift!.querySelector('[data-testid="live-consensus-card-resolved"]')).toBeNull();
+  });
+
+  it('non-demo bets pass enabled:true (or omit enabled) so the live SDK pipeline runs normally', () => {
+    useMarketMock.mockReturnValue({
+      market: null,
+      loading: false,
+      isFetching: false,
+      error: null,
+      refetch: () => {},
+    });
+    recordBet(localBet);
+    renderReceipt('archived-market', 'pos-1');
+    const allMarketCalls = useMarketMock.mock.calls;
+    expect(allMarketCalls.length).toBeGreaterThan(0);
+    // For a non-demo bet, every useMarket call must be enabled
+    // (either explicitly true or left undefined which the SDK treats
+    // as enabled). We accept both shapes so this test does not become
+    // brittle if a callsite stops passing the option entirely.
+    for (const [, options] of allMarketCalls) {
+      const isEnabled = options === undefined || options?.enabled === undefined || options?.enabled === true;
+      expect(isEnabled).toBe(true);
+    }
+  });
+
   it('the polaroid renders the market title in its caption strip (NOT just the photo + scale)', () => {
     // The bug the user reported was: photo + scale strip render
     // correctly, but the caption strip below (italic market title +

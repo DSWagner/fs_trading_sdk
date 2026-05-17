@@ -42,6 +42,12 @@ export interface ConsensusDriftSparklineProps {
   createdAt: string;
   /** Compact mode for embeds. */
   compact?: boolean;
+  /**
+   * When false, the component renders nothing AND skips the SDK history
+   * fetch + 60s poll. Used by the Receipt page for curated demo bets
+   * whose market IDs are not real engine markets and would 422 forever.
+   */
+  enabled?: boolean;
 }
 
 interface DriftSeries {
@@ -61,14 +67,19 @@ export function ConsensusDriftSparkline({
   marketUnits,
   createdAt,
   compact = false,
+  enabled = true,
 }: ConsensusDriftSparklineProps) {
   // Pull the last 200 snapshots, polled once a minute. The fast-cadence
   // drift card next door already handles the immediate live feel;
   // this view is the macro-historical accompaniment, so a slow poll
   // is fine and keeps the engine cost minimal.
+  //
+  // `enabled: false` short-circuits both the initial fetch and the
+  // poll, so demo market IDs (which 422 forever) stay silent.
   const { history, loading, error } = useMarketHistory(marketId, {
     limit: 200,
-    pollInterval: 60_000,
+    pollInterval: enabled ? 60_000 : 0,
+    enabled,
   });
 
   // Replay state. `playProgress` is in [0, 1]: 0 means "show nothing",
@@ -207,6 +218,8 @@ export function ConsensusDriftSparkline({
     }
     return d;
   }, [series, plotH, plotW, playProgress]);
+
+  if (!enabled) return null;
 
   if (loading && !series) {
     return (

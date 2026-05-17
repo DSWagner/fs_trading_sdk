@@ -39,6 +39,15 @@ export interface LiveConsensusCardProps {
   marketUnits?: string;
   /** Compact mode renders without the outer card chrome. */
   compact?: boolean;
+  /**
+   * When false, the card renders nothing AND does not subscribe to the
+   * SDK market cache (no network request, no polling). The Receipt page
+   * uses this to suppress live data fetches for curated demo bets whose
+   * market IDs (e.g. `demo-gpt-release`) are not real engine markets
+   * and would 422 in a tight loop, polluting the console and rendering
+   * a perma-loading skeleton on someone else's polaroid view.
+   */
+  enabled?: boolean;
 }
 
 const POLL_INTERVAL_MS = 5_000;
@@ -51,10 +60,18 @@ export function LiveConsensusCard({
   upperBound,
   marketUnits = '',
   compact = false,
+  enabled = true,
 }: LiveConsensusCardProps) {
+  // `useMarket` accepts `enabled: false` which suppresses both the
+  // initial fetch and any polling, keeping the SDK cache idle for this
+  // marketId. The hook MUST be called unconditionally (rules of hooks)
+  // so we always invoke it but pass through the gate.
   const { market, loading, error } = useMarket(marketId, {
-    pollInterval: POLL_INTERVAL_MS,
+    pollInterval: enabled ? POLL_INTERVAL_MS : 0,
+    enabled,
   });
+
+  if (!enabled) return null;
 
   const liveConsensus = market?.consensusMean ?? null;
   const resolutionState = (market as any)?.resolutionState ?? 'open';

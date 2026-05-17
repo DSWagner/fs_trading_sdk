@@ -69,6 +69,14 @@ export interface ComparisonPairProps {
   width: number;
   /** Stack vertically when true. */
   isMobile: boolean;
+  /**
+   * When false, the entire block renders nothing AND skips the live
+   * `useConsensus` / `useMarket` SDK fetches. The Receipt page disables
+   * this for curated demo bets whose market IDs are not real engine
+   * markets — without this gate the SDK polls them forever, fills the
+   * console with 422s, and pins a perma-skeleton on the page.
+   */
+  enabled?: boolean;
 }
 
 export function ComparisonPair({
@@ -83,16 +91,23 @@ export function ComparisonPair({
   resolvedOutcome,
   width,
   isMobile,
+  enabled = true,
 }: ComparisonPairProps) {
   // Both hooks tap into the same SDK cache the rest of the Receipt
-  // page is already using, so this adds zero engine cost.
-  const { consensus, loading: consensusLoading } = useConsensus(marketId);
-  const { market } = useMarket(marketId);
+  // page is already using, so this adds zero engine cost. When
+  // `enabled` is false (demo markets) we pass `enabled: false` through
+  // to the SDK so neither hook fetches or polls.
+  const { consensus, loading: consensusLoading } = useConsensus(marketId, undefined, {
+    enabled,
+  });
+  const { market } = useMarket(marketId, { enabled });
 
   const crowdSummary = useMemo(
     () => summariseConsensus(consensus, lowerBound, upperBound),
     [consensus, lowerBound, upperBound],
   );
+
+  if (!enabled) return null;
 
   // Hide the block when the engine has not yet sent us enough data to
   // render a meaningful crowd polaroid. We don't want to flash a

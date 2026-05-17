@@ -722,9 +722,19 @@
 }
 
 .fs-cs-slider-col input[type="range"] {
+  /*
+   * Vertical range input. The standardized way (and the one Chrome
+   * actively recommends to replace the legacy `appearance:
+   * slider-vertical`) is `writing-mode: vertical-lr; direction: rtl`.
+   * Removing `appearance: slider-vertical` silences the
+   * "an 'appearance' property is not standardized. It will be removed
+   * in the future. Use <input type=range style=\"writing-mode:
+   * vertical-lr; direction: rtl\"> instead." console warning that
+   * fires every time the user lands on a page that mounts the
+   * candle-stick widget.
+   */
   writing-mode: vertical-lr;
   direction: rtl;
-  appearance: slider-vertical;
   height: 5rem;
   width: 1rem;
   cursor: pointer;
