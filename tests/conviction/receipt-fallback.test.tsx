@@ -266,27 +266,27 @@ describe('Receipt page: graceful market fallback', () => {
   // ────────────────────────────────────────────────────────────────────
   // POLAROID FRAME GEOMETRY -- pins the wrapper / SVG sizing contract.
   //
-  // Final design (after every CSS-only attempt failed in production):
-  //   * Wrapper width is set in CSS (`width: 100%; maxWidth:
-  //     polaroidWidth`) so it tracks the grid cell up to the
-  //     editorial cap.
-  //   * Wrapper height is set in PIXELS via JS, measured from the
-  //     wrapper's actual rendered width inside a synchronous
-  //     `useLayoutEffect` and re-measured every time the wrapper
-  //     resizes via a ResizeObserver. The height is always exactly
-  //     `measured-width * 1.5` -- the polaroid's 2:3 portrait
-  //     ratio, expressed as a concrete pixel number.
-  //   * The Polaroid SVG inside is rendered with `fillParent`,
-  //     which adds INLINE `position: absolute; inset: 0;
-  //     width: 100%; height: 100%` to the SVG. The SVG inline-
-  //     fills the wrapper's concrete pixel box. No CSS layout path
-  //     is in the load-bearing position; nothing about specificity,
-  //     build minification, browser zoom layout, or flex quirks
-  //     can intervene between "wrapper has these pixel dimensions"
-  //     and "SVG fills those exact pixels".
+  // Final design (after every JS-pixel-locked-rectangle attempt
+  // failed in production):
+  //   * The wrapper is intentionally minimal: `position: relative`
+  //     ONLY. No explicit width / height, no aspect-ratio fallback,
+  //     no overflow:hidden clip, no box-sizing border-box, no
+  //     ResizeObserver. The wrapper is just an anchor for the
+  //     CashedOutStamp absolute overlay and for the ShareKit PNG
+  //     export ref.
+  //   * The Polaroid SVG dictates its OWN intrinsic dimensions via
+  //     the `width` prop -> SVG `width={width} height={width *
+  //     1.5}` HTML attributes. The SVG is the visual frame.
+  //   * The global responsive CSS rule `svg[role="img"] {
+  //     max-width: 100%; height: auto }` lets the SVG shrink
+  //     gracefully on narrow viewports.
+  //
+  // This is identical to how every OTHER polaroid in the app
+  // renders (Profile.tsx BetTile, Embed.tsx, Explore.tsx). Same
+  // code path. No special-case wrapper that could clip the photo.
   // ────────────────────────────────────────────────────────────────────
 
-  it('the polaroid frame wrapper carries explicit pixel WIDTH and HEIGHT in a 2:3 portrait ratio (defended by stacked guarantees)', () => {
+  it('the polaroid frame wrapper is minimal -- a position:relative anchor with NO clipping / NO size lock', () => {
     useMarketMock.mockReturnValue({
       market: null,
       loading: false,
@@ -301,44 +301,26 @@ describe('Receipt page: graceful market fallback', () => {
     ) as HTMLElement | null;
     expect(frame).not.toBeNull();
     const style = (frame as HTMLElement).style;
-    // PRIMARY: BOTH width and height are explicit pixel values from
-    // React state -- ResizeObserver-driven for live updates, with a
-    // safe initial fallback from the polaroidWidth prop. The wrapper
-    // is a known pixel rectangle that the SVG matches exactly.
-    expect(style.width).toMatch(/^\d+px$/);
-    expect(style.height).toMatch(/^\d+px$/);
-    const w = parseInt(style.width, 10);
-    const h = parseInt(style.height, 10);
-    expect(w).toBeGreaterThan(0);
-    expect(h).toBeGreaterThan(0);
-    // Height is exactly round(width * 1.5), the polaroid's 2:3
-    // portrait ratio expressed as a concrete pixel number.
-    expect(h).toBe(Math.round(w * 1.5));
-    // FALLBACK 1: aspect-ratio: 2 / 3 is set as a CSS-layer
-    // backstop. If the inline `height` ever fails to apply (build
-    // minification quirk, future React state hiccup), the browser
-    // still derives the height from the width and keeps the 2:3
-    // portrait ratio so the polaroid never renders as a square or
-    // a flat banner.
-    expect(style.aspectRatio).toBe('2 / 3');
-    // FALLBACK 2: overflow:hidden clips any pixel-level rounding
-    // spill from the SVG so the wrapper is the unambiguous source
-    // of truth for the polaroid silhouette.
-    expect(style.overflow).toBe('hidden');
-    // FALLBACK 3: box-sizing border-box so any future border or
-    // padding never grows the rectangle past its declared size.
-    expect(style.boxSizing).toBe('border-box');
-    // No padding-bottom hack, no max-width. Both were previous
-    // attempts that had at least one failure path on the live
-    // receipt grid.
-    expect(style.paddingBottom).toBe('');
-    expect(style.maxWidth).toBe('');
-    // flex-shrink: 0 so a narrow flex container doesn't squish
-    // the explicit pixel dimensions.
-    expect(style.flexShrink).toBe('0');
-    // position: relative so CashedOutStamp absolute-overlay
-    // anchors against the wrapper.
+    // The wrapper is JUST a relative-positioned anchor for the
+    // CashedOutStamp overlay and the polaroidRef PNG export. The
+    // SVG inside carries the dimensions.
     expect(style.position).toBe('relative');
+    // EXPLICITLY no clipping. Every previous incarnation of this
+    // wrapper had `overflow: hidden`, which silently amputated the
+    // polaroid's right and bottom edges any time the wrapper's
+    // computed pixel rectangle drifted from the SVG's intrinsic
+    // size by even one frame.
+    expect(style.overflow).not.toBe('hidden');
+    // No explicit width / height that could disagree with the
+    // SVG's intrinsic dimensions. The SVG drives the size.
+    expect(style.width).toBe('');
+    expect(style.height).toBe('');
+    // No aspect-ratio constraint. The SVG carries 2:3 natively via
+    // its `width=` and `height=` attributes.
+    expect(style.aspectRatio).toBe('');
+    // No box-sizing override that could interact with future
+    // padding / borders to shrink the visible rectangle.
+    expect(style.boxSizing).toBe('');
   });
 
   // ════════════════════════════════════════════════════════════════════
@@ -347,26 +329,16 @@ describe('Receipt page: graceful market fallback', () => {
   //   "WRITE A VALIDATION TEST WHERE YOU WILL ALWAYS TRY WHETHER THE
   //    IMAGE SIZE AND POLAROID FRAME ARE THE SAME SIZE"
   //
-  // The polaroid SVG and its wrapper frame must be EXACTLY the same
-  // pixel dimensions at every render. Any deviation means the SVG
-  // is being CSS-stretched / letterboxed / clipped relative to its
-  // wrapper, which is the root cause of every "polaroid is the wrong
-  // shape, caption is missing, photo is cropped" report we got.
-  //
-  // Contract:
-  //   * Wrapper carries explicit pixel `width` and `height` inline
-  //     styles (set by JS via ResizeObserver on the parent column).
-  //   * Polaroid SVG carries `width="<wrapperWidth>"` and
-  //     `height="<wrapperHeight>"` HTML attributes equal to the
-  //     wrapper's pixel dimensions (because we pass
-  //     `polaroidPixelWidth` directly to the Polaroid component).
-  //   * The SVG's viewBox is `0 0 <wrapperWidth> <wrapperHeight>`
-  //     so the coordinate space matches the rendered pixels 1:1.
-  //   * Height is exactly round(width * 1.5), the polaroid's 2:3
-  //     portrait ratio.
+  // With the minimal wrapper the SVG IS the frame -- there is no
+  // separate sized wrapper that could disagree. The test now pins
+  // the SVG's own intrinsic dimensions: width attribute equal to
+  // the polaroidWidth prop (380 desktop), height attribute exactly
+  // 1.5x the width, viewBox matches the rendered pixel space, no
+  // CSS stretch contract on the SVG element. If any of these break,
+  // the polaroid renders at the wrong shape.
   // ════════════════════════════════════════════════════════════════════
 
-  it('VALIDATION: the polaroid SVG and the wrapper frame are EXACTLY the same pixel size (image size === frame size)', () => {
+  it('VALIDATION: the polaroid SVG renders at its FULL intrinsic 2:3 size (no clipping, no letterbox, no stretch)', () => {
     useMarketMock.mockReturnValue({
       market: null,
       loading: false,
@@ -377,41 +349,23 @@ describe('Receipt page: graceful market fallback', () => {
     recordBet(localBet);
     const { container } = renderReceipt('archived-market', 'pos-1');
 
-    const frame = container.querySelector(
-      '[data-testid="receipt-polaroid-frame"]',
-    ) as HTMLElement | null;
-    expect(frame).not.toBeNull();
-
     const svg = container.querySelector(
       '[data-testid="receipt-polaroid-frame"] svg[role="img"][aria-label^="Polaroid receipt"]',
     ) as SVGSVGElement | null;
     expect(svg).not.toBeNull();
 
-    // Wrapper pixel dimensions (from inline style).
-    const frameW = parseInt(frame!.style.width, 10);
-    const frameH = parseInt(frame!.style.height, 10);
-    expect(frameW).toBeGreaterThan(0);
-    expect(frameH).toBeGreaterThan(0);
-
     // SVG pixel dimensions (from HTML attributes).
     const svgW = parseInt(svg!.getAttribute('width') || '0', 10);
     const svgH = parseInt(svg!.getAttribute('height') || '0', 10);
-    expect(svgW).toBeGreaterThan(0);
-    expect(svgH).toBeGreaterThan(0);
 
-    // ── THE CORE INVARIANT ──
-    // Image size === Frame size. If this ever fails, the polaroid
-    // is rendering at a different shape than its wrapper, which
-    // visually manifests as a cropped / stretched / letterboxed
-    // polaroid with missing caption text, exactly the bug the user
-    // kept reporting.
-    expect(svgW).toBe(frameW);
-    expect(svgH).toBe(frameH);
-
-    // Both the wrapper and the SVG must be the polaroid's 2:3
-    // portrait aspect ratio (height = 1.5 * width).
-    expect(frameH).toBe(Math.round(frameW * 1.5));
+    // Desktop polaroidWidth is 380 (jsdom matchMedia returns false,
+    // so isMobile is false). The previous "fits in viewport" sizing
+    // is preserved here so the entire artifact + caption fits a
+    // typical 768px viewport without scrolling.
+    expect(svgW).toBe(380);
+    // Height is exactly round(width * 1.5), the 2:3 portrait ratio.
     expect(svgH).toBe(Math.round(svgW * 1.5));
+    expect(svgH).toBe(570);
 
     // The SVG's viewBox must use the same coordinate space as the
     // rendered pixels so every internal layout calculation

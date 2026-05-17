@@ -1,6 +1,6 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { useMarket, useAuth } from '@functionspace/react';
+import { useMarket, useAuth, useConsensus } from '@functionspace/react';
 import { palette, fonts } from '../theme';
 import { Polaroid } from '../components/Polaroid';
 import { LiveConsensusCard } from '../components/LiveConsensusCard';
@@ -210,6 +210,24 @@ function ReceiptView({
   // page renders entirely from the demo bet's pre-baked payload.
   const isDemo = useMemo(() => isDemoMarketId(String(merged.marketId)), [merged.marketId]);
 
+  // Live crowd-consensus density curve for the hero polaroid's back
+  // hill. Shares the SDK cache key with the Receipt page's other
+  // consensus subscribers (LiveConsensusCard, ComparisonPair,
+  // ConsensusDriftSparkline) so this hook adds zero engine cost. The
+  // resulting y-array is forwarded to the Polaroid's `consensusCurve`
+  // prop so the back hill carries the EXACT shape of the market's
+  // current consensus -- bimodal markets render as two peaks, not as
+  // a single Gaussian approximation. Demo markets pass enabled:false
+  // so the SDK never fetches them; the polaroid then falls back to
+  // the legacy single-Gaussian back hill (centred on consensusAtBet).
+  const { consensus: liveConsensus } = useConsensus(merged.marketId, undefined, {
+    enabled: !isDemo,
+  });
+  const consensusCurveY = useMemo(
+    () => (liveConsensus?.points ? liveConsensus.points.map((p) => p.y) : null),
+    [liveConsensus],
+  );
+
   // Cash-out state: starts from localStorage so the stamp survives a
   // page reload before the SDK cache surfaces the position as sold.
   // The CashOutPanel's `onCashedOut` callback hands us the freshly
@@ -413,88 +431,27 @@ function ReceiptView({
     </div>
   );
 
-  // The wrapper is the absolute-positioning context for the
-  // `CashedOutStamp` overlay and the `ShareKit` PNG-export ref. It
-  // doubles as the visual "frame" the user perceives around the
-  // artifact.
-  //
-  // BOTH wrapper dimensions are set as explicit pixel values via JS:
-  //
-  //   - We measure the FLEX CONTAINER (the wrapper's parent)
-  //     synchronously via `useLayoutEffect` and refresh on every
-  //     resize via `ResizeObserver`.
-  //   - The wrapper's pixel width is `min(measured-container-width,
-  //     polaroidWidth)`, so the wrapper fits in the column on
-  //     narrow viewports but never grows past the editorial cap on
-  //     wide viewports.
-  //   - The wrapper's pixel height is exactly `width * 1.5`, the
-  //     polaroid's 2:3 portrait ratio expressed as a concrete
-  //     number.
-  //
-  // The Polaroid SVG inside is then rendered with `fillParent`,
-  // which adds INLINE
-  // `position: absolute; inset: 0; width: 100%; height: 100%` on
-  // the SVG element. The SVG fills the wrapper's concrete pixel
-  // rectangle to the pixel.
-  //
-  // No CSS layout property (width: 100%, max-width, aspect-ratio,
-  // padding-bottom, height: auto, flex-item sizing, align-items)
-  // is in the load-bearing position any more. The wrapper is a
-  // pixel rectangle from React state, the SVG is inline-styled to
-  // fill it. Every previous regression (the wrapper rendering as
-  // a square, the caption clipped, the "fraction of a second
-  // correct then breaks" follow-up render) was a CSS layout path
-  // failing on the live receipt grid. There is now no CSS layout
-  // path between "wrapper has these dimensions" and "SVG fills
-  // those dimensions".
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const [polaroidPixelWidth, setPolaroidPixelWidth] = useState<number>(polaroidWidth);
-  useLayoutEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const compute = () => {
-      const w = el.clientWidth;
-      if (w > 0) setPolaroidPixelWidth(Math.min(w, polaroidWidth));
-    };
-    compute();
-    if (typeof ResizeObserver === 'undefined') return;
-    const observer = new ResizeObserver(compute);
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [polaroidWidth]);
-  const polaroidPixelHeight = Math.round(polaroidPixelWidth * 1.5);
-
+  // The wrapper is intentionally minimal -- a `position: relative`
+  // box sized by the polaroid SVG itself. This matches how every
+  // OTHER polaroid in the app renders (Profile.tsx BetTile,
+  // Embed.tsx, Explore.tsx, LivePortfolioSection.tsx): no
+  // ResizeObserver, no pixel-locked rectangle, no overflow:hidden
+  // clip, no aspect-ratio fallback. Just a `<div style="position:
+  // relative">` that lets the SVG dictate its own intrinsic size
+  // (driven by the `width` prop -> SVG `width={width} height={width
+  // * 1.5}`), with the global responsive CSS rule
+  // `svg[role="img"] { max-width: 100%; height: auto }` letting it
+  // shrink gracefully on narrow viewports. The CashedOutStamp
+  // overlay anchors against this wrapper, the ShareKit PNG export
+  // captures it through `polaroidRef`, and the receipt page never
+  // again clips the polaroid because the wrapper IS the polaroid.
   const polaroidNode = (
-    <div
-      ref={containerRef}
-      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, width: '100%' }}
-    >
-      {/* The wrapper carries STACKED guarantees so its rectangle is
-          ALWAYS the polaroid's 2:3 portrait aspect, identical to the
-          SVG inside, regardless of which guarantee survives any given
-          browser / build / cache state:
-
-          1. Explicit pixel `width` and `height` from React state
-             (ResizeObserver-driven). This is the primary contract.
-          2. CSS `aspectRatio: '2 / 3'` as a fallback. If for any
-             reason the inline `height` is dropped, miscomputed, or
-             overridden, the browser will derive height from width
-             keeping the 2:3 portrait ratio.
-          3. `boxSizing: 'border-box'` so any future border / padding
-             never grows the rectangle past its declared dimensions.
-          4. `overflow: 'hidden'` clips any pixel-level rounding spill
-             from the SVG so the wrapper is the unambiguous source of
-             truth for the polaroid's visual silhouette. */}
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, width: '100%' }}>
       <div
         ref={polaroidRef}
         style={{
           position: 'relative',
-          width: polaroidPixelWidth,
-          height: polaroidPixelHeight,
-          aspectRatio: '2 / 3',
           flexShrink: 0,
-          boxSizing: 'border-box',
-          overflow: 'hidden',
         }}
         data-testid="receipt-polaroid-frame"
       >
@@ -516,10 +473,20 @@ function ReceiptView({
           upperBound={merged.upperBound ?? 1}
           resolutionState={marketResolutionState}
           resolvedOutcome={resolvedOutcome}
-          width={polaroidPixelWidth}
+          width={polaroidWidth}
           animateDevelop
           consensusAtBet={merged.consensusAtBet ?? null}
           expiresAt={(merged as any).expiresAt ?? null}
+          // Hand the literal market-consensus density curve to the
+          // polaroid so its back hill draws the EXACT shape of the
+          // chart's orange "Market Consensus" curve -- bimodal /
+          // multimodal markets render as actual multi-peak ridges
+          // instead of being collapsed to a single Gaussian
+          // approximation. Falls back to the legacy single-Gaussian
+          // back hill (centred on `consensusAtBet`) when the live
+          // curve is unavailable -- demo bets, archived markets,
+          // engine errors all gracefully degrade.
+          consensusCurve={consensusCurveY}
           // Scale-strip viewer perspective: only call the author "you" if
           // the signed-in viewer IS the author. When somebody else's
           // receipt opens (visiting their archive, a shared link, an
@@ -529,7 +496,7 @@ function ReceiptView({
         />
         {showCashedStamp && cashedOut && (
           <CashedOutStamp
-            polaroidWidth={polaroidPixelWidth}
+            polaroidWidth={polaroidWidth}
             realizedPnl={cashedOut.realizedPnl}
             animateLanding={landingPending}
           />

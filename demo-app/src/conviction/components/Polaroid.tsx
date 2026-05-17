@@ -97,6 +97,33 @@ export interface PolaroidProps {
    */
   consensusAtBet?: number | null;
   /**
+   * Optional ACTUAL crowd-consensus density curve, sampled at any
+   * number of evenly-spaced X positions across [lowerBound,
+   * upperBound]. When provided, the back hill (consensus
+   * silhouette) is drawn directly from this array instead of being
+   * approximated as a Gaussian centred on `consensusAtBet`. This
+   * makes the polaroid's back hill the EXACT same shape as the
+   * orange "Market Consensus" curve in the bottom-of-page
+   * Probability Density chart -- including bimodal / multimodal /
+   * heavy-tailed distributions that a single-Gaussian
+   * approximation flattens out. Pass the result of
+   * `evaluateDensityCurve(market.consensus, lowerBound,
+   * upperBound, n).map(p => p.y)` from the SDK's `useConsensus`
+   * hook. Length is unconstrained -- the polaroid resamples at its
+   * own internal grid via linear interpolation.
+   */
+  consensusCurve?: number[] | null;
+  /**
+   * Optional ACTUAL user-belief density curve, same contract as
+   * `consensusCurve` but for the foreground hill. When provided,
+   * the polaroid's front hill matches the chart's purple "Trade
+   * Preview" curve pixel-for-pixel instead of relying on the
+   * shape-driven `densityAt` reconstruction. Pass the result of
+   * `evaluateDensityCurve(previewBelief, lowerBound, upperBound,
+   * n).map(p => p.y)` from the SDK.
+   */
+  userCurve?: number[] | null;
+  /**
    * Label used in the scale strip to mark the prediction tick. Defaults
    * to "you" because the overwhelmingly common case is a polaroid that
    * represents the viewer's OWN bet. ComparisonPair overrides this to
@@ -136,6 +163,8 @@ function PolaroidImpl(props: PolaroidProps) {
     interactive = false,
     animateDevelop = false,
     consensusAtBet = null,
+    consensusCurve = null,
+    userCurve = null,
     predictionLabel = 'you',
   } = props;
 
@@ -310,6 +339,14 @@ function PolaroidImpl(props: PolaroidProps) {
         // can paint a second hill behind the user's silhouette - the
         // contrarian-vs-consensus story rendered as parallax depth.
         consensusAtBet,
+        // ACTUAL density curves from the SDK -- when supplied, the
+        // back hill takes the literal market-consensus shape (orange
+        // chart curve) and the front hill takes the literal preview
+        // belief shape (purple chart curve). Both fall back to the
+        // procedural Gaussian / densityAt reconstructions when null
+        // so legacy receipts keep rendering the same artwork.
+        consensusCurve,
+        userCurve,
       }),
     [
       width,
@@ -327,6 +364,8 @@ function PolaroidImpl(props: PolaroidProps) {
       resolvedOutcome,
       effectiveRarity,
       consensusAtBet,
+      consensusCurve,
+      userCurve,
     ],
   );
 
@@ -1472,6 +1511,25 @@ function buildPhoto(opts: {
    * Null falls back to the original single-hill composition.
    */
   consensusAtBet: number | null;
+  /**
+   * ACTUAL crowd-consensus density curve (e.g. straight from
+   * `useConsensus`). When provided, the back hill is drawn from
+   * this array verbatim, so a bimodal market consensus renders as
+   * an actual two-peak ridge instead of the single-Gaussian
+   * approximation that ignored multi-modal shapes. Null/empty
+   * falls back to the legacy `gaussian(x, consensusAtBet, ...)`
+   * reconstruction.
+   */
+  consensusCurve?: number[] | null;
+  /**
+   * ACTUAL user-belief density curve (e.g. straight from
+   * `evaluateDensityCurve(previewBelief, ...)`). When provided,
+   * the front hill is drawn from this array verbatim instead of
+   * being recomputed via `densityAt`, so the polaroid hill
+   * silhouette is pixel-equivalent to the chart's "Trade Preview"
+   * curve. Null/empty falls back to `densityAt`.
+   */
+  userCurve?: number[] | null;
 }): PhotoSpec {
   const range = opts.upperBound - opts.lowerBound;
   const rng = mulberry32(opts.seed);
@@ -1773,14 +1831,49 @@ function buildPhoto(opts: {
   const dx = range / Math.max(1, numSamples - 1);
   const peakLift = 0.15 + opts.conviction * 0.18;
 
+  // Resample any provided density curve (variable length) onto our
+  // 96-sample silhouette grid via linear interpolation, so callers can
+  // pass curves of any granularity straight from `useConsensus` /
+  // `evaluateDensityCurve` without conforming to our internal sample
+  // count.
+  const resampleCurve = (curve: number[]): number[] => {
+    const out = new Array<number>(numSamples);
+    if (curve.length === 0) return out.fill(0);
+    if (curve.length === 1) return out.fill(curve[0]);
+    for (let i = 0; i < numSamples; i++) {
+      const t = i / (numSamples - 1);
+      const idx = t * (curve.length - 1);
+      const lo = Math.floor(idx);
+      const hi = Math.min(curve.length - 1, lo + 1);
+      const f = idx - lo;
+      out[i] = curve[lo] * (1 - f) + curve[hi] * f;
+    }
+    return out;
+  };
+
   const userRaw: number[] = new Array(numSamples);
   let userMass = 0;
-  for (let i = 0; i < numSamples; i++) {
-    const t = i / (numSamples - 1);
-    const x = opts.lowerBound + t * range;
-    const v = densityAt(x, opts);
-    userRaw[i] = v;
-    userMass += v;
+  if (opts.userCurve && opts.userCurve.length > 0) {
+    // Caller supplied the chart's actual evaluated belief curve. The
+    // polaroid front hill copies its shape verbatim, ensuring "the
+    // hills in the polaroid look exactly like the curves in the
+    // chart" without relying on the procedural densityAt
+    // reconstruction matching the SDK's `evaluateDensityCurve` to
+    // floating-point precision.
+    const samples = resampleCurve(opts.userCurve);
+    for (let i = 0; i < numSamples; i++) {
+      const v = Math.max(0, samples[i]);
+      userRaw[i] = v;
+      userMass += v;
+    }
+  } else {
+    for (let i = 0; i < numSamples; i++) {
+      const t = i / (numSamples - 1);
+      const x = opts.lowerBound + t * range;
+      const v = densityAt(x, opts);
+      userRaw[i] = v;
+      userMass += v;
+    }
   }
   userMass *= dx;
   let userPdfMax = 0;
@@ -1799,11 +1892,16 @@ function buildPhoto(opts: {
     userPdfMax = userRaw.reduce((a, b) => Math.max(a, b), 0);
   }
 
-  const consensusInRange =
+  const hasConsensusCurve = !!(opts.consensusCurve && opts.consensusCurve.length > 0);
+  const consensusMeanInRange =
     opts.consensusAtBet != null &&
     Number.isFinite(opts.consensusAtBet) &&
     opts.consensusAtBet >= opts.lowerBound &&
     opts.consensusAtBet <= opts.upperBound;
+  // The back hill draws as long as we have ANY signal for it: either
+  // the actual density curve (preferred -- bimodal-aware) or just a
+  // scalar mean to centre a Gaussian on (legacy fallback).
+  const consensusInRange = hasConsensusCurve || consensusMeanInRange;
 
   let consensusRaw: number[] | null = null;
   let consensusPdfMax = 0;
@@ -1811,21 +1909,35 @@ function buildPhoto(opts: {
   let consensusJitters: number[] | null = null;
 
   if (consensusInRange) {
-    const consensusMean = opts.consensusAtBet as number;
-    // Crowd hill is a Gaussian regardless of the user's shape: the
-    // engine only exposes a scalar consensusMean so we don't have a
-    // crowd shape to honour. A wider sigma reads as "the crowd's
-    // belief has more uncertainty than any individual" which is true
-    // by construction.
-    const consensusSpread = Math.max(opts.spread * 1.3, range * 0.05);
     consensusRaw = new Array(numSamples);
     let consensusMass = 0;
-    for (let i = 0; i < numSamples; i++) {
-      const t = i / (numSamples - 1);
-      const x = opts.lowerBound + t * range;
-      const v = gaussian(x, consensusMean, consensusSpread);
-      consensusRaw[i] = v;
-      consensusMass += v;
+    if (hasConsensusCurve) {
+      // Caller supplied the actual market-consensus density curve.
+      // The polaroid back hill copies its shape verbatim -- a
+      // bimodal market consensus paints as two peaks instead of
+      // collapsing into a single Gaussian. This is the contract
+      // the user requested: "the lighter hill should have the shape
+      // of the market consensus."
+      const samples = resampleCurve(opts.consensusCurve as number[]);
+      for (let i = 0; i < numSamples; i++) {
+        const v = Math.max(0, samples[i]);
+        consensusRaw[i] = v;
+        consensusMass += v;
+      }
+    } else {
+      const consensusMean = opts.consensusAtBet as number;
+      // Legacy fallback when no curve is available: Gaussian centred
+      // on the scalar `consensusAtBet`. Wider sigma reads as "the
+      // crowd's belief has more uncertainty than any individual"
+      // which is true by construction.
+      const consensusSpread = Math.max(opts.spread * 1.3, range * 0.05);
+      for (let i = 0; i < numSamples; i++) {
+        const t = i / (numSamples - 1);
+        const x = opts.lowerBound + t * range;
+        const v = gaussian(x, consensusMean, consensusSpread);
+        consensusRaw[i] = v;
+        consensusMass += v;
+      }
     }
     consensusMass *= dx;
     if (consensusMass > 1e-9) {

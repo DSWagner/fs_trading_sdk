@@ -6,12 +6,13 @@ import {
   useMarket,
   useBuy,
   usePreviewPayout,
+  useConsensus,
 } from '@functionspace/react';
 
 // React 18 (demo-app) vs React 19 (workspace root) types mismatch. Cast to align.
 const FunctionSpaceContext = _FunctionSpaceContext as unknown as React.Context<any>;
 import { ConsensusChart } from '@functionspace/ui';
-import { generateGaussian, generateRange, generateBelief } from '@functionspace/core';
+import { generateGaussian, generateRange, generateBelief, evaluateDensityCurve } from '@functionspace/core';
 import type { BeliefVector, PayoutCurve } from '@functionspace/core';
 import { palette, fonts } from '../theme';
 import { recordBet } from '../storage';
@@ -127,6 +128,68 @@ export function BetFlowPage() {
   const deferredCollateral = useDeferredValue(collateral);
   const deferredShape = useDeferredValue(shape);
   const deferredReasoning = useDeferredValue(reasoning);
+
+  // ────────────────────────────────────────────────────────────────────
+  // POLAROID HILL CURVES -- pixel-equivalent to the chart's curves.
+  //
+  // The polaroid silhouettes are drawn from the SAME density data the
+  // bottom-of-page Probability Density chart renders, not from a
+  // separate procedural reconstruction. The chart subscribes to
+  // `useConsensus(marketId)` for the orange "Market Consensus" curve
+  // and to `evaluateDensityCurve(previewBelief, ...)` for the purple
+  // "Trade Preview" curve. The polaroid now does the same and passes
+  // the y-arrays straight to the Polaroid component as `consensusCurve`
+  // and `userCurve`. Net: a bimodal market consensus paints two peaks
+  // on the back hill, a tight Gaussian preview paints a sharp front
+  // hill, and the polaroid stops "lying about shape." Without this the
+  // polaroid back hill was hardcoded to a single Gaussian centred on
+  // `consensusMean` and could not represent multimodal markets at all.
+  //
+  // CRITICAL HOOK ORDER: these MUST live above the loading / error
+  // early-return guards further down. React requires the same number
+  // of hooks fired in the same order on every render. The first render
+  // returns early (market still loading) and the second returns the
+  // populated page; both need to call `useConsensus` and `useMemo`
+  // here or React throws "Rendered more hooks than during the previous
+  // render" (minified error #310).
+  // ────────────────────────────────────────────────────────────────────
+  const { consensus: liveConsensus } = useConsensus(marketId ?? '');
+  const consensusCurveY = useMemo(
+    () => (liveConsensus?.points ? liveConsensus.points.map((p) => p.y) : null),
+    [liveConsensus],
+  );
+  // `market` from the existing useMarket call above is in scope here.
+  // We rebuild the belief vector from DEFERRED slider values so the
+  // polaroid hill and the chart preview curve move in lockstep, even
+  // mid-drag.
+  const userBeliefCurve = useMemo(() => {
+    if (!market) return null;
+    try {
+      const { numBuckets, lowerBound: lo, upperBound: hi } = market.config;
+      let belief: BeliefVector;
+      if (deferredShape === 'range') {
+        const half = Math.max(deferredSpread, (hi - lo) * 0.005);
+        const low = Math.max(lo, deferredPrediction - half);
+        const high = Math.min(hi, deferredPrediction + half);
+        belief = generateRange(low, high, numBuckets, lo, hi, 0.4);
+      } else if (deferredShape === 'bimodal') {
+        belief = generateBelief(
+          [
+            { type: 'point', center: deferredPrediction, spread: Math.max(deferredSpread, 0.01), weight: 0.5 },
+            { type: 'point', center: deferredSecondPeak, spread: Math.max(deferredSpread, 0.01), weight: 0.7 },
+          ],
+          numBuckets,
+          lo,
+          hi,
+        );
+      } else {
+        belief = generateGaussian(deferredPrediction, Math.max(deferredSpread, 0.01), numBuckets, lo, hi);
+      }
+      return evaluateDensityCurve(belief, lo, hi, 200).map((p) => p.y);
+    } catch {
+      return null;
+    }
+  }, [market, deferredShape, deferredPrediction, deferredSpread, deferredSecondPeak]);
 
   // Measure BOTH halves of the page so we can:
   //   1. Pass the right-column width to the polaroid so it fills 50%
@@ -528,6 +591,7 @@ export function BetFlowPage() {
   // its resolvedOutcome could disagree by one frame, causing visible
   // flicker between develop accuracy bands.
   const deferredPreviewOutcome = deferredPrediction;
+
   const renderPreviewPolaroid = (
     mode: 'before' | 'after',
     overrideWidth?: number,
@@ -560,6 +624,11 @@ export function BetFlowPage() {
       resolutionState={mode === 'after' ? 'resolved' : 'open'}
       resolvedOutcome={mode === 'after' ? deferredPreviewOutcome : null}
       consensusAtBet={market.consensusMean ?? null}
+      // Hand the literal chart curves to the polaroid so the back hill
+      // (consensus) and front hill (user belief) draw the EXACT shapes
+      // the bottom-of-page chart renders -- including bimodal markets.
+      consensusCurve={consensusCurveY}
+      userCurve={userBeliefCurve}
       animateDevelop={mode === 'after'}
     />
   );

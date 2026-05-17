@@ -60,6 +60,7 @@ const useMarketMock = vi.fn();
 const useAuthMock = vi.fn();
 const useBuyMock = vi.fn();
 const usePreviewPayoutMock = vi.fn();
+const useConsensusMock = vi.fn();
 
 vi.mock('@functionspace/react', () => ({
   // The page imports the context to fire setPreviewBelief calls; we
@@ -70,6 +71,11 @@ vi.mock('@functionspace/react', () => ({
   useAuth: (...args: any[]) => useAuthMock(...args),
   useBuy: (...args: any[]) => useBuyMock(...args),
   usePreviewPayout: (...args: any[]) => usePreviewPayoutMock(...args),
+  // BetFlow now subscribes to the live consensus density curve so it
+  // can hand the polaroid the actual chart-shaped back hill. The
+  // hook-order test only cares about the React render order, not the
+  // curve shape, so we return a benign empty curve by default.
+  useConsensus: (...args: any[]) => useConsensusMock(...args),
 }));
 
 // The SDK's `ConsensusChart` from `@functionspace/ui` reaches for
@@ -101,6 +107,8 @@ beforeEach(() => {
   useAuthMock.mockReset();
   useBuyMock.mockReset();
   usePreviewPayoutMock.mockReset();
+  useConsensusMock.mockReset();
+  useConsensusMock.mockReturnValue({ consensus: null, loading: false, isFetching: false, error: null, refetch: () => {} });
   // Default: not authenticated. The AuthGate inside BetFlow then
   // mounts the editorial sign-in surface, which is fine — we only
   // care that BetFlow itself doesn't crash on the transition.

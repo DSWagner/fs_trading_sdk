@@ -219,28 +219,6 @@ svg[role="img"][aria-label^="Polaroid receipt"] {
   height: auto;
 }
 
-/* Receipt page polaroid SVG: pin to its intrinsic numeric pixel
- * size set by React props. The wrapper around the SVG carries the
- * same pixel dimensions (driven by `ResizeObserver`), so this
- * selector defensively turns OFF the responsive-shrink behaviour
- * for the receipt's hero polaroid. Without this rule the global
- * `max-width: 100%; height: auto` could desynchronise the SVG's
- * rendered size from the wrapper's pixel box during the brief
- * window between two layout passes, which was the visible root
- * cause of the "polaroid is cut off, the caption is missing"
- * regression that kept resurfacing on the live receipt page.
- *
- * `width: auto` here means "use the SVG's intrinsic numeric
- * `width=` HTML attribute". `max-width: none` strips the
- * responsive cap. The wrapper around it is sized in lockstep
- * with that same numeric width, so the SVG cannot overflow it. */
-[data-testid="receipt-polaroid-frame"] svg[role="img"][aria-label^="Polaroid receipt"] {
-  display: block;
-  width: auto;
-  height: auto;
-  max-width: none;
-}
-
 a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible {
   outline: 2px solid var(--c-ember);
   outline-offset: 2px;
