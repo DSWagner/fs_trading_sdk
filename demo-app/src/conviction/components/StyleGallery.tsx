@@ -131,7 +131,17 @@ export function StyleGallery() {
                   fontFamily: fonts.mono,
                   fontSize: 10,
                   letterSpacing: 1.5,
-                  color: isActive ? meta.color : palette.inkMute,
+                  // Inactive: `palette.inkSoft` (deep purple in light
+                  // mode, pale lavender in dark mode). The previous
+                  // `palette.inkMute` value sat at the low-contrast
+                  // boundary and read as "almost invisible" in dark
+                  // mode -- the user could only see the labels by
+                  // hovering, which surfaced the saturated rarity
+                  // color below. `inkSoft` is two shades brighter
+                  // and clears WCAG AA in both themes while still
+                  // letting the hovered `meta.color` flash carry
+                  // the rarity-signal payload.
+                  color: isActive ? meta.color : palette.inkSoft,
                   textAlign: 'center',
                   textTransform: 'uppercase',
                   transition: 'color 160ms',

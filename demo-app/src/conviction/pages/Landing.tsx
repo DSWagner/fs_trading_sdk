@@ -305,14 +305,32 @@ function RarityIntro({ isMobile }: { isMobile: boolean }) {
       >
         {RARITY_ORDER.map((tier) => {
           const meta = TIER_META[tier];
+          // Derive the chip styling from the saturated rarity color
+          // (the same hex used for the Polaroid border in the gallery
+          // below) rather than the hard-coded pale `badgeFill` /
+          // `badgeStroke` / `badgeText` triplet from `rarity.ts`. The
+          // pale-fill triplet was tuned for a near-white card and
+          // washed out badly on the dark aubergine `--c-card` in dark
+          // mode (low saturation, too bright). `color-mix` blends the
+          // rarity hue with the active card color, so the same rule
+          // produces a faint pastel tint on light mode and a faint
+          // saturated tint on dark mode -- always feeling like the
+          // polaroid border below, never washed out.
+          //
+          // Border = saturated rarity color so the chip carries the
+          // same edge color as the polaroid in the StyleGallery.
+          // Label text = `palette.ink` so it stays readable in BOTH
+          // modes regardless of rarity hue (the legendary yellow
+          // would otherwise wash out against its own faint tint).
+          // The dot already carries the saturated rarity signal.
           return (
             <div
               key={tier}
               data-testid={`landing-tier-${tier}`}
               style={{
                 padding: '12px 8px',
-                background: meta.badgeFill,
-                border: `1px solid ${meta.badgeStroke}`,
+                background: `color-mix(in srgb, ${meta.color} 16%, var(--c-card))`,
+                border: `1px solid ${meta.color}`,
                 borderRadius: 6,
                 textAlign: 'center',
               }}
@@ -322,7 +340,7 @@ function RarityIntro({ isMobile }: { isMobile: boolean }) {
                   fontFamily: fonts.mono,
                   fontSize: 9.5,
                   letterSpacing: 1.4,
-                  color: meta.badgeText,
+                  color: palette.ink,
                   marginBottom: 6,
                 }}
               >
