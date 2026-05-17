@@ -77,6 +77,14 @@ export interface ComparisonPairProps {
    * console with 422s, and pins a perma-skeleton on the page.
    */
   enabled?: boolean;
+  /**
+   * Whether the signed-in viewer IS the bet author. Drives the
+   * left-hand polaroid's scale-strip prefix: the author sees "you"
+   * but a stranger sees "@theirhandle" so the receipt never falsely
+   * implies the conviction belongs to the viewer. The crowd
+   * polaroid on the right is unaffected and always reads "crowd".
+   */
+  isOwner?: boolean;
 }
 
 export function ComparisonPair({
@@ -92,6 +100,7 @@ export function ComparisonPair({
   width,
   isMobile,
   enabled = true,
+  isOwner = true,
 }: ComparisonPairProps) {
   // Both hooks tap into the same SDK cache the rest of the Receipt
   // page is already using, so this adds zero engine cost. When
@@ -156,7 +165,7 @@ export function ComparisonPair({
               fontWeight: 600,
             }}
           >
-            YOUR CALL · VS · THE CROWD
+            {isOwner ? 'YOUR CALL · VS · THE CROWD' : `@${userBet.username.toUpperCase()} · VS · THE CROWD`}
           </div>
           <h3
             style={{
@@ -193,8 +202,8 @@ export function ComparisonPair({
         }}
       >
         <PairColumn
-          label="YOU"
-          subLabel={`@${userBet.username}`}
+          label={isOwner ? 'YOU' : `@${userBet.username}`}
+          subLabel={isOwner ? `@${userBet.username}` : 'their conviction'}
           isMobile={isMobile}
         >
           <Polaroid
@@ -217,6 +226,10 @@ export function ComparisonPair({
             width={userWidth}
             consensusAtBet={userBet.consensusAtBet}
             expiresAt={(market as any)?.expiresAt ?? null}
+            // "you" only when the signed-in viewer IS the author.
+            // Otherwise the strip reads "@theirhandle" so a visitor
+            // never sees a stranger's conviction labelled as their own.
+            predictionLabel={isOwner ? 'you' : `@${userBet.username}`}
           />
         </PairColumn>
 
@@ -269,6 +282,8 @@ export function ComparisonPair({
         upperBound={upperBound}
         resolvedOutcome={resolvedOutcome}
         resolutionState={resolutionState}
+        authorHandle={userBet.username}
+        isOwner={isOwner}
       />
     </section>
   );
@@ -359,12 +374,19 @@ interface DiffBandProps {
   upperBound: number;
   resolvedOutcome?: number | null;
   resolutionState?: string;
+  /** Author handle used in non-owner diff sentences ("@pimo is …"). */
+  authorHandle: string;
+  /** Whether the signed-in viewer IS the author. */
+  isOwner: boolean;
 }
 
 /**
  * The diff band sits below both polaroids and turns the picture into a
- * sentence. "You are 12 % {units} {higher|lower} than the crowd. The
- * crowd is closer to the truth (after resolution only)."
+ * sentence. When the viewer IS the author it reads in second person
+ * ("You are 12 % higher than the crowd"). When the viewer is a stranger
+ * it reads about the author in third person ("@pimo is 12 % higher than
+ * the crowd") so the page never falsely claims the conviction is the
+ * viewer's.
  */
 function DiffBand({
   userPrediction,
@@ -374,6 +396,8 @@ function DiffBand({
   upperBound,
   resolvedOutcome,
   resolutionState,
+  authorHandle,
+  isOwner,
 }: DiffBandProps) {
   const diff = userPrediction - crowdMean;
   const range = Math.max(0.0001, upperBound - lowerBound);
@@ -386,11 +410,26 @@ function DiffBand({
     const userErr = Math.abs(userPrediction - (resolvedOutcome as number));
     const crowdErr = Math.abs(crowdMean - (resolvedOutcome as number));
     if (userErr < crowdErr - range * 0.01) {
-      verdict = { text: 'You called it tighter than the crowd.', color: palette.jade };
+      verdict = {
+        text: isOwner
+          ? 'You called it tighter than the crowd.'
+          : `@${authorHandle} called it tighter than the crowd.`,
+        color: palette.jade,
+      };
     } else if (crowdErr < userErr - range * 0.01) {
-      verdict = { text: 'The crowd called it tighter than you.', color: palette.rose };
+      verdict = {
+        text: isOwner
+          ? 'The crowd called it tighter than you.'
+          : `The crowd called it tighter than @${authorHandle}.`,
+        color: palette.rose,
+      };
     } else {
-      verdict = { text: 'You and the crowd landed equally close.', color: palette.inkSoft };
+      verdict = {
+        text: isOwner
+          ? 'You and the crowd landed equally close.'
+          : `@${authorHandle} and the crowd landed equally close.`,
+        color: palette.inkSoft,
+      };
     }
   }
   return (
@@ -411,7 +450,8 @@ function DiffBand({
       }}
     >
       <span>
-        You are <strong style={{ color: palette.ember }}>{diffPct.toFixed(1)}%</strong> of the
+        {isOwner ? 'You are ' : <>@{authorHandle} is </>}
+        <strong style={{ color: palette.ember }}>{diffPct.toFixed(1)}%</strong> of the
         range {sign} than the crowd
         {marketUnits ? <> (<span style={{ fontFamily: fonts.mono }}>{userPrediction.toFixed(2)} vs {crowdMean.toFixed(2)} {marketUnits}</span>)</> : null}.
       </span>

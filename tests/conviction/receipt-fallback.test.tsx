@@ -571,4 +571,68 @@ describe('Receipt page: graceful market fallback', () => {
     expect(svgText).toContain('$25');
     expect(svgText).toContain('CONVICTION');
   });
+
+  // ════════════════════════════════════════════════════════════════════
+  // VIEWER-PERSPECTIVE LABEL -- the user reported that opening
+  // somebody else's conviction still printed "you · 3,580" on the
+  // polaroid scale strip, falsely implying the conviction was the
+  // viewer's own. The contract:
+  //
+  //   * Visiting MY OWN receipt: the strip prefix reads "you".
+  //   * Visiting somebody ELSE'S receipt: the strip prefix reads
+  //     "@theirhandle". No "you" anywhere on the polaroid.
+  // ════════════════════════════════════════════════════════════════════
+
+  it('VIEWER-PERSPECTIVE: my own receipt prefixes the scale strip with "you"', () => {
+    useMarketMock.mockReturnValue({
+      market: null,
+      loading: false,
+      isFetching: false,
+      error: null,
+      refetch: () => {},
+    });
+    // Author === current viewer.
+    useAuthMock.mockReturnValue({ user: { username: 'me' }, isAuthenticated: true });
+    recordBet(localBet);
+    const { container } = renderReceipt('archived-market', 'pos-1');
+    const svg = container.querySelector(
+      '[data-testid="receipt-polaroid-frame"] svg[role="img"][aria-label^="Polaroid receipt"]',
+    ) as SVGSVGElement | null;
+    expect(svg).not.toBeNull();
+    // The scale strip "you · NN" prediction marker is the only place
+    // where a 'you' label can legitimately appear on the polaroid SVG
+    // for an owner-view; assert it is present here so the receipt
+    // reads as the visitor's own.
+    expect((svg as SVGSVGElement).textContent ?? '').toMatch(/you\s+·\s+60/);
+  });
+
+  it('VIEWER-PERSPECTIVE: somebody else\'s receipt prefixes the scale strip with "@theirhandle" (NEVER "you")', () => {
+    useMarketMock.mockReturnValue({
+      market: null,
+      loading: false,
+      isFetching: false,
+      error: null,
+      refetch: () => {},
+    });
+    // Author "me", but the signed-in viewer is a stranger named
+    // "stranger". The polaroid must NOT call the visitor "you".
+    useAuthMock.mockReturnValue({
+      user: { username: 'stranger' },
+      isAuthenticated: true,
+    });
+    recordBet(localBet);
+    const { container } = renderReceipt('archived-market', 'pos-1');
+    const svg = container.querySelector(
+      '[data-testid="receipt-polaroid-frame"] svg[role="img"][aria-label^="Polaroid receipt"]',
+    ) as SVGSVGElement | null;
+    expect(svg).not.toBeNull();
+    const svgText = (svg as SVGSVGElement).textContent ?? '';
+    // The strip should now read "@me · 60", not "you · 60".
+    expect(svgText).toMatch(/@me\s+·\s+60/);
+    // Hard contract: NO "you · " anywhere on the SVG when viewing
+    // someone else's receipt. The footer line "@me · predicted 60"
+    // is the only handle reference allowed and it never starts with
+    // "you".
+    expect(svgText).not.toMatch(/you\s+·/);
+  });
 });

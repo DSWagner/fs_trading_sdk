@@ -253,7 +253,7 @@ export function ProfilePage() {
               ? enriched.filter((e) => e.resolutionState === 'resolved' || e.resolutionState === 'voided')
               : enriched
             ).map((e) => (
-              <BetTile key={`${e.record.marketId}:${e.record.positionId}`} bet={e} />
+              <BetTile key={`${e.record.marketId}:${e.record.positionId}`} bet={e} isOwn={isOwn} />
             ))}
           </div>
         </>
@@ -589,7 +589,7 @@ function CalibrationCard({
   );
 }
 
-function BetTile({ bet }: { bet: EnrichedBet }) {
+function BetTile({ bet, isOwn }: { bet: EnrichedBet; isOwn: boolean }) {
   const r = bet.record;
   return (
     <Link
@@ -617,6 +617,11 @@ function BetTile({ bet }: { bet: EnrichedBet }) {
         expiresAt={r.expiresAt ?? null}
         width={260}
         interactive
+        // Visiting your own profile, the strip prefixes "you · 3,580";
+        // visiting somebody else's profile it reads "@theirhandle ·
+        // 3,580" so a stranger's archive never reads as the viewer's
+        // own convictions.
+        predictionLabel={isOwn ? 'you' : `@${r.username}`}
       />
     </Link>
   );

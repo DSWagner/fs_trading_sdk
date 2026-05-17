@@ -520,6 +520,12 @@ function ReceiptView({
           animateDevelop
           consensusAtBet={merged.consensusAtBet ?? null}
           expiresAt={(merged as any).expiresAt ?? null}
+          // Scale-strip viewer perspective: only call the author "you" if
+          // the signed-in viewer IS the author. When somebody else's
+          // receipt opens (visiting their archive, a shared link, an
+          // embed), the strip prints "@theirhandle" instead so the
+          // polaroid never falsely claims the conviction is yours.
+          predictionLabel={isOwner ? 'you' : `@${merged.username}`}
         />
         {showCashedStamp && cashedOut && (
           <CashedOutStamp
@@ -786,6 +792,7 @@ function ReceiptView({
             width={isMobile ? 260 : 320}
             isMobile={isMobile}
             enabled={!isDemo}
+            isOwner={isOwner}
           />
 
           {/* Macro-historical consensus drift sparkline. Pulls the

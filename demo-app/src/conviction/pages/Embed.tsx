@@ -122,6 +122,11 @@ export function EmbedPage() {
           consensusAtBet={(merged as any).consensusAtBet ?? null}
           expiresAt={(merged as any).expiresAt ?? null}
           interactive
+          // Embeds are dropped into someone else's blog / Notion /
+          // Substack — the viewer is by definition NOT the author.
+          // Always prefix the strip with the author's handle so the
+          // embedded receipt never reads as the embedder's own.
+          predictionLabel={`@${merged.username}`}
         />
       </a>
       <a

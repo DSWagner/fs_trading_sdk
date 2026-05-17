@@ -248,6 +248,10 @@ function GalleryCard({ entry, isMobile }: { entry: GalleryEntry; isMobile: boole
             consensusAtBet={featured.bet.consensusAtBet ?? null}
             expiresAt={featured.bet.expiresAt ?? null}
             width={isMobile ? 200 : 220}
+            // Galleries spotlight other people's convictions, not the
+            // viewer's own. The strip reads "@author · 3,580" so the
+            // featured receipt never gets misread as the visitor's.
+            predictionLabel={`@${featured.bet.username}`}
           />
         </div>
       )}
