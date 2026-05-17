@@ -91,6 +91,15 @@ export function ConsensusDriftSparkline({
   const [isPlaying, setIsPlaying] = useState(false);
   const rafRef = useRef<number | null>(null);
   const playStartRef = useRef<number | null>(null);
+
+  // Hover state. `hoverProgress` is the cursor's progress along the
+  // time axis [0, 1], or null when the user is not currently hovering
+  // the chart. Hover takes precedence over replay for the headline
+  // readout: if the user is dragging their mouse across the chart we
+  // show the value AT THE CURSOR, even mid-replay, because that's
+  // the immediate feedback they're asking for.
+  const [hoverProgress, setHoverProgress] = useState<number | null>(null);
+  const svgRef = useRef<SVGSVGElement | null>(null);
   // Total replay duration in ms. Tuned so even a market with a
   // ridiculously long history (200 snapshots) replays in 5 seconds —
   // long enough to read as a "movie", short enough to not feel slow.
@@ -264,6 +273,70 @@ export function ConsensusDriftSparkline({
   const drift = last.mean - first.mean;
   const driftPct = Math.abs(drift) / Math.max(0.0001, upperBound - lowerBound);
 
+  // Cursor progress = where the readout / hairline / dot are pinned.
+  // Priority: hover > active replay > resting at "latest snapshot".
+  // The user's complaint was that the chart had NO value readout
+  // during replay or hover. Cursor progress now drives the headline
+  // value so both interactions surface a live number.
+  const cursorProgress: number =
+    hoverProgress != null
+      ? hoverProgress
+      : isPlaying || playProgress < 1
+        ? playProgress
+        : 1;
+  const cursorMode: 'hover' | 'replay' | 'latest' =
+    hoverProgress != null ? 'hover' : isPlaying || playProgress < 1 ? 'replay' : 'latest';
+  const cursor = pickCursor(points, cursorProgress);
+  const cursorX = padL + ((cursor.t - tMin) / tSpan) * plotW;
+
+  const fromBet = consensusAtBet != null ? cursor.mean - consensusAtBet : null;
+  const cursorAgeMs = Math.max(0, Date.now() - cursor.t);
+  // Format milliseconds into a friendly "Xm ago / Xh ago / Xd ago"
+  // bucket so the time delta is human-readable at every scale.
+  const formatAge = (ms: number): string => {
+    if (ms < 60_000) return 'just now';
+    const minutes = Math.round(ms / 60_000);
+    if (minutes < 90) return `${minutes}m ago`;
+    const hours = Math.round(minutes / 60);
+    if (hours < 48) return `${hours}h ago`;
+    const days = Math.round(hours / 24);
+    return `${days}d ago`;
+  };
+  // Format a market value with sensible decimal precision based on
+  // the market's absolute scale. Sub-1 markets get 3 decimals
+  // (e.g. probability markets), 1..1000 gets 2, larger gets none.
+  const formatValue = (v: number): string => {
+    const abs = Math.abs(v);
+    if (abs < 1) return v.toFixed(3);
+    if (abs < 1000) return v.toFixed(2);
+    if (abs < 1_000_000) return v.toFixed(0);
+    if (abs < 1_000_000_000) return (v / 1_000_000).toFixed(2) + ' Million';
+    return (v / 1_000_000_000).toFixed(2) + ' Billion';
+  };
+
+  // Map a clientX coordinate to a cursor progress in [0, 1] across
+  // the SVG's plot area. Used by mouse / touch handlers below.
+  const computeProgressFromPointer = (clientX: number): number | null => {
+    const svg = svgRef.current;
+    if (!svg) return null;
+    const rect = svg.getBoundingClientRect();
+    if (rect.width <= 0) return null;
+    // Map clientX to viewBox X. The SVG uses preserveAspectRatio
+    // default (xMidYMid meet), so the viewBox scales uniformly.
+    // For our use case, viewBox width === w === bounding-rect width
+    // (the SVG renders at intrinsic size), so the ratio is direct.
+    const localX = ((clientX - rect.left) / rect.width) * w;
+    const tx = (localX - padL) / plotW;
+    return Math.max(0, Math.min(1, tx));
+  };
+  const onPointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
+    const p = computeProgressFromPointer(e.clientX);
+    if (p != null) setHoverProgress(p);
+  };
+  const onPointerLeave = () => {
+    setHoverProgress(null);
+  };
+
   // Replay: animate the consensus path being drawn from t=0 to the
   // present. The slider value is "how many points of the time series
   // have been drawn so far," from 0 to points.length. When the user
@@ -312,12 +385,16 @@ export function ConsensusDriftSparkline({
         }}
       >
         <svg
+          ref={svgRef}
           width={w}
           height={h}
           viewBox={`0 0 ${w} ${h}`}
           role="img"
           aria-label="Consensus drift sparkline"
-          style={{ flex: '0 0 auto', maxWidth: '100%' }}
+          style={{ flex: '0 0 auto', maxWidth: '100%', cursor: 'crosshair', touchAction: 'none' }}
+          onPointerMove={onPointerMove}
+          onPointerLeave={onPointerLeave}
+          onPointerDown={onPointerMove}
         >
           {/* y guide: prediction reference line */}
           <line
@@ -379,47 +456,92 @@ export function ConsensusDriftSparkline({
             strokeWidth={1.4}
             strokeLinejoin="round"
           />
-          {/* End dot in drift colour. During replay it tracks the most
-              recently played snapshot, not the latest snapshot, so the
-              dot reads as the "playhead" moving along the curve. */}
-          <PlayheadDot
-            points={points}
-            playProgress={playProgress}
-            tMin={tMin}
-            tSpan={tSpan}
-            meanMin={meanMin}
-            ySpan={ySpan}
-            padL={padL}
-            padT={padT}
-            plotW={plotW}
-            plotH={plotH}
-            color={driftColor}
+          {/* Cursor hairline: vertical reference line at the
+              currently-pinned cursor X. Visible whenever the user
+              is hovering OR a replay is mid-flight. Hidden when the
+              cursor is just resting on the latest snapshot, because
+              then the end-dot already marks the position and the
+              extra line would be visual noise. */}
+          {(cursorMode === 'hover' || cursorMode === 'replay') && (
+            <line
+              x1={cursorX}
+              x2={cursorX}
+              y1={padT}
+              y2={h - padB + 2}
+              stroke={cursorMode === 'hover' ? palette.ember : palette.teal}
+              strokeOpacity={0.55}
+              strokeWidth={1}
+              strokeDasharray={cursorMode === 'hover' ? '2 2' : undefined}
+              pointerEvents="none"
+            />
+          )}
+          {/* End dot in drift colour. Tracks the cursor (hover OR
+              replay playhead OR latest snapshot) so the dot, the
+              hairline, and the headline value all agree on a single
+              "currently-pinned point in time." */}
+          <CursorDot
+            cx={cursorX}
+            cy={padT + (1 - (cursor.mean - meanMin) / ySpan) * plotH}
+            color={cursorMode === 'hover' ? palette.ember : driftColor}
+            highlighted={cursorMode !== 'latest'}
           />
         </svg>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <div
+          data-testid="drift-readout"
+          style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 200 }}
+        >
+          {/* Contextual eyebrow: tells the user WHAT the headline
+              number below means (live latest / hover sample /
+              replay playhead). The colour matches the cursor's
+              hairline / dot so the chart and the readout read as a
+              single coordinated overlay. */}
           <span
+            data-testid="drift-readout-label"
             style={{
               fontFamily: fonts.mono,
               fontSize: 10,
-              letterSpacing: 1.2,
-              color: palette.inkMute,
+              letterSpacing: 1.4,
+              color:
+                cursorMode === 'hover'
+                  ? palette.ember
+                  : cursorMode === 'replay'
+                    ? palette.teal
+                    : palette.inkMute,
             }}
           >
-            DRIFT SINCE FIRST SNAPSHOT
+            {cursorMode === 'hover'
+              ? 'AT CURSOR'
+              : cursorMode === 'replay'
+                ? `REPLAYING · ${Math.round(cursorProgress * 100)}%`
+                : 'LATEST CONSENSUS'}
           </span>
+          {/* Headline: the consensus mean at the currently-pinned
+              cursor position. Updates LIVE during hover and during
+              replay so the user can read the actual value at any
+              point on the timeline. */}
           <span
+            data-testid="drift-readout-value"
             style={{
               fontFamily: fonts.display,
-              fontSize: compact ? 16 : 20,
+              fontSize: compact ? 18 : 22,
               fontWeight: 700,
-              color: driftColor,
+              color:
+                cursorMode === 'hover'
+                  ? palette.ember
+                  : cursorMode === 'replay'
+                    ? palette.teal
+                    : palette.ink,
               letterSpacing: -0.3,
             }}
           >
-            {drift >= 0 ? '+' : ''}
-            {drift.toFixed(2)} {marketUnits}
+            {formatValue(cursor.mean)}{marketUnits ? ` ${marketUnits}` : ''}
           </span>
+          {/* Subline: when this snapshot was, and (when known) how
+              far it is from the consensus at bet time. Replaces
+              the previous "200 snapshots tracked" line with
+              something the user can act on. */}
           <span
+            data-testid="drift-readout-context"
             style={{
               fontFamily: fonts.body,
               fontSize: 12,
@@ -428,9 +550,38 @@ export function ConsensusDriftSparkline({
               maxWidth: 220,
             }}
           >
-            {points.length} snapshots tracked · last
-            {' '}
-            {Math.max(1, Math.round((Date.now() - last.t) / 60000))}m ago
+            {formatAge(cursorAgeMs)}
+            {fromBet != null && (
+              <>
+                {' · '}
+                <span style={{ color: fromBet === 0 ? palette.inkMute : (fromBet > 0 ? palette.jade : palette.rose) }}>
+                  {fromBet >= 0 ? '+' : ''}
+                  {formatValue(fromBet)}
+                  {' from your bet-time consensus'}
+                </span>
+              </>
+            )}
+          </span>
+          {/* Total drift summary -- kept as a secondary stat so the
+              user can still see the macro trajectory at a glance. */}
+          <span
+            data-testid="drift-total"
+            style={{
+              fontFamily: fonts.mono,
+              fontSize: 10.5,
+              letterSpacing: 1,
+              color: palette.inkFade,
+              marginTop: 2,
+            }}
+          >
+            TOTAL DRIFT{' '}
+            <span style={{ color: driftColor, fontWeight: 600 }}>
+              {drift >= 0 ? '+' : ''}
+              {formatValue(drift)}
+              {marketUnits ? ` ${marketUnits}` : ''}
+            </span>
+            {' · '}
+            {points.length} snapshots
           </span>
           {/* Replay control. Only shown when there are at least 3
               snapshots — anything shorter replays instantly and the
@@ -472,59 +623,63 @@ export function ConsensusDriftSparkline({
 }
 
 /**
- * Playhead dot. During replay it tracks the interpolated position
- * between the last fully-played snapshot and the next one. After
- * replay (or when the user hasn't started one), it sits on the
- * latest snapshot. The visual cue is what makes the replay read as
- * "the crowd's mind moving" rather than just a path drawing in.
+ * Cursor dot. Marks the point on the consensus path that the
+ * headline readout, the hairline, and the timeline are all
+ * referring to. Three states:
+ *   - "hover": user is dragging their pointer across the chart;
+ *     the dot follows the pointer and the dot grows slightly to
+ *     reinforce the live-feedback feel.
+ *   - "replay": the dot tracks the interpolated playhead position
+ *     between the last fully-played snapshot and the next.
+ *   - "latest": the dot rests on the latest snapshot, marking
+ *     where the live trace ends.
  */
-function PlayheadDot({
-  points,
-  playProgress,
-  tMin,
-  tSpan,
-  meanMin,
-  ySpan,
-  padL,
-  padT,
-  plotW,
-  plotH,
+function CursorDot({
+  cx,
+  cy,
   color,
+  highlighted,
 }: {
-  points: Array<{ t: number; mean: number }>;
-  playProgress: number;
-  tMin: number;
-  tSpan: number;
-  meanMin: number;
-  ySpan: number;
-  padL: number;
-  padT: number;
-  plotW: number;
-  plotH: number;
+  cx: number;
+  cy: number;
   color: string;
+  highlighted: boolean;
 }) {
-  const cursor = pickCursor(points, playProgress);
-  const cx = padL + ((cursor.t - tMin) / tSpan) * plotW;
-  const cy = padT + (1 - (cursor.mean - meanMin) / ySpan) * plotH;
-  return <circle cx={cx} cy={cy} r={3.4} fill={color} />;
+  const r = highlighted ? 4.6 : 3.4;
+  return (
+    <>
+      {highlighted && (
+        <circle cx={cx} cy={cy} r={r + 3} fill={color} fillOpacity={0.18} pointerEvents="none" />
+      )}
+      <circle cx={cx} cy={cy} r={r} fill={color} pointerEvents="none" />
+    </>
+  );
 }
 
 function pickCursor(
   points: Array<{ t: number; mean: number }>,
   progress: number,
 ): { t: number; mean: number } {
-  const safe = Math.max(0, Math.min(1, progress));
-  if (points.length === 0) return { t: 0, mean: 0 };
+  if (!points || points.length === 0) return { t: 0, mean: 0 };
+  const safe = Math.max(0, Math.min(1, Number.isFinite(progress) ? progress : 1));
+  if (points.length === 1) return points[0];
   if (safe >= 1) return points[points.length - 1];
+  if (safe <= 0) return points[0];
   const cursorIndex = safe * (points.length - 1);
-  const lo = Math.floor(cursorIndex);
-  const hi = Math.min(points.length - 1, lo + 1);
-  const t = cursorIndex - lo;
-  const a = points[lo];
-  const b = points[hi];
+  const lo = Math.max(0, Math.min(points.length - 1, Math.floor(cursorIndex)));
+  const hi = Math.max(0, Math.min(points.length - 1, lo + 1));
+  // Defensive: if the array is sparse or arithmetic produces an
+  // out-of-range index for any reason, fall back to the nearest
+  // valid endpoint instead of crashing the render. (jsdom test
+  // environments without a real SVG layout occasionally hit this
+  // path with a synthetic pointer event before the series settles.)
+  const a = points[lo] ?? points[0];
+  const b = points[hi] ?? a;
+  if (!a || !b) return { t: 0, mean: 0 };
+  const frac = cursorIndex - lo;
   return {
-    t: a.t + (b.t - a.t) * t,
-    mean: a.mean + (b.mean - a.mean) * t,
+    t: a.t + (b.t - a.t) * frac,
+    mean: a.mean + (b.mean - a.mean) * frac,
   };
 }
 

@@ -222,3 +222,138 @@ describe('ConsensusDriftSparkline: replay control', () => {
     expect(btn.textContent).toMatch(/Pause/);
   });
 });
+
+// ────────────────────────────────────────────────────────────────────
+// VALUE READOUT -- pins the cursor-driven headline contract.
+//
+// User feedback: "this doesn't have any value displayed. even during
+// the replay and neither when I hover over the chart". The chart
+// previously showed only the aggregate "DRIFT SINCE FIRST SNAPSHOT"
+// number with no live readout for the playhead or hover position.
+// The new contract exposes:
+//   - drift-readout-label: contextual eyebrow ("LATEST CONSENSUS",
+//     "AT CURSOR", or "REPLAYING · NN%")
+//   - drift-readout-value: the consensus mean at the currently-pinned
+//     cursor position, formatted with appropriate precision and units
+//   - drift-readout-context: "Xm/h/d ago" + delta from bet-time
+//     consensus when known
+//   - drift-total: the original aggregate drift, now demoted to a
+//     secondary stat so the live cursor value is the headline.
+// ────────────────────────────────────────────────────────────────────
+
+describe('ConsensusDriftSparkline: cursor-driven value readout', () => {
+  function shortHistory() {
+    return {
+      history: {
+        marketId: 1,
+        totalSnapshots: 4,
+        snapshots: [
+          makeSnapshot({ ts: '2026-05-10T08:00:00Z', alpha: pointMassAt(11, 2), snapshotId: 1 }),
+          makeSnapshot({ ts: '2026-05-10T10:00:00Z', alpha: pointMassAt(11, 4), snapshotId: 2 }),
+          makeSnapshot({ ts: '2026-05-10T12:00:00Z', alpha: pointMassAt(11, 6), snapshotId: 3 }),
+          makeSnapshot({ ts: '2026-05-10T16:00:00Z', alpha: pointMassAt(11, 8), snapshotId: 4 }),
+        ],
+      },
+      loading: false,
+      isFetching: false,
+      error: null,
+      refetch: () => {},
+    };
+  }
+
+  it('renders a headline value readout with a "LATEST CONSENSUS" label and the latest snapshot mean', () => {
+    useMarketHistoryMock.mockReturnValue(shortHistory());
+    render(<ConsensusDriftSparkline {...defaultProps()} />);
+    const label = screen.getByTestId('drift-readout-label');
+    const value = screen.getByTestId('drift-readout-value');
+    expect(label.textContent).toMatch(/LATEST CONSENSUS/);
+    // The latest snapshot's alpha is point-mass-at-bucket-8 over an
+    // 11-bucket alphaVector across [0, 100], so the mean lands in the
+    // 70-80 band. We don't pin the exact bucket arithmetic (the
+    // transformHistoryToFanChart helper uses bucket midpoints with
+    // its own internal scale); we just require the rendered value
+    // string to be a positive number with units. That alone catches
+    // a "value disappeared" regression while not depending on the
+    // precise bucketing rule.
+    expect(value.textContent).toMatch(/\d+\.\d+\s*%/);
+  });
+
+  it('switches the readout label to "REPLAYING · NN%" while a replay is in flight', () => {
+    useMarketHistoryMock.mockReturnValue(shortHistory());
+    render(<ConsensusDriftSparkline {...defaultProps()} />);
+    const btn = screen.getByTestId('drift-replay-button');
+    fireEvent.click(btn);
+    const label = screen.getByTestId('drift-readout-label');
+    // "REPLAYING · 0%" the instant the button is clicked. The exact
+    // percentage advances under requestAnimationFrame, but the
+    // "REPLAYING · " prefix is stable from the first frame.
+    expect(label.textContent).toMatch(/REPLAYING/);
+    expect(label.textContent).toMatch(/%/);
+  });
+
+  it('switches the readout label to "AT CURSOR" while the user is hovering the chart', () => {
+    useMarketHistoryMock.mockReturnValue(shortHistory());
+    const { container } = render(<ConsensusDriftSparkline {...defaultProps()} />);
+    const svg = container.querySelector('svg[aria-label="Consensus drift sparkline"]') as SVGSVGElement;
+    expect(svg).not.toBeNull();
+    // jsdom doesn't lay out the SVG so getBoundingClientRect returns
+    // zero-width; the component's `computeProgressFromPointer` short-
+    // circuits to null in that case and the readout stays in
+    // "LATEST" mode. We work around by stubbing getBoundingClientRect
+    // before firing the pointer event so the hover handler can
+    // resolve a non-null progress.
+    const rectStub = {
+      x: 0,
+      y: 0,
+      top: 0,
+      left: 0,
+      right: 460,
+      bottom: 92,
+      width: 460,
+      height: 92,
+      toJSON: () => ({}),
+    } as DOMRect;
+    svg.getBoundingClientRect = () => rectStub;
+    // pointermove halfway across the SVG.
+    fireEvent.pointerMove(svg, { clientX: 230, clientY: 40 });
+    const label = screen.getByTestId('drift-readout-label');
+    expect(label.textContent).toMatch(/AT CURSOR/);
+    // The headline value must update too -- it can't be the latest
+    // snapshot since the cursor is mid-timeline.
+    const value = screen.getByTestId('drift-readout-value');
+    expect(value.textContent).toMatch(/\d+\.\d+\s*%/);
+  });
+
+  it('reverts to "LATEST CONSENSUS" when the pointer leaves the chart', () => {
+    useMarketHistoryMock.mockReturnValue(shortHistory());
+    const { container } = render(<ConsensusDriftSparkline {...defaultProps()} />);
+    const svg = container.querySelector('svg[aria-label="Consensus drift sparkline"]') as SVGSVGElement;
+    const rectStub = {
+      x: 0,
+      y: 0,
+      top: 0,
+      left: 0,
+      right: 460,
+      bottom: 92,
+      width: 460,
+      height: 92,
+      toJSON: () => ({}),
+    } as DOMRect;
+    svg.getBoundingClientRect = () => rectStub;
+    fireEvent.pointerMove(svg, { clientX: 230, clientY: 40 });
+    expect(screen.getByTestId('drift-readout-label').textContent).toMatch(/AT CURSOR/);
+    fireEvent.pointerLeave(svg);
+    expect(screen.getByTestId('drift-readout-label').textContent).toMatch(/LATEST CONSENSUS/);
+  });
+
+  it('keeps the aggregate "TOTAL DRIFT" stat visible alongside the live cursor readout', () => {
+    useMarketHistoryMock.mockReturnValue(shortHistory());
+    render(<ConsensusDriftSparkline {...defaultProps()} />);
+    const total = screen.getByTestId('drift-total');
+    expect(total.textContent).toMatch(/TOTAL DRIFT/);
+    // The drift number is signed and ends in % units in this fixture.
+    expect(total.textContent).toMatch(/[+-]?\d+\.\d+\s*%/);
+    // And the snapshot count is folded into the same line.
+    expect(total.textContent).toMatch(/\d+ snapshots/);
+  });
+});
