@@ -401,38 +401,43 @@ function ReceiptView({
   // doubles as the visual "frame" the user perceives around the
   // artifact.
   //
-  // The wrapper's WIDTH is set in CSS (`width: 100%; maxWidth:
-  // polaroidWidth`) so it tracks its grid cell up to the editorial
-  // size (480 desktop / 300 mobile). The wrapper's HEIGHT is set
-  // in PIXELS via JS, measured from the wrapper's actual rendered
-  // width inside a synchronous `useLayoutEffect` and re-measured
-  // every time the wrapper resizes (window resize, devtools open,
-  // mobile orientation change, etc.) via a ResizeObserver. The
-  // height is always exactly `measured-width * 1.5`, which is the
-  // polaroid's 2:3 portrait ratio.
+  // BOTH wrapper dimensions are set as explicit pixel values via JS:
+  //
+  //   - We measure the FLEX CONTAINER (the wrapper's parent)
+  //     synchronously via `useLayoutEffect` and refresh on every
+  //     resize via `ResizeObserver`.
+  //   - The wrapper's pixel width is `min(measured-container-width,
+  //     polaroidWidth)`, so the wrapper fits in the column on
+  //     narrow viewports but never grows past the editorial cap on
+  //     wide viewports.
+  //   - The wrapper's pixel height is exactly `width * 1.5`, the
+  //     polaroid's 2:3 portrait ratio expressed as a concrete
+  //     number.
   //
   // The Polaroid SVG inside is then rendered with `fillParent`,
   // which adds INLINE
-  // `position: absolute; inset: 0; width: 100%; height: 100%` to
+  // `position: absolute; inset: 0; width: 100%; height: 100%` on
   // the SVG element. The SVG fills the wrapper's concrete pixel
-  // rectangle to the pixel, with no CSS layout path involved.
+  // rectangle to the pixel.
   //
-  // This is the contract that survived "for a tiny fraction of a
-  // second I see it correctly but then it breaks". Every prior
-  // attempt (aspect-ratio CSS, padding-bottom hack, responsive-
-  // image idiom on the SVG, fillParent over a padding-derived box)
-  // had at least one render path on the live receipt grid where
-  // the wrapper and the SVG ended up disagreeing on shape and the
-  // caption strip dropped into empty matte. Putting the wrapper
-  // height into JS as measured pixels eliminates every CSS layout
-  // path that bug ever used.
-  const [wrapperHeight, setWrapperHeight] = useState<number>(() => Math.round(polaroidWidth * 1.5));
+  // No CSS layout property (width: 100%, max-width, aspect-ratio,
+  // padding-bottom, height: auto, flex-item sizing, align-items)
+  // is in the load-bearing position any more. The wrapper is a
+  // pixel rectangle from React state, the SVG is inline-styled to
+  // fill it. Every previous regression (the wrapper rendering as
+  // a square, the caption clipped, the "fraction of a second
+  // correct then breaks" follow-up render) was a CSS layout path
+  // failing on the live receipt grid. There is now no CSS layout
+  // path between "wrapper has these dimensions" and "SVG fills
+  // those dimensions".
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [polaroidPixelWidth, setPolaroidPixelWidth] = useState<number>(polaroidWidth);
   useLayoutEffect(() => {
-    const el = polaroidRef.current;
+    const el = containerRef.current;
     if (!el) return;
     const compute = () => {
       const w = el.clientWidth;
-      if (w > 0) setWrapperHeight(Math.round(w * 1.5));
+      if (w > 0) setPolaroidPixelWidth(Math.min(w, polaroidWidth));
     };
     compute();
     if (typeof ResizeObserver === 'undefined') return;
@@ -440,16 +445,19 @@ function ReceiptView({
     observer.observe(el);
     return () => observer.disconnect();
   }, [polaroidWidth]);
+  const polaroidPixelHeight = Math.round(polaroidPixelWidth * 1.5);
 
   const polaroidNode = (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+    <div
+      ref={containerRef}
+      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, width: '100%' }}
+    >
       <div
         ref={polaroidRef}
         style={{
           position: 'relative',
-          width: '100%',
-          maxWidth: polaroidWidth,
-          height: wrapperHeight,
+          width: polaroidPixelWidth,
+          height: polaroidPixelHeight,
           flexShrink: 0,
         }}
         data-testid="receipt-polaroid-frame"

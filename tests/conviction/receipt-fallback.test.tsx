@@ -286,7 +286,7 @@ describe('Receipt page: graceful market fallback', () => {
   //     and "SVG fills those exact pixels".
   // ────────────────────────────────────────────────────────────────────
 
-  it('the polaroid frame wrapper carries an explicit pixel height equal to 1.5x its maxWidth (initial fallback before ResizeObserver runs)', () => {
+  it('the polaroid frame wrapper carries explicit pixel WIDTH and HEIGHT in a 2:3 portrait ratio (no responsive CSS path involved)', () => {
     useMarketMock.mockReturnValue({
       market: null,
       loading: false,
@@ -301,27 +301,31 @@ describe('Receipt page: graceful market fallback', () => {
     ) as HTMLElement | null;
     expect(frame).not.toBeNull();
     const style = (frame as HTMLElement).style;
-    // Width grows to fill the grid cell up to maxWidth.
-    expect(style.width).toBe('100%');
-    const maxW = parseInt(style.maxWidth, 10);
-    expect(maxW).toBeGreaterThan(0);
-    // Height is set as an explicit pixel value (initial state =
-    // round(polaroidWidth * 1.5), updated to round(measured-width *
-    // 1.5) by ResizeObserver on first paint). In jsdom (no
-    // ResizeObserver runtime, no layout) the initial value sticks.
-    expect(style.height).not.toBe('');
-    expect(style.height).not.toBe('0px');
+    // BOTH width and height are explicit pixel values from React
+    // state -- ResizeObserver-driven for live updates, with a
+    // safe initial fallback from the polaroidWidth prop. There is
+    // no `width: 100%`, no `max-width`, no padding-bottom, no
+    // aspect-ratio -- just a known pixel rectangle.
+    expect(style.width).toMatch(/^\d+px$/);
+    expect(style.height).toMatch(/^\d+px$/);
+    const w = parseInt(style.width, 10);
     const h = parseInt(style.height, 10);
+    expect(w).toBeGreaterThan(0);
     expect(h).toBeGreaterThan(0);
-    // The initial fallback is exactly round(maxWidth * 1.5), which
-    // is the polaroid's 2:3 portrait ratio. ResizeObserver later
-    // refines this with the actual measured wrapper width.
-    expect(Math.abs(h - Math.round(maxW * 1.5))).toBeLessThanOrEqual(1);
-    // No padding-bottom hack, no aspect-ratio CSS -- the height is
-    // a concrete pixel number, and that's the entire contract.
+    // Height is exactly round(width * 1.5), the polaroid's 2:3
+    // portrait ratio expressed as a concrete pixel number.
+    expect(h).toBe(Math.round(w * 1.5));
+    // No padding-bottom hack, no aspect-ratio CSS, no max-width.
+    // All three were previous attempts that had at least one
+    // failure path on the live receipt grid.
     expect(style.paddingBottom).toBe('');
     expect(style.aspectRatio).toBe('');
+    expect(style.maxWidth).toBe('');
+    // flex-shrink: 0 so a narrow flex container doesn't squish
+    // the explicit pixel dimensions.
     expect(style.flexShrink).toBe('0');
+    // position: relative so CashedOutStamp absolute-overlay
+    // anchors against the wrapper.
     expect(style.position).toBe('relative');
   });
 
