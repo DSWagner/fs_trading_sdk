@@ -206,18 +206,8 @@ html {
 }
 
 /* Default polaroid SVG behaviour: always block, never overflow its
- * parent, and (for callers that don't opt into `fillParent`)
- * preserve its intrinsic 2:3 portrait ratio when shrunk by a
- * narrow wrapper.
- *
- * The Receipt page's polaroid uses a different mechanism --
- * `fillParent` adds an inline `position: absolute; inset: 0;
- * width: 100%; height: 100%` to the SVG, and the wrapper's height
- * is set in pixels via JS / ResizeObserver. So this rule is just
- * a defensive safety net for the OTHER callers (Landing, BetFlow
- * preview pair, ComparisonPair, gallery thumbnails, Profile cards,
- * etc.) that pass an explicit numeric `width` prop and want the
- * SVG to render at exactly those intrinsic pixels.
+ * parent, and preserve its intrinsic 2:3 portrait ratio when shrunk
+ * by a narrow wrapper.
  *
  * `max-width: 100%; height: auto` is the standard responsive-image
  * idiom adapted to SVG. If a caller's wrapper is narrower than the
@@ -227,6 +217,28 @@ svg[role="img"][aria-label^="Polaroid receipt"] {
   display: block;
   max-width: 100%;
   height: auto;
+}
+
+/* Receipt page polaroid SVG: pin to its intrinsic numeric pixel
+ * size set by React props. The wrapper around the SVG carries the
+ * same pixel dimensions (driven by `ResizeObserver`), so this
+ * selector defensively turns OFF the responsive-shrink behaviour
+ * for the receipt's hero polaroid. Without this rule the global
+ * `max-width: 100%; height: auto` could desynchronise the SVG's
+ * rendered size from the wrapper's pixel box during the brief
+ * window between two layout passes, which was the visible root
+ * cause of the "polaroid is cut off, the caption is missing"
+ * regression that kept resurfacing on the live receipt page.
+ *
+ * `width: auto` here means "use the SVG's intrinsic numeric
+ * `width=` HTML attribute". `max-width: none` strips the
+ * responsive cap. The wrapper around it is sized in lockstep
+ * with that same numeric width, so the SVG cannot overflow it. */
+[data-testid="receipt-polaroid-frame"] svg[role="img"][aria-label^="Polaroid receipt"] {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: none;
 }
 
 a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible {

@@ -286,7 +286,7 @@ describe('Receipt page: graceful market fallback', () => {
   //     and "SVG fills those exact pixels".
   // ────────────────────────────────────────────────────────────────────
 
-  it('the polaroid frame wrapper carries explicit pixel WIDTH and HEIGHT in a 2:3 portrait ratio (no responsive CSS path involved)', () => {
+  it('the polaroid frame wrapper carries explicit pixel WIDTH and HEIGHT in a 2:3 portrait ratio (defended by stacked guarantees)', () => {
     useMarketMock.mockReturnValue({
       market: null,
       loading: false,
@@ -301,11 +301,10 @@ describe('Receipt page: graceful market fallback', () => {
     ) as HTMLElement | null;
     expect(frame).not.toBeNull();
     const style = (frame as HTMLElement).style;
-    // BOTH width and height are explicit pixel values from React
-    // state -- ResizeObserver-driven for live updates, with a
-    // safe initial fallback from the polaroidWidth prop. There is
-    // no `width: 100%`, no `max-width`, no padding-bottom, no
-    // aspect-ratio -- just a known pixel rectangle.
+    // PRIMARY: BOTH width and height are explicit pixel values from
+    // React state -- ResizeObserver-driven for live updates, with a
+    // safe initial fallback from the polaroidWidth prop. The wrapper
+    // is a known pixel rectangle that the SVG matches exactly.
     expect(style.width).toMatch(/^\d+px$/);
     expect(style.height).toMatch(/^\d+px$/);
     const w = parseInt(style.width, 10);
@@ -315,11 +314,24 @@ describe('Receipt page: graceful market fallback', () => {
     // Height is exactly round(width * 1.5), the polaroid's 2:3
     // portrait ratio expressed as a concrete pixel number.
     expect(h).toBe(Math.round(w * 1.5));
-    // No padding-bottom hack, no aspect-ratio CSS, no max-width.
-    // All three were previous attempts that had at least one
-    // failure path on the live receipt grid.
+    // FALLBACK 1: aspect-ratio: 2 / 3 is set as a CSS-layer
+    // backstop. If the inline `height` ever fails to apply (build
+    // minification quirk, future React state hiccup), the browser
+    // still derives the height from the width and keeps the 2:3
+    // portrait ratio so the polaroid never renders as a square or
+    // a flat banner.
+    expect(style.aspectRatio).toBe('2 / 3');
+    // FALLBACK 2: overflow:hidden clips any pixel-level rounding
+    // spill from the SVG so the wrapper is the unambiguous source
+    // of truth for the polaroid silhouette.
+    expect(style.overflow).toBe('hidden');
+    // FALLBACK 3: box-sizing border-box so any future border or
+    // padding never grows the rectangle past its declared size.
+    expect(style.boxSizing).toBe('border-box');
+    // No padding-bottom hack, no max-width. Both were previous
+    // attempts that had at least one failure path on the live
+    // receipt grid.
     expect(style.paddingBottom).toBe('');
-    expect(style.aspectRatio).toBe('');
     expect(style.maxWidth).toBe('');
     // flex-shrink: 0 so a narrow flex container doesn't squish
     // the explicit pixel dimensions.

@@ -452,13 +452,32 @@ function ReceiptView({
       ref={containerRef}
       style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, width: '100%' }}
     >
+      {/* The wrapper carries STACKED guarantees so its rectangle is
+          ALWAYS the polaroid's 2:3 portrait aspect, identical to the
+          SVG inside, regardless of which guarantee survives any given
+          browser / build / cache state:
+
+          1. Explicit pixel `width` and `height` from React state
+             (ResizeObserver-driven). This is the primary contract.
+          2. CSS `aspectRatio: '2 / 3'` as a fallback. If for any
+             reason the inline `height` is dropped, miscomputed, or
+             overridden, the browser will derive height from width
+             keeping the 2:3 portrait ratio.
+          3. `boxSizing: 'border-box'` so any future border / padding
+             never grows the rectangle past its declared dimensions.
+          4. `overflow: 'hidden'` clips any pixel-level rounding spill
+             from the SVG so the wrapper is the unambiguous source of
+             truth for the polaroid's visual silhouette. */}
       <div
         ref={polaroidRef}
         style={{
           position: 'relative',
           width: polaroidPixelWidth,
           height: polaroidPixelHeight,
+          aspectRatio: '2 / 3',
           flexShrink: 0,
+          boxSizing: 'border-box',
+          overflow: 'hidden',
         }}
         data-testid="receipt-polaroid-frame"
       >
