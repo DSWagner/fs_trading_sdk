@@ -338,6 +338,17 @@ describe('Receipt page: graceful market fallback', () => {
     // worked reliably.
     expect(style.display).toBe('flex');
     expect(style.justifyContent).toBe('center');
+    // CRITICAL: `align-items: flex-start` prevents the receipt
+    // page's tall right grid cell (stretched to match the left
+    // column) from stretching the flex wrapper vertically, which
+    // would cause Chrome to compute the SVG's `height: auto` to a
+    // value LARGER than 570 px. The polaroid SVG's
+    // `preserveAspectRatio="xMidYMid meet"` would then letterbox
+    // its 380x570 content vertically inside the over-tall element,
+    // pushing the matte + caption DOWN ~65 px and rendering the
+    // footer + date lines BELOW the visible matte bottom (the
+    // exact bug the user reported).
+    expect(style.alignItems).toBe('flex-start');
     // Receipt-only additions: positioned ancestor for the
     // CashedOutStamp absolute overlay.
     expect(style.position).toBe('relative');
@@ -346,16 +357,12 @@ describe('Receipt page: graceful market fallback', () => {
     // no margin / padding, no overflow clip. The polaroid SVG
     // inside dictates its own intrinsic size via its `width=` /
     // `height=` HTML attributes, exactly as it does on /explore.
-    // Adding any of these to the wrapper has historically broken
-    // the layout (see the v1-v5 history block in the comment above
-    // the wrapper in Receipt.tsx).
     expect(style.width).toBe('');
     expect(style.height).toBe('');
     expect(style.maxWidth).toBe('');
     expect(style.aspectRatio).toBe('');
     expect(style.flexShrink).toBe('');
     expect(style.flexDirection).toBe('');
-    expect(style.alignItems).toBe('');
     expect(style.margin).toBe('');
     expect(style.boxSizing).toBe('');
     expect(style.overflow).not.toBe('hidden');

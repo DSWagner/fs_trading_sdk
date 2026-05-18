@@ -487,7 +487,29 @@ function ReceiptView({
     <div
       ref={polaroidRef}
       data-testid="receipt-polaroid-frame"
-      style={{ display: 'flex', justifyContent: 'center', position: 'relative' }}
+      style={{
+        display: 'flex',
+        justifyContent: 'center',
+        // alignItems: 'flex-start' is the load-bearing fix. The
+        // receipt page's right grid cell is stretched to match the
+        // tall left column (live drift card + comparison pair +
+        // share embed block). The default flex `align-items:
+        // stretch` then stretches THIS flex container vertically
+        // to the cell's full height, and Chrome computes the SVG's
+        // `height: auto` to fill that stretched space (e.g. 700+
+        // px instead of the 570 px the polaroid's viewBox needs).
+        // With `preserveAspectRatio="xMidYMid meet"` the SVG then
+        // letterboxes its 380x570 content vertically inside the
+        // 380x700 element, pushing the matte+caption DOWN by
+        // ~65 px so the footer + date lines fall BELOW the
+        // visible matte bottom and disappear.
+        //
+        // `flex-start` keeps the SVG sized to its intrinsic 380x570
+        // (or 280x420 on mobile) regardless of how tall the parent
+        // grid cell becomes.
+        alignItems: 'flex-start',
+        position: 'relative',
+      }}
     >
       <Polaroid
         marketId={merged.marketId}
