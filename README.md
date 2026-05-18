@@ -16,7 +16,7 @@ Every prediction is signed, dated, and turned into a Polaroid receipt the user c
 | Full project walkthrough | [`CONVICTION.md`](./CONVICTION.md) |
 | Contact for competition form | `@dswagner9` on Telegram |
 
-Final submission state: Conviction has a public Vercel deploy, a public GitHub fork, 498 Conviction-specific tests across 37 files, live smoke tests passing, and focused regressions for the receipt Polaroid sizing, caption visibility, comparison-pair clipping, duplicate SVG definition IDs, and live market field drift.
+Final submission state: Conviction has a public Vercel deploy, a public GitHub fork, 500 Conviction-specific tests across 37 files, live smoke tests passing, and focused regressions for the receipt Polaroid sizing, caption visibility, comparison-pair clipping, duplicate SVG definition IDs, matching main/comparison Polaroid silhouettes, exact consensus-curve crowd Polaroids, and live market field drift.
 
 | Surface | Purpose |
 | --- | --- |

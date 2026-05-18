@@ -57,6 +57,7 @@ export interface ComparisonPairProps {
     createdAt: string;
     prediction: number;
     spread: number;
+    secondPeak?: number | null;
     conviction: number;
     collateral: number;
     shape: 'gaussian' | 'range' | 'bimodal';
@@ -126,6 +127,9 @@ export function ComparisonPair({
 
   const crowdWidth = isMobile ? Math.min(width, 280) : width;
   const userWidth = isMobile ? Math.min(width, 280) : width;
+  const consensusCurveY = Array.isArray(consensus?.points)
+    ? consensus.points.map((point) => point.y)
+    : null;
   // The crowd polaroid uses the SAME createdAt as the user's bet so
   // the "develop" progression for both polaroids tracks the same
   // pre-resolution arc and reads visually consistent. After the bet
@@ -217,6 +221,7 @@ export function ComparisonPair({
             createdAt={userBet.createdAt}
             prediction={userBet.prediction}
             spread={userBet.spread}
+            secondPeak={userBet.shape === 'bimodal' ? userBet.secondPeak ?? null : null}
             conviction={userBet.conviction}
             collateral={userBet.collateral}
             shape={userBet.shape}
@@ -226,6 +231,7 @@ export function ComparisonPair({
             resolvedOutcome={resolvedOutcome}
             width={userWidth}
             consensusAtBet={userBet.consensusAtBet}
+            consensusCurve={consensusCurveY}
             expiresAt={(market as any)?.expiresAt ?? null}
             // "you" only when the signed-in viewer IS the author.
             // Otherwise the strip reads "@theirhandle" so a visitor
@@ -262,7 +268,8 @@ export function ComparisonPair({
             resolutionState={resolutionState}
             resolvedOutcome={resolvedOutcome}
             width={crowdWidth}
-            consensusAtBet={crowdSummary.mean}
+            consensusAtBet={null}
+            userCurve={consensusCurveY}
             expiresAt={(market as any)?.expiresAt ?? null}
             // The receipt's main polaroid is always the user's, so its
             // scale strip prefix "you" is correct there. The CROWD

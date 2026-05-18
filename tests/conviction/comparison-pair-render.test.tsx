@@ -54,7 +54,8 @@ vi.mock('@functionspace/react', () => ({
   useMarket: (...args: any[]) => useMarketMock(...args),
 }));
 
-import { ComparisonPair } from '../../demo-app/src/conviction/components/ComparisonPair';
+import { ComparisonPair, summariseConsensus } from '../../demo-app/src/conviction/components/ComparisonPair';
+import { Polaroid } from '../../demo-app/src/conviction/components/Polaroid';
 
 // A small, deterministic gaussian density centred at 40, so the crowd's
 // summarised mean lands away from the user's prediction of 60. This
@@ -171,6 +172,131 @@ describe('ComparisonPair render', () => {
     // polaroid). If the regression returns this will be 2.
     const matches = (container.textContent ?? '').match(/you · /g) ?? [];
     expect(matches.length).toBe(1);
+  });
+
+  it('renders the user comparison polaroid with the same bimodal silhouette as the main receipt', () => {
+    const consensusPoints = gaussianAt(40, 8);
+    const consensusCurve = consensusPoints.map((point) => point.y);
+    const bimodalBet = {
+      ...baseUserBet,
+      shape: 'bimodal' as const,
+      secondPeak: 84,
+    };
+    useConsensusMock.mockReturnValue({
+      consensus: { points: consensusPoints },
+      loading: false,
+      isFetching: false,
+      error: null,
+      refetch: () => {},
+    });
+
+    const { container } = render(
+      <>
+        <Polaroid
+          marketId="haaland-2627"
+          positionId="pos-1"
+          marketTitle="Erling Haaland Total EPL Goals in 26/27 Season"
+          marketUnits="goals"
+          username={bimodalBet.username}
+          reasoning={bimodalBet.reasoning}
+          createdAt={bimodalBet.createdAt}
+          prediction={bimodalBet.prediction}
+          spread={bimodalBet.spread}
+          secondPeak={bimodalBet.secondPeak}
+          conviction={bimodalBet.conviction}
+          collateral={bimodalBet.collateral}
+          shape={bimodalBet.shape}
+          lowerBound={0}
+          upperBound={100}
+          resolutionState="open"
+          resolvedOutcome={null}
+          width={320}
+          consensusAtBet={bimodalBet.consensusAtBet}
+          consensusCurve={consensusCurve}
+          expiresAt="2026-06-01T00:00:00.000Z"
+          predictionLabel="you"
+        />
+        <ComparisonPair
+          marketId="haaland-2627"
+          positionId="pos-1"
+          marketTitle="Erling Haaland Total EPL Goals in 26/27 Season"
+          marketUnits="goals"
+          lowerBound={0}
+          upperBound={100}
+          userBet={bimodalBet}
+          resolutionState="open"
+          resolvedOutcome={null}
+          width={320}
+          isMobile={false}
+        />
+      </>,
+    );
+
+    const userSilhouettes = Array.from(container.querySelectorAll('[data-testid="polaroid-user-silhouette"]'));
+    expect(userSilhouettes[0].getAttribute('d')).toBe(userSilhouettes[1].getAttribute('d'));
+  });
+
+  it('renders the crowd polaroid foreground hill from the exact consensus curve', () => {
+    const leftPeak = gaussianAt(30, 5);
+    const rightPeak = gaussianAt(72, 6);
+    const consensusPoints = leftPeak.map((point, i) => ({
+      x: point.x,
+      y: point.y * 0.7 + rightPeak[i].y * 0.9,
+    }));
+    const consensusCurve = consensusPoints.map((point) => point.y);
+    const crowdSummary = summariseConsensus({ points: consensusPoints }, 0, 100);
+    expect(crowdSummary).not.toBeNull();
+    useConsensusMock.mockReturnValue({
+      consensus: { points: consensusPoints },
+      loading: false,
+      isFetching: false,
+      error: null,
+      refetch: () => {},
+    });
+
+    const { container } = render(
+      <>
+        <Polaroid
+          marketId="crowd-haaland-2627"
+          positionId="crowd-pos-1"
+          marketTitle="Erling Haaland Total EPL Goals in 26/27 Season"
+          marketUnits="goals"
+          username="thecrowd"
+          reasoning="The aggregate belief currently priced into the market. Updates as new bets shift the consensus."
+          createdAt={baseUserBet.createdAt}
+          prediction={crowdSummary!.mean}
+          spread={crowdSummary!.spread}
+          conviction={crowdSummary!.conviction}
+          collateral={Math.max(baseUserBet.collateral, 1)}
+          shape="gaussian"
+          lowerBound={0}
+          upperBound={100}
+          resolutionState="open"
+          resolvedOutcome={null}
+          width={320}
+          consensusAtBet={null}
+          userCurve={consensusCurve}
+          expiresAt="2026-06-01T00:00:00.000Z"
+          predictionLabel="crowd"
+        />
+        <ComparisonPair
+          marketId="haaland-2627"
+          positionId="pos-1"
+          marketTitle="Erling Haaland Total EPL Goals in 26/27 Season"
+          marketUnits="goals"
+          lowerBound={0}
+          upperBound={100}
+          userBet={baseUserBet}
+          resolutionState="open"
+          resolvedOutcome={null}
+          width={320}
+          isMobile={false}
+        />
+      </>,
+    );
+
+    const userSilhouettes = Array.from(container.querySelectorAll('[data-testid="polaroid-user-silhouette"]'));
+    expect(userSilhouettes[0].getAttribute('d')).toBe(userSilhouettes[2].getAttribute('d'));
   });
 
   it('renders the loading skeleton while consensus is still loading (no crash)', () => {

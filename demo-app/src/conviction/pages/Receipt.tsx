@@ -813,6 +813,7 @@ function ReceiptView({
               createdAt: merged.createdAt,
               prediction: merged.prediction,
               spread: merged.spread,
+              secondPeak: merged.shape === 'bimodal' ? merged.secondPeak ?? null : null,
               conviction: merged.conviction,
               collateral: merged.collateral,
               shape: merged.shape,
