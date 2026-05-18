@@ -1224,10 +1224,30 @@ function renderSvgCaption(args: {
   const footerSize = Math.max(10, Math.round(polaroidWidth * 0.028));
   const dateSize = Math.max(9, Math.round(polaroidWidth * 0.024));
 
-  // Tuned for italic serif: real Fraunces is ~0.46em wide, but the export
-  // rasterizer falls back to a generic system serif that's ~0.55-0.6em.
-  // We pick a conservative value so wrapping matches in both contexts.
-  const titleCharsPerLine = Math.max(8, Math.floor(width / (titleSize * 0.56)));
+  // Per-character em width used to BUDGET how many characters fit on a
+  // line BEFORE we wrap. We want a CONSERVATIVE upper bound -- the
+  // estimate must NEVER undercount the real rendered width, or the
+  // last line of the title overflows the caption clipPath and gets
+  // sliced mid-word (the "Tesla Optimus Units Sold or / Deployed
+  // Internally by Dec 202(" bug on the desktop Receipt at width=380).
+  //
+  // The display font is now Bricolage Grotesque (see `fonts.display`
+  // in theme.ts). Bricolage has NO true italic, so applying
+  // `font-style="italic"` to the SVG <text> triggers either a browser-
+  // synthesised oblique or a cascade fall-through into "Funnel
+  // Display" / "Outfit" / system-ui italic -- all of which render at
+  // ~0.58-0.62em average. The legacy 0.56em estimate (originally
+  // tuned for Fraunces italic at ~0.46em) underestimates that real
+  // width by 4-10%, which on a 31-character second line at 19px
+  // overflows the 348px clipPath by ~5-15px. Picking 0.64 gives us
+  // 12-15% safety margin over the worst-case observed render, so the
+  // wrap budget always TRIGGERS A LINE BREAK before the browser
+  // actually runs out of room. The textLength="X" + lengthAdjust
+  // safety cap on the <text> elements below is a belt-and-braces
+  // second line of defence in case any future font swap pushes em
+  // width even wider.
+  const titleEmEstimate = 0.64;
+  const titleCharsPerLine = Math.max(8, Math.floor(width / (titleSize * titleEmEstimate)));
   // Pre-compute the footer baseline so we can decide whether a 3rd
   // title line would overlap the footer. Mirrors the formula below.
   const footerBaselineRel = height - 6 - footerSize - 6;
@@ -1242,9 +1262,13 @@ function renderSvgCaption(args: {
   const maxTitleLines = canFitThreeLines ? 3 : 2;
   const titleLines = wrapText(`"${subjectLabel}"`, titleCharsPerLine, maxTitleLines);
 
-  // Approximate em-width for the mono text in the footer/date lines. The
-  // fallback monospace is also a bit wider than JetBrains Mono, so the
-  // 0.62em estimate keeps both renderings inside the box.
+  // Approximate em-width for the mono text in the footer/date lines.
+  // Space Mono (the active `fonts.mono`) renders at ~0.60em, and
+  // every mainstream monospace fallback ("IBM Plex Mono",
+  // "ui-monospace", "Cascadia Code", monospace) sits in the
+  // 0.60-0.62em band. 0.62em is the conservative ceiling for the
+  // family -- pushing it higher (e.g. 0.66) over-truncates the
+  // footer sentence and strips the "$stake" tail off the right end.
   const monoCharEm = 0.62;
   const accuracyWidth = accuracyLabel.length * footerSize * monoCharEm;
   const footerAvail = Math.max(0, width - accuracyWidth - 10);
