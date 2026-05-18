@@ -634,7 +634,7 @@ Peaks beyond 4x are clipped visually but remain in the tooltip data. This ensure
 
 ### Queries
 All query functions accept an optional trailing `options?: { signal?: AbortSignal }` parameter (backward-compatible). Signal is forwarded through composed call chains.
-- `queryMarketState(client, marketId, options?)` → `MarketState` (wraps `GET /api/views/markets/{market_id}`)
+- `queryMarketState(client, marketId, options?)` → `MarketState` (wraps `GET /api/views/markets/{market_id}`; accepts `alpha_vector` or `state_vector` for consensus coefficients)
 - `getConsensusCurve(client, marketId, numPoints?, options?)` → `ConsensusCurve` (market state + client-side density eval)
 - `queryConsensusSummary(client, marketId, options?)` → `ConsensusSummary` (client-side stats from consensus coefficients)
 - `queryDensityAt(client, marketId, x, options?)` → density value at a single outcome point
@@ -646,7 +646,7 @@ All query functions accept an optional trailing `options?: { signal?: AbortSigna
 - `queryTradeHistory(client, marketId, options?)` → `TradeEntry[]` (composed: queryMarketPositions → positionsToTradeEntries; options accepts limit and signal)
 
 ### Discovery
-- `discoverMarkets(client, options?)` -> `MarketState[]` (L1 -- wraps `GET /api/views/markets/list`; accepts `MarketDiscoveryOptions` for client-side filtering/sorting)
+- `discoverMarkets(client, options?)` -> `MarketState[]` (L1 -- wraps `GET /api/views/markets/list`; accepts `MarketDiscoveryOptions` for client-side filtering/sorting; accepts `alpha_vector` or `state_vector` from list rows and skips malformed rows so one bad market cannot blank discovery feeds)
 - `filterMarkets(markets, options)` -> `MarketState[]` (L1 Discovery -- pure client-side filtering/sorting of `MarketState` arrays; field resolution checks top-level then metadata)
 - `discoverPopularMarkets(client, options?)` -> `MarketState[]` (L2 -- preset: sortBy totalVolume desc, limit 10; merges caller options)
 - `discoverActiveMarkets(client, options?)` -> `MarketState[]` (L2 -- preset: state 'open'; merges caller options)

@@ -1,4 +1,4 @@
-import { memo, useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useId, useLayoutEffect, useMemo, useState } from 'react';
 import { palette, fonts, LIGHT_RAW } from '../theme';
 import { calculateRarity, potentialRarity, TIER_META, type Rarity } from '../rarity';
 import {
@@ -142,6 +142,8 @@ export interface PolaroidProps {
 // BetFlow.tsx, this caps the polaroid's redraw cadence at the browser's
 // natural paint rate even while the user drags a slider at 60+ Hz.
 function PolaroidImpl(props: PolaroidProps) {
+  const rawInstanceId = useId();
+  const svgInstanceId = rawInstanceId.replace(/[^a-zA-Z0-9_-]/g, '');
   const {
     marketTitle,
     marketUnits = '',
@@ -396,15 +398,16 @@ function PolaroidImpl(props: PolaroidProps) {
   // three lines based on the available caption height; the user
   // sees the full title on every polaroid except pathological cases.
   const subjectLabel = truncate(marketTitle, 120);
-  const filterId = `develop-${seed}`;
-  const grainId = `grain-${seed}`;
-  const skyGradientId = `sky-${seed}`;
-  const groundGradientId = `ground-${seed}`;
-  const consensusGradientId = `consensus-${seed}`;
-  const sunGradientId = `sun-${seed}`;
-  const photoClipId = `photoclip-${seed}`;
-  const captionClipId = `capclip-${seed}`;
-  const photoVignetteId = `photovig-${seed}`;
+  const makeDefId = (name: string) => `${name}-${seed}-${svgInstanceId}`;
+  const filterId = makeDefId('develop');
+  const grainId = makeDefId('grain');
+  const skyGradientId = makeDefId('sky');
+  const groundGradientId = makeDefId('ground');
+  const consensusGradientId = makeDefId('consensus');
+  const sunGradientId = makeDefId('sun');
+  const photoClipId = makeDefId('photoclip');
+  const captionClipId = makeDefId('capclip');
+  const photoVignetteId = makeDefId('photovig');
 
   const accuracyLabel = (() => {
     if (!developed) {
@@ -746,8 +749,8 @@ function PolaroidImpl(props: PolaroidProps) {
         {photo.aurora && (
           <g opacity={photo.aurora.intensity * (0.4 + progress * 0.6)} filter={photoFilter}>
             {photo.aurora.curtains.map((c, i) => {
-              const gradId = `aurora-${seed}-${i}`;
-              const accentId = `aurora-accent-${seed}-${i}`;
+              const gradId = makeDefId(`aurora-${i}`);
+              const accentId = makeDefId(`aurora-accent-${i}`);
               const steps = 48;
               const yTop = photoY + c.yTop * photoSize;
               const yBot = photoY + c.yBot * photoSize;
@@ -808,7 +811,7 @@ function PolaroidImpl(props: PolaroidProps) {
         {photo.nebula && (
           <g opacity={photo.nebula.intensity * (0.5 + progress * 0.5)} filter={photoFilter}>
             <defs>
-              <radialGradient id={`nebula-${seed}`}>
+              <radialGradient id={makeDefId('nebula')}>
                 <stop offset="0%" stopColor={photo.nebula.innerColor} stopOpacity="0.55" />
                 <stop offset="55%" stopColor={photo.nebula.outerColor} stopOpacity="0.30" />
                 <stop offset="100%" stopColor={photo.nebula.outerColor} stopOpacity="0" />
@@ -818,7 +821,7 @@ function PolaroidImpl(props: PolaroidProps) {
               cx={photoX + photo.nebula.x * photoSize}
               cy={photoY + photo.nebula.y * photoSize}
               r={photo.nebula.radius * photoSize}
-              fill={`url(#nebula-${seed})`}
+              fill={`url(#${makeDefId('nebula')})`}
             />
           </g>
         )}
@@ -850,7 +853,7 @@ function PolaroidImpl(props: PolaroidProps) {
           const dy = Math.sin(c.angle) * c.length * photoSize;
           const tailX = headX + dx;
           const tailY = headY + dy;
-          const gradId = `comet-${seed}-${i}`;
+          const gradId = makeDefId(`comet-${i}`);
           // Tail color: bright moonlight white at the head transitioning
           // to a faint accent-tinted blue at the end.
           return (

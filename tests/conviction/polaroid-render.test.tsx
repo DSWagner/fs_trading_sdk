@@ -63,6 +63,22 @@ describe('Polaroid: smoke render', () => {
     expect(svg.getAttribute('role')).toBe('img');
     expect(svg.getAttribute('aria-label')).toMatch(/Polaroid receipt/);
   });
+
+  it('uses instance-unique SVG defs when the same receipt renders at multiple sizes', () => {
+    const { container } = render(
+      <>
+        <Polaroid {...baseline} width={380} />
+        <Polaroid {...baseline} width={220} />
+      </>,
+    );
+
+    const ids = Array.from(container.querySelectorAll('[id]')).map((node) => node.id);
+    expect(ids.length).toBeGreaterThan(0);
+    expect(new Set(ids).size).toBe(ids.length);
+
+    const photoClips = Array.from(container.querySelectorAll('clipPath[id^="photoclip-"] rect'));
+    expect(photoClips.map((rect) => rect.getAttribute('width'))).toEqual(['348', '188']);
+  });
 });
 
 describe('Polaroid: prediction label (you vs crowd)', () => {
@@ -198,8 +214,9 @@ describe('Polaroid: width range', () => {
 
 describe('Polaroid: deterministic rendering', () => {
   it('produces the same SVG markup for the same inputs (same marketId/positionId)', () => {
-    const a = renderPolaroid({ width: 280 }).container.innerHTML;
-    const b = renderPolaroid({ width: 280 }).container.innerHTML;
+    const normalizeInstanceIds = (html: string) => html.replace(/-r\d+/g, '-INSTANCE');
+    const a = normalizeInstanceIds(renderPolaroid({ width: 280 }).container.innerHTML);
+    const b = normalizeInstanceIds(renderPolaroid({ width: 280 }).container.innerHTML);
     expect(a).toBe(b);
   });
 

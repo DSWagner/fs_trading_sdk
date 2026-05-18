@@ -645,7 +645,25 @@ describe('queryMarketState', () => {
     expect(result.title).toBe('Root Title');
   });
 
-  it('throws when alpha_vector is missing', async () => {
+  it('maps state_vector as a fallback for the renamed single-market consensus field', async () => {
+    const rawWithStateVector = {
+      ...mockMarketStateRaw,
+      alpha_vector: undefined,
+      state_vector: [5, 10, 20, 30, 20, 10, 5, 2],
+    };
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(rawWithStateVector),
+    });
+
+    const client = makeMockClient();
+    const result = await queryMarketState(client, '123');
+
+    expect(result.alpha).toEqual([5, 10, 20, 30, 20, 10, 5, 2]);
+    expect(result.consensusMean).toBeCloseTo(expectedMarketState.consensusMean, 6);
+  });
+
+  it('throws when no consensus vector field is present', async () => {
     const rawWithoutAlpha = { ...mockMarketStateRaw, alpha_vector: undefined };
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -654,7 +672,7 @@ describe('queryMarketState', () => {
 
     const client = makeMockClient();
     await expect(queryMarketState(client, '123')).rejects.toThrow(
-      'Missing alpha_vector',
+      'Missing consensus vector',
     );
   });
 
@@ -1628,7 +1646,7 @@ describe('discoverMarkets', () => {
     expect(result).toEqual([]);
   });
 
-  it('throws error when lower_bound is missing from list item', async () => {
+  it('skips list item when lower_bound is missing', async () => {
     const rawWithoutL = {
       markets: [{
         ...mockDiscoverMarketsRaw.markets[0],
@@ -1641,12 +1659,11 @@ describe('discoverMarkets', () => {
     });
 
     const client = makeMockClient();
-    await expect(discoverMarkets(client)).rejects.toThrow(
-      'Missing lower_bound in market list item',
-    );
+    const result = await discoverMarkets(client);
+    expect(result).toEqual([]);
   });
 
-  it('throws error when upper_bound is missing from list item', async () => {
+  it('skips list item when upper_bound is missing', async () => {
     const rawWithoutH = {
       markets: [{
         ...mockDiscoverMarketsRaw.markets[0],
@@ -1659,12 +1676,11 @@ describe('discoverMarkets', () => {
     });
 
     const client = makeMockClient();
-    await expect(discoverMarkets(client)).rejects.toThrow(
-      'Missing upper_bound in market list item',
-    );
+    const result = await discoverMarkets(client);
+    expect(result).toEqual([]);
   });
 
-  it('throws error when num_buckets is missing from list item', async () => {
+  it('skips list item when num_buckets is missing', async () => {
     const rawWithoutK = {
       markets: [{
         ...mockDiscoverMarketsRaw.markets[0],
@@ -1677,17 +1693,19 @@ describe('discoverMarkets', () => {
     });
 
     const client = makeMockClient();
-    await expect(discoverMarkets(client)).rejects.toThrow(
-      'Missing num_buckets in market list item',
-    );
+    const result = await discoverMarkets(client);
+    expect(result).toEqual([]);
   });
 
-  it('throws when alpha_vector is missing from list item', async () => {
+  it('skips malformed list items and keeps valid markets', async () => {
     const rawWithoutAlpha = {
-      markets: [{
-        ...mockDiscoverMarketsRaw.markets[0],
-        alpha_vector: undefined,
-      }],
+      markets: [
+        {
+          ...mockDiscoverMarketsRaw.markets[0],
+          alpha_vector: undefined,
+        },
+        mockDiscoverMarketsRaw.markets[1],
+      ],
     };
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -1695,12 +1713,32 @@ describe('discoverMarkets', () => {
     });
 
     const client = makeMockClient();
-    await expect(discoverMarkets(client)).rejects.toThrow(
-      'Missing alpha_vector in market list item',
-    );
+    const result = await discoverMarkets(client);
+    expect(result).toEqual([expectedDiscoverMarkets[1]]);
   });
 
-  it('throws when market_model_params is missing from list item', async () => {
+  it('maps state_vector as a fallback for the renamed list consensus field', async () => {
+    const rawWithStateVector = {
+      markets: [{
+        ...mockDiscoverMarketsRaw.markets[0],
+        alpha_vector: undefined,
+        state_vector: [5, 10, 20, 30, 20, 10, 5, 2],
+      }],
+    };
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(rawWithStateVector),
+    });
+
+    const client = makeMockClient();
+    const result = await discoverMarkets(client);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].alpha).toEqual([5, 10, 20, 30, 20, 10, 5, 2]);
+    expect(result[0].consensusMean).toBeCloseTo(expectedDiscoverMarkets[0].consensusMean, 6);
+  });
+
+  it('skips list item when market_model_params is missing', async () => {
     const rawWithoutMMP = {
       markets: [{
         ...mockDiscoverMarketsRaw.markets[0],
@@ -1713,9 +1751,8 @@ describe('discoverMarkets', () => {
     });
 
     const client = makeMockClient();
-    await expect(discoverMarkets(client)).rejects.toThrow(
-      'Missing market_model_params in market list item',
-    );
+    const result = await discoverMarkets(client);
+    expect(result).toEqual([]);
   });
 
   it('returns all-zero consensus for zero-sum alpha in list item (fresh market)', async () => {

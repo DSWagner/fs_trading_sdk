@@ -357,7 +357,7 @@ function useMarkets(
 | `error` | `Error \| null` | Fetch error, if any |
 | `refetch` | `() => Promise<void>` | Trigger a background refetch |
 
-The hook delegates to `discoverMarkets(client, options)` from core. Filtering, sorting, and limiting are all client-side -- the full market list is fetched from the server on every request. Cache keys are derived from the discovery options, so different option combinations use separate cache entries.
+The hook delegates to `discoverMarkets(client, options)` from core. Filtering, sorting, and limiting are all client-side -- the full market list is fetched from the server on every request. Cache keys are derived from the discovery options, so different option combinations use separate cache entries. Core accepts `alpha_vector` or `state_vector` from market-list rows and skips malformed rows so one incomplete backend item cannot blank every `useMarkets()` feed.
 
 **Example -- list all markets:**
 

@@ -312,7 +312,7 @@ All query functions take an `FSClient` as their first argument and return a Prom
 
 ### `discoverMarkets(client, options?)`
 
-Lists available markets with optional client-side filtering, sorting, and limiting. Returns `MarketState[]`. The full market list is always fetched from the server; filtering is applied client-side.
+Lists available markets with optional client-side filtering, sorting, and limiting. Returns `MarketState[]`. The full market list is always fetched from the server; filtering is applied client-side. List rows may provide `alpha_vector` or `state_vector`; malformed rows are skipped so one incomplete market cannot fail the full discovery feed.
 
 ```typescript
 import { FSClient, discoverMarkets } from '@functionspace/core';
@@ -377,7 +377,7 @@ const weather = await discoverMarketsByCategory(client, ['weather']);
 
 ### `queryMarketState(client, marketId)`
 
-The foundational call. Returns a `MarketState` containing the consensus distribution, market config (`numBuckets`, `lowerBound`, `upperBound`), metadata (title, units, decimals), pool balance, volume, and resolution status. Nearly every workflow begins here.
+The foundational call. Returns a `MarketState` containing the consensus distribution, market config (`numBuckets`, `lowerBound`, `upperBound`), metadata (title, units, decimals), pool balance, volume, and resolution status. Nearly every workflow begins here. The consensus coefficients may come from `alpha_vector` or `state_vector` in the raw API response.
 
 ```typescript
 import { FSClient, queryMarketState } from '@functionspace/core';
