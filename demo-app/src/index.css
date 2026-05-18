@@ -219,6 +219,50 @@ svg[role="img"][aria-label^="Polaroid receipt"] {
   height: auto;
 }
 
+/* RECEIPT PAGE POLAROID: render at EXACT intrinsic pixel size, NOT
+ * the responsive `max-width: 100%; height: auto` above.
+ *
+ * Why: every previous attempt that relied on `height: auto` for the
+ * receipt polaroid ended up with a letterboxed / squashed / shifted
+ * matte. The pattern is:
+ *
+ *   1. Flex wrapper around the SVG computes its own width from the
+ *      grid cell (often within ~1 px of 380).
+ *   2. SVG `max-width: 100%` clamps to that wrapper width.
+ *   3. SVG `height: auto` is supposed to recompute height from the
+ *      intrinsic 380/570 ratio -- but with `preserveAspectRatio=
+ *      "xMidYMid meet"` Chrome sometimes resolves `auto` against the
+ *      HTML `height="570"` attribute INSTEAD of recomputing it from
+ *      the clamped width, and the SVG element ends up at e.g.
+ *      378x570 instead of 378x567.
+ *   4. The SVG's own preserveAspectRatio then letterboxes the
+ *      380x570 viewBox inside the 378x570 element. The matte and all
+ *      its content (photo, conviction strip, scale strip, caption
+ *      lines) get scaled down AND shifted vertically, so the photo
+ *      shrinks, a huge empty gap appears below it, and the footer +
+ *      date lines fall off the bottom of the visible matte.
+ *
+ * Fix: forget responsive scaling for this one location -- the
+ * receipt page is the artifact view, the polaroid IS the page, and
+ * it has a fixed editorial size (380x570 desktop, 280x420 mobile).
+ * Force those dimensions directly so the SVG element's box and the
+ * viewBox match EXACTLY, eliminating every aspect / letterbox math
+ * branch. iPhone SE (320 px) still has 20 px slack around the 280 px
+ * mobile polaroid, so no phone overflows. */
+[data-testid="receipt-polaroid-frame"] svg[role="img"][aria-label^="Polaroid receipt"] {
+  width: 380px !important;
+  height: 570px !important;
+  max-width: none !important;
+  flex-shrink: 0;
+}
+
+@media (max-width: 900px) {
+  [data-testid="receipt-polaroid-frame"] svg[role="img"][aria-label^="Polaroid receipt"] {
+    width: 280px !important;
+    height: 420px !important;
+  }
+}
+
 
 a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible {
   outline: 2px solid var(--c-ember);
