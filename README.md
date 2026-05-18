@@ -11,6 +11,7 @@ Every prediction is signed, dated, and turned into a Polaroid receipt the user c
 | --- | --- |
 | Live app | https://conviction-receipts.vercel.app/ |
 | Source repo | https://github.com/DSWagner/fs_trading_sdk |
+| X post | https://x.com/davidwagner999/status/2056314810829062410 |
 | Submission guide | [`SUBMISSION.md`](./SUBMISSION.md) |
 | Full project walkthrough | [`CONVICTION.md`](./CONVICTION.md) |
 | Contact for competition form | `@dswagner9` on Telegram |

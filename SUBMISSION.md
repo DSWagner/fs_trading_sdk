@@ -10,7 +10,7 @@ Everything you need to submit Conviction to the [FunctionSpace Vibecoding Compet
 > | ✓ done | Vercel deploy live at https://conviction-receipts.vercel.app/ (production deploy rebuilt on Vercel, public SSO protection disabled, and the 1024px receipt polaroid regression verified in Chromium). |
 > | ✓ done | 498 conviction tests pass, including 5 live smoke tests + vite + docusaurus builds clean. |
 > | ☐ you | Follow [@functionspaceHQ on X](https://x.com/functionspaceHQ) — required for eligibility, the rule is checked manually before announcement. |
-> | ☐ you | Post about the build on X tagging `@functionSPACEHQ`. Suggested copy is in §1 below; attach a screenshot or short clip of the receipt developing. |
+> | ✓ done | X post published at https://x.com/davidwagner999/status/2056314810829062410. |
 > | ✓ done | Telegram handle for the form: `@dswagner9`. |
 > | ☐ you | Open the [submission form](https://ecosystem.functionspace.dev/competition/submit) and paste the values from §1 below. Every text field already has a copy-paste-ready answer. |
 > | ☐ you | Tick both acknowledgement boxes on the form (follow on X + IP terms). |
@@ -76,7 +76,7 @@ https://conviction-receipts.vercel.app/
 ### X post URL
 
 ```
-<paste your tweet URL here once posted>
+https://x.com/davidwagner999/status/2056314810829062410
 ```
 
 Suggested tweet (≤280 chars):
