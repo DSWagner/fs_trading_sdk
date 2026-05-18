@@ -68,7 +68,11 @@ vi.mock('@functionspace/react', () => ({
   useConsensus: (...args: any[]) => useConsensusMock(...args),
 }));
 
-import { ReceiptPage, getReceiptPolaroidWidth } from '../../demo-app/src/conviction/pages/Receipt';
+import {
+  ReceiptPage,
+  getReceiptComparisonPolaroidWidth,
+  getReceiptPolaroidWidth,
+} from '../../demo-app/src/conviction/pages/Receipt';
 import { recordBet } from '../../demo-app/src/conviction/storage';
 
 const localBet = {
@@ -707,5 +711,14 @@ describe('Receipt page: polaroid width selection', () => {
   it('caps wide mobile and desktop receipt polaroids at the editorial desktop size', () => {
     expect(getReceiptPolaroidWidth(true, 820)).toBe(380);
     expect(getReceiptPolaroidWidth(false, 390)).toBe(380);
+  });
+
+  it('shrinks desktop comparison polaroids to fit beside the main receipt artifact', () => {
+    expect(getReceiptComparisonPolaroidWidth(false, 1024)).toBe(237);
+    expect(getReceiptComparisonPolaroidWidth(false, 1120)).toBe(260);
+  });
+
+  it('uses a smaller capped comparison polaroid on mobile', () => {
+    expect(getReceiptComparisonPolaroidWidth(true, 390)).toBe(280);
   });
 });

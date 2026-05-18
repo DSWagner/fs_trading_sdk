@@ -195,10 +195,11 @@ export function ComparisonPair({
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+          gridTemplateColumns: isMobile ? '1fr' : `repeat(2, minmax(0, ${width}px))`,
           gap: isMobile ? 16 : 22,
           alignItems: 'start',
           justifyItems: 'center',
+          justifyContent: 'center',
         }}
       >
         <PairColumn

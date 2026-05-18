@@ -365,6 +365,7 @@ function ReceiptView({
   // Mobile: use the safe viewport width so the receipt matches the downloaded
   // artifact visually, while keeping a 280px floor for narrow phones.
   const polaroidWidth = getReceiptPolaroidWidth(isMobile, viewportWidth);
+  const comparisonPolaroidWidth = getReceiptComparisonPolaroidWidth(isMobile, viewportWidth);
   const isOwner = user?.username === merged.username;
   const isOpen = marketResolutionState !== 'resolved' && marketResolutionState !== 'voided';
   const showCashOutPanel = isOwner && isOpen && cashedOut == null;
@@ -819,7 +820,7 @@ function ReceiptView({
             }}
             resolutionState={marketResolutionState}
             resolvedOutcome={resolvedOutcome}
-            width={isMobile ? 260 : 320}
+            width={comparisonPolaroidWidth}
             isMobile={isMobile}
             enabled={!isDemo}
             isOwner={isOwner}
@@ -942,6 +943,24 @@ export function getReceiptPolaroidWidth(isMobile: boolean, viewportWidth: number
   if (!isMobile) return 380;
   if (viewportWidth == null || viewportWidth <= 0) return 280;
   return Math.max(280, Math.min(380, Math.floor(viewportWidth - 32)));
+}
+
+export function getReceiptComparisonPolaroidWidth(isMobile: boolean, viewportWidth: number | null): number {
+  if (isMobile) {
+    return Math.min(280, getReceiptPolaroidWidth(true, viewportWidth));
+  }
+  if (viewportWidth == null || viewportWidth <= 0) return 220;
+
+  const pageWidth = Math.min(viewportWidth, 1120);
+  const pagePadding = 48;
+  const receiptColumnGap = 56;
+  const receiptPolaroidColumn = 380;
+  const comparisonPadding = 44;
+  const comparisonGap = 22;
+  const leftColumnWidth = pageWidth - pagePadding - receiptColumnGap - receiptPolaroidColumn;
+  const availablePerPolaroid = (leftColumnWidth - comparisonPadding - comparisonGap) / 2;
+
+  return Math.max(160, Math.min(260, Math.floor(availablePerPolaroid)));
 }
 
 function useViewportWidth(): number | null {

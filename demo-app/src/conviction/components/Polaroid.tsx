@@ -1310,8 +1310,12 @@ function renderSvgCaption(args: {
   const dateTruncated = truncate(dateLine, dateChars);
 
   const titleBaseline1 = y + titleSize + 4;
-  const dateBaseline = y + height - 6;
-  const footerBaseline = dateBaseline - dateSize - 6;
+  const lastTitleBaseline = titleBaseline1 + (titleLines.length - 1) * titleLineHeight;
+  const lowestDateBaseline = y + height - 6;
+  const lowestFooterBaseline = lowestDateBaseline - dateSize - 6;
+  const stackedFooterBaseline = lastTitleBaseline + Math.max(footerSize + 8, 16);
+  const footerBaseline = Math.min(stackedFooterBaseline, lowestFooterBaseline);
+  const dateBaseline = Math.min(footerBaseline + dateSize + 5, lowestDateBaseline);
 
   return (
     <g clipPath={`url(#${clipId})`}>
@@ -1334,7 +1338,7 @@ function renderSvgCaption(args: {
         y={footerBaseline}
         fontFamily={fonts.mono}
         fontSize={footerSize}
-        fill={palette.inkMute}
+        fill={palette.inkSoft}
         letterSpacing="0.4"
       >
         {footerText}
@@ -1356,7 +1360,7 @@ function renderSvgCaption(args: {
         y={dateBaseline}
         fontFamily={fonts.mono}
         fontSize={dateSize}
-        fill={palette.inkFade}
+        fill={palette.inkMute}
         letterSpacing="0.5"
       >
         {dateTruncated}

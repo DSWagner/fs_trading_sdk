@@ -141,6 +141,23 @@ describe('ComparisonPair render', () => {
     expect(polaroids.length).toBe(2);
   });
 
+  it('uses fixed safe comparison columns instead of clipping 320px polaroids inside 1fr tracks', () => {
+    useConsensusMock.mockReturnValue({
+      consensus: { points: gaussianAt(40, 8) },
+      loading: false,
+      isFetching: false,
+      error: null,
+      refetch: () => {},
+    });
+    const { container } = renderPair({ width: 237 });
+    const pair = container.querySelector('[data-testid="comparison-pair"]') as HTMLElement | null;
+    const grid = pair?.querySelector('section > div') as HTMLElement | null;
+
+    expect(grid).not.toBeNull();
+    expect(grid!.style.gridTemplateColumns).toBe('repeat(2, minmax(0, 237px))');
+    expect(grid!.style.justifyContent).toBe('center');
+  });
+
   it('the crowd polaroid label is "crowd ·" exactly (never the misleading "you · 40" duplicate)', () => {
     useConsensusMock.mockReturnValue({
       consensus: { points: gaussianAt(40, 8) },
