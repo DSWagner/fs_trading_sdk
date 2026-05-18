@@ -512,21 +512,46 @@ function PolaroidImpl(props: PolaroidProps) {
       xmlns="http://www.w3.org/2000/svg"
       preserveAspectRatio="xMidYMid meet"
       style={{
-        // The SVG always renders at the EXACT pixel dimensions its
-        // caller asked for. Width and height are numeric pixel
-        // attributes on the <svg> tag (above), and the wrapper
-        // around the SVG is sized to those same pixels by every
-        // caller -- so the SVG and its frame are ALWAYS the same
-        // size, with no CSS layout property in the load-bearing
-        // position. This eliminates every regression where the
-        // wrapper and the SVG ended up disagreeing on shape.
+        // LOAD-BEARING: inline width / height / maxWidth pinned in PIXELS.
         //
-        // The global CSS rule `svg[role="img"][aria-label^="Polaroid
-        // receipt"] { display: block; max-width: 100%; height:
-        // auto }` only kicks in if a caller's wrapper happens to be
-        // narrower than the polaroid's intrinsic width, in which
-        // case the SVG shrinks proportionally and the wrapper (sized
-        // identically) shrinks with it.
+        // The polaroid SVG MUST render at the exact pixel dimensions its
+        // caller asked for (width prop, and height = width * 1.5). Any
+        // mismatch between the SVG element's CSS box and its viewBox
+        // triggers `preserveAspectRatio="xMidYMid meet"` to letterbox the
+        // viewBox inside the element, which scales the matte / photo /
+        // caption DOWN and shifts them vertically -- visually the photo
+        // shrinks, a huge empty band appears below it, and the footer +
+        // date lines fall off the bottom of the matte.
+        //
+        // History: this used to rely on the HTML `width=` / `height=`
+        // attributes plus a global `svg[role="img"][aria-label^=
+        // "Polaroid receipt"] { max-width: 100%; height: auto }` CSS
+        // rule for responsive scaling. CSS specificity puts that
+        // external rule above the HTML presentational attributes, so on
+        // every page where the parent container width was even 1-2 px off
+        // from the polaroid's intrinsic width (receipt page in
+        // particular -- the grid cell width depends on viewport, page
+        // padding, and the 1120 px max-width clamp), Chrome's
+        // `height: auto` for SVG resolved against the HTML `height`
+        // attribute INSTEAD of recomputing from the clamped width and
+        // the SVG element ended up at e.g. 378x570 with a viewBox of
+        // 380x570. The internal preserveAspectRatio then letterboxed
+        // the matte.
+        //
+        // The fix: pin width AND height in pixels on the INLINE style,
+        // and explicitly override max-width to none. Inline styles win
+        // over external non-!important CSS by specificity, so no parent,
+        // no global rule, and no responsive media query can resize the
+        // SVG element away from its viewBox dimensions.
+        //
+        // For responsive layouts: each caller is responsible for passing
+        // a `width` prop appropriate for the current viewport (the
+        // receipt page does `isMobile ? 280 : 380`, explore does
+        // `isMobile ? 200 : 220`, etc.). The polaroid no longer scales
+        // itself.
+        width: `${width}px`,
+        height: `${height}px`,
+        maxWidth: 'none',
         display: 'block',
         filter: developFilter,
         transition: developTransition,
