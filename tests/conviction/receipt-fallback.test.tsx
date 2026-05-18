@@ -266,27 +266,51 @@ describe('Receipt page: graceful market fallback', () => {
   // ────────────────────────────────────────────────────────────────────
   // POLAROID FRAME GEOMETRY -- pins the wrapper / SVG sizing contract.
   //
-  // Final design (after every JS-pixel-locked-rectangle attempt
-  // failed in production):
-  //   * The wrapper is intentionally minimal: `position: relative`
-  //     ONLY. No explicit width / height, no aspect-ratio fallback,
-  //     no overflow:hidden clip, no box-sizing border-box, no
-  //     ResizeObserver. The wrapper is just an anchor for the
-  //     CashedOutStamp absolute overlay and for the ShareKit PNG
-  //     export ref.
-  //   * The Polaroid SVG dictates its OWN intrinsic dimensions via
-  //     the `width` prop -> SVG `width={width} height={width *
-  //     1.5}` HTML attributes. The SVG is the visual frame.
-  //   * The global responsive CSS rule `svg[role="img"] {
-  //     max-width: 100%; height: auto }` lets the SVG shrink
-  //     gracefully on narrow viewports.
+  // Design history & current contract:
   //
-  // This is identical to how every OTHER polaroid in the app
-  // renders (Profile.tsx BetTile, Embed.tsx, Explore.tsx). Same
-  // code path. No special-case wrapper that could clip the photo.
+  //   v1 (FAILED): wrapper pinned to `width: 480, height: 720` with
+  //     SVG sized via `width: 100%; height: 100%`. The 1024 px-wide
+  //     desktop viewport capped the wrapper's WIDTH to ~460 px (grid
+  //     cell width) but left the wrapper's HEIGHT at 720 px, so the
+  //     SVG (preserving 2:3 via aspect-ratio) rendered 460 x 690
+  //     and left a 30 px strip of empty matte at the bottom of the
+  //     wrapper -- the original "polaroid is cut off" bug.
+  //
+  //   v2 (FAILED): wrapper minimal -- ONLY `position: relative` +
+  //     `flexShrink: 0`. The SVG's HTML width / height attributes
+  //     drove the wrapper's intrinsic size via shrink-to-fit. This
+  //     looked right at 175% zoom (where the page falls into mobile
+  //     layout and the polaroid sits in a single-column flow) but
+  //     broke at 100% desktop zoom: inside a `display: flex;
+  //     align-items: center` parent with no definite cross-axis
+  //     size, Chrome resolves the SVG's `height: auto` (from the
+  //     global responsive rule) against an UNDER-counted parent
+  //     height, the photo renders wider than tall, and the matte
+  //     truncates BEFORE the footer + date strip.
+  //
+  //   v3 (CURRENT): wrapper owns a DEFINITE 2:3 box.
+  //     * `position: relative` -- still the absolute-overlay anchor
+  //       for the CashedOutStamp and ShareKit PNG export ref.
+  //     * `width: polaroidWidth` -- a concrete cross-axis size the
+  //       flex parent can compute against, breaking the SVG /
+  //       wrapper circular sizing.
+  //     * `maxWidth: '100%'` -- the wrapper still shrinks gracefully
+  //       when the grid cell is narrower than polaroidWidth (no
+  //       horizontal overflow on phones / zoomed viewports).
+  //     * `aspectRatio: '2 / 3'` -- the wrapper carries the 2:3
+  //       portrait ratio itself, so its height is always exactly
+  //       1.5x its width. Even if the SVG's `height: auto` were
+  //       ever to misresolve, the wrapper box is the right shape
+  //       and the SVG (forced to width:100%; height:100% via the
+  //       receipt-scoped CSS rule in index.css, with
+  //       preserveAspectRatio="xMidYMid meet") renders its content
+  //       at the correct shape inside.
+  //     * still NO `overflow: hidden` -- the wrapper never clips the
+  //       SVG, the SVG never overflows the wrapper. The matte and
+  //       caption are guaranteed to be visible at every viewport.
   // ────────────────────────────────────────────────────────────────────
 
-  it('the polaroid frame wrapper is minimal -- a position:relative anchor with NO clipping / NO size lock', () => {
+  it('the polaroid frame wrapper carries an explicit width + 2:3 aspect-ratio so the SVG cannot squash vertically', () => {
     useMarketMock.mockReturnValue({
       market: null,
       loading: false,
@@ -301,24 +325,27 @@ describe('Receipt page: graceful market fallback', () => {
     ) as HTMLElement | null;
     expect(frame).not.toBeNull();
     const style = (frame as HTMLElement).style;
-    // The wrapper is JUST a relative-positioned anchor for the
-    // CashedOutStamp overlay and the polaroidRef PNG export. The
-    // SVG inside carries the dimensions.
+    // The wrapper is still a relative-positioned anchor for the
+    // CashedOutStamp overlay and the polaroidRef PNG export.
     expect(style.position).toBe('relative');
-    // EXPLICITLY no clipping. Every previous incarnation of this
-    // wrapper had `overflow: hidden`, which silently amputated the
-    // polaroid's right and bottom edges any time the wrapper's
-    // computed pixel rectangle drifted from the SVG's intrinsic
-    // size by even one frame.
+    // EXPLICITLY no clipping. Previous incarnations had `overflow:
+    // hidden`, which silently amputated the polaroid's right and
+    // bottom edges any time the wrapper's computed pixel rectangle
+    // drifted from the SVG's intrinsic size by even one frame.
     expect(style.overflow).not.toBe('hidden');
-    // No explicit width / height that could disagree with the
-    // SVG's intrinsic dimensions. The SVG drives the size.
-    expect(style.width).toBe('');
-    expect(style.height).toBe('');
-    // No aspect-ratio constraint. The SVG carries 2:3 natively via
-    // its `width=` and `height=` attributes.
-    expect(style.aspectRatio).toBe('');
-    // No box-sizing override that could interact with future
+    // The wrapper now owns a DEFINITE width -- this is what gives
+    // the SVG inside a stable box to size against, instead of
+    // chasing the SVG's intrinsic width through a flex circular
+    // dependency that under-resolves on desktop Chrome.
+    expect(style.width).toBe('380px');
+    // ...but the wrapper still shrinks gracefully when the grid
+    // cell is narrower than the polaroid's natural width.
+    expect(style.maxWidth).toBe('100%');
+    // The wrapper carries the 2:3 portrait ratio itself, so its
+    // height is always exactly 1.5x its width. This is the hard
+    // floor that survives any SVG `height: auto` misresolution.
+    expect(style.aspectRatio).toBe('2 / 3');
+    // Still no box-sizing override that could interact with future
     // padding / borders to shrink the visible rectangle.
     expect(style.boxSizing).toBe('');
   });
@@ -329,13 +356,17 @@ describe('Receipt page: graceful market fallback', () => {
   //   "WRITE A VALIDATION TEST WHERE YOU WILL ALWAYS TRY WHETHER THE
   //    IMAGE SIZE AND POLAROID FRAME ARE THE SAME SIZE"
   //
-  // With the minimal wrapper the SVG IS the frame -- there is no
-  // separate sized wrapper that could disagree. The test now pins
-  // the SVG's own intrinsic dimensions: width attribute equal to
-  // the polaroidWidth prop (380 desktop), height attribute exactly
-  // 1.5x the width, viewBox matches the rendered pixel space, no
-  // CSS stretch contract on the SVG element. If any of these break,
-  // the polaroid renders at the wrong shape.
+  // The wrapper now carries its own DEFINITE width + 2:3 aspect
+  // ratio (see the previous test) AND the SVG carries the same
+  // intrinsic 380 x 570 pixel dimensions. Because the two agree on
+  // shape exactly, the receipt-scoped CSS rule that forces the SVG
+  // to width:100%; height:100% inside the wrapper produces a
+  // perfect 1:1 overlay -- no letterbox, no stretch, no clip. This
+  // test pins the SVG side of that contract: width attribute equal
+  // to the polaroidWidth prop (380 desktop), height attribute
+  // exactly 1.5x the width, viewBox matches the rendered pixel
+  // space. If any of these break, the polaroid renders at the
+  // wrong shape inside the wrapper box.
   // ════════════════════════════════════════════════════════════════════
 
   it('VALIDATION: the polaroid SVG renders at its FULL intrinsic 2:3 size (no clipping, no letterbox, no stretch)', () => {

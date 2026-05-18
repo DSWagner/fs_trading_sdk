@@ -431,27 +431,45 @@ function ReceiptView({
     </div>
   );
 
-  // The wrapper is intentionally minimal -- a `position: relative`
-  // box sized by the polaroid SVG itself. This matches how every
-  // OTHER polaroid in the app renders (Profile.tsx BetTile,
-  // Embed.tsx, Explore.tsx, LivePortfolioSection.tsx): no
-  // ResizeObserver, no pixel-locked rectangle, no overflow:hidden
-  // clip, no aspect-ratio fallback. Just a `<div style="position:
-  // relative">` that lets the SVG dictate its own intrinsic size
-  // (driven by the `width` prop -> SVG `width={width} height={width
-  // * 1.5}`), with the global responsive CSS rule
-  // `svg[role="img"] { max-width: 100%; height: auto }` letting it
-  // shrink gracefully on narrow viewports. The CashedOutStamp
-  // overlay anchors against this wrapper, the ShareKit PNG export
-  // captures it through `polaroidRef`, and the receipt page never
-  // again clips the polaroid because the wrapper IS the polaroid.
+  // The wrapper needs THREE properties for the SVG inside to render
+  // at the correct 2:3 portrait shape on every viewport:
+  //
+  //   1. `width: polaroidWidth` -- a DEFINITE cross-axis size so the
+  //      flex parent (`display: flex; align-items: center`) can
+  //      compute a stable width for the SVG to size against. Without
+  //      this the SVG's intrinsic width (from its `width` attribute)
+  //      and the wrapper's content-sized width chase each other in a
+  //      circular dependency, and Chrome's flex layout sometimes
+  //      lands on a SHORTER computed height than the viewBox aspect
+  //      ratio demands. The photo then renders wider than tall and
+  //      the bottom of the matte (footer + date lines) gets clipped
+  //      -- exactly the bug the user reported.
+  //   2. `maxWidth: '100%'` -- on viewports where the grid cell is
+  //      narrower than `polaroidWidth` (rare on desktop, the 1fr
+  //      cell at 1024 px is 460 px wide and polaroidWidth tops out
+  //      at 380), the wrapper shrinks to the cell and the SVG
+  //      shrinks with it via the global `max-width: 100%` rule.
+  //   3. `aspectRatio: '2 / 3'` -- a hard floor on the wrapper's
+  //      shape that survives ANY upstream layout glitch. Even if the
+  //      SVG's `height: auto` were ever to resolve wrong, the
+  //      wrapper itself would still hold a 2:3 box, and the SVG
+  //      (with `preserveAspectRatio="xMidYMid meet"`) would render
+  //      its full 380 x 570 content scaled to fit inside.
+  //
+  // The wrapper still has no fixed pixel height -- height tracks
+  // width via `aspectRatio`, so a narrower grid cell never leaves
+  // empty matte at the bottom (the previous-attempt failure mode
+  // described in the long comment block above).
+  const polaroidAspectRatio = '2 / 3';
   const polaroidNode = (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, width: '100%' }}>
       <div
         ref={polaroidRef}
         style={{
           position: 'relative',
-          flexShrink: 0,
+          width: polaroidWidth,
+          maxWidth: '100%',
+          aspectRatio: polaroidAspectRatio,
         }}
         data-testid="receipt-polaroid-frame"
       >

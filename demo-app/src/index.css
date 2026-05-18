@@ -219,6 +219,28 @@ svg[role="img"][aria-label^="Polaroid receipt"] {
   height: auto;
 }
 
+/* Receipt-page polaroid wrapper: the wrapper itself owns a definite
+ * 2:3 aspect-ratio box (see `polaroidNode` in Receipt.tsx), so the
+ * SVG inside MUST fill the wrapper exactly -- otherwise Chrome's
+ * flex layout can compute the SVG's `height: auto` to a SHORTER
+ * value than the wrapper's actual height, the photo and matte
+ * render squashed, and the footer + date lines get clipped below
+ * the visible SVG box. Forcing `width: 100%; height: 100%` makes
+ * the SVG fill the wrapper deterministically; the SVG's own
+ * `preserveAspectRatio="xMidYMid meet"` (set on the element itself
+ * in Polaroid.tsx) keeps its content's 2:3 ratio intact inside
+ * whatever box the wrapper hands it.
+ *
+ * Scope is intentionally tight: this only targets the receipt
+ * page's polaroid (`data-testid="receipt-polaroid-frame"`). Every
+ * other polaroid in the app (BetTile, Embed, Explore, LivePortfolio
+ * preview, etc.) keeps the standard responsive `max-width: 100%;
+ * height: auto` behaviour above. */
+[data-testid="receipt-polaroid-frame"] > svg[role="img"][aria-label^="Polaroid receipt"] {
+  width: 100%;
+  height: 100%;
+}
+
 a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible {
   outline: 2px solid var(--c-ember);
   outline-offset: 2px;
