@@ -176,7 +176,7 @@ describe('ComparisonPair render', () => {
 
   it('renders the user comparison polaroid with the same bimodal silhouette as the main receipt', () => {
     const consensusPoints = gaussianAt(40, 8);
-    const consensusCurve = consensusPoints.map((point) => point.y);
+    const consensusCurve = consensusPoints;
     const bimodalBet = {
       ...baseUserBet,
       shape: 'bimodal' as const,
@@ -240,10 +240,10 @@ describe('ComparisonPair render', () => {
     const leftPeak = gaussianAt(30, 5);
     const rightPeak = gaussianAt(72, 6);
     const consensusPoints = leftPeak.map((point, i) => ({
-      x: point.x,
+      x: point.x <= 50 ? point.x * 0.8 : 40 + (point.x - 50) * 1.2,
       y: point.y * 0.7 + rightPeak[i].y * 0.9,
     }));
-    const consensusCurve = consensusPoints.map((point) => point.y);
+    const consensusCurve = consensusPoints;
     const crowdSummary = summariseConsensus({ points: consensusPoints }, 0, 100);
     expect(crowdSummary).not.toBeNull();
     useConsensusMock.mockReturnValue({

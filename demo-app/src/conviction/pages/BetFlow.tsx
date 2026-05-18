@@ -138,8 +138,8 @@ export function BetFlowPage() {
   // `useConsensus(marketId)` for the orange "Market Consensus" curve
   // and to `evaluateDensityCurve(previewBelief, ...)` for the purple
   // "Trade Preview" curve. The polaroid now does the same and passes
-  // the y-arrays straight to the Polaroid component as `consensusCurve`
-  // and `userCurve`. Net: a bimodal market consensus paints two peaks
+  // the full {x,y} curves straight to the Polaroid component as
+  // `consensusCurve` and `userCurve`. Net: a bimodal market consensus paints two peaks
   // on the back hill, a tight Gaussian preview paints a sharp front
   // hill, and the polaroid stops "lying about shape." Without this the
   // polaroid back hill was hardcoded to a single Gaussian centred on
@@ -154,8 +154,8 @@ export function BetFlowPage() {
   // render" (minified error #310).
   // ────────────────────────────────────────────────────────────────────
   const { consensus: liveConsensus } = useConsensus(marketId ?? '');
-  const consensusCurveY = useMemo(
-    () => (liveConsensus?.points ? liveConsensus.points.map((p) => p.y) : null),
+  const consensusCurvePoints = useMemo(
+    () => liveConsensus?.points ?? null,
     [liveConsensus],
   );
   // `market` from the existing useMarket call above is in scope here.
@@ -185,7 +185,7 @@ export function BetFlowPage() {
       } else {
         belief = generateGaussian(deferredPrediction, Math.max(deferredSpread, 0.01), numBuckets, lo, hi);
       }
-      return evaluateDensityCurve(belief, lo, hi, 200).map((p) => p.y);
+      return evaluateDensityCurve(belief, lo, hi, 200);
     } catch {
       return null;
     }
@@ -627,7 +627,7 @@ export function BetFlowPage() {
       // Hand the literal chart curves to the polaroid so the back hill
       // (consensus) and front hill (user belief) draw the EXACT shapes
       // the bottom-of-page chart renders -- including bimodal markets.
-      consensusCurve={consensusCurveY}
+      consensusCurve={consensusCurvePoints}
       userCurve={userBeliefCurve}
       animateDevelop={mode === 'after'}
     />

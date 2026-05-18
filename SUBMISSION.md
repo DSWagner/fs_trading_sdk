@@ -232,7 +232,7 @@ The Conviction-only suite is the recommended verification path: `npx vitest run 
 | Receipt verify pill | Below the stat row. Should show "✓ Verified · <8-char-fingerprint>" on receipts authored on this device. Open the Receipt in incognito; the pill should show "No on-device signature" but the rest of the receipt should render fine. |
 | Embed (`/embed/r/<id>/<id>`) | Bare receipt, no nav, ready to drop in an iframe. |
 | Mobile (375 px viewport) | Every page is usable. No horizontal scroll except the style gallery. |
-| Share-card preview | Right-click → View page source. Verify `og:title`, `og:image`, `twitter:image`, `link rel="icon"` are all there. |
+| Share-card preview | Right-click → View page source. Verify `og:title`, absolute PNG `og:image`, `twitter:image`, and `link rel="icon"` are all there. |
 
 ---
 
@@ -250,4 +250,4 @@ If anything in those files reads as wrong or off-message, fix before you push to
 
 ---
 
-*Last updated: 2026-05-18: market refresh stability and receipt polaroid clipping fixes. The SDK now accepts `alpha_vector` or `state_vector` for live market consensus data, preventing market refreshes from blanking the UI when the backend field name drifts. The Receipt page reserves a fixed desktop polaroid column, uses the safe viewport width on mobile, keeps the SVG footer/date directly under the title, shrinks comparison polaroids to fit the available two-up spread, gives every Polaroid SVG unique defs so repeated receipt/crowd polaroids cannot steal each other's clipPaths, keeps the main receipt and user comparison Polaroids visually identical for the same signed bet, and draws the crowd Polaroid from the actual consensus curve. The Conviction suite is **500 tests across 37 files**, all passing including live smoke.*
+*Last updated: 2026-05-18: market refresh stability, social preview, and receipt polaroid clipping fixes. The SDK now accepts `alpha_vector` or `state_vector` for live market consensus data, preventing market refreshes from blanking the UI when the backend field name drifts. The Receipt page reserves a fixed desktop polaroid column, uses the safe viewport width on mobile, keeps SVG footer/date baselines fixed, compresses caption text instead of ellipsizing, shrinks comparison polaroids to fit the available two-up spread, gives every Polaroid SVG unique defs so repeated receipt/crowd polaroids cannot steal each other's clipPaths, keeps the main receipt and user comparison Polaroids visually identical for the same signed bet, draws the crowd Polaroid from the exact consensus curve, and serves X/Twitter a PNG preview card. The Conviction suite is **500 tests across 37 files**, all passing including live smoke.*

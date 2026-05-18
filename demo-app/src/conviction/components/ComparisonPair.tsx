@@ -127,8 +127,8 @@ export function ComparisonPair({
 
   const crowdWidth = isMobile ? Math.min(width, 280) : width;
   const userWidth = isMobile ? Math.min(width, 280) : width;
-  const consensusCurveY = Array.isArray(consensus?.points)
-    ? consensus.points.map((point) => point.y)
+  const consensusCurvePoints = Array.isArray(consensus?.points)
+    ? consensus.points
     : null;
   // The crowd polaroid uses the SAME createdAt as the user's bet so
   // the "develop" progression for both polaroids tracks the same
@@ -231,7 +231,7 @@ export function ComparisonPair({
             resolvedOutcome={resolvedOutcome}
             width={userWidth}
             consensusAtBet={userBet.consensusAtBet}
-            consensusCurve={consensusCurveY}
+            consensusCurve={consensusCurvePoints}
             expiresAt={(market as any)?.expiresAt ?? null}
             // "you" only when the signed-in viewer IS the author.
             // Otherwise the strip reads "@theirhandle" so a visitor
@@ -269,7 +269,7 @@ export function ComparisonPair({
             resolvedOutcome={resolvedOutcome}
             width={crowdWidth}
             consensusAtBet={null}
-            userCurve={consensusCurveY}
+            userCurve={consensusCurvePoints}
             expiresAt={(market as any)?.expiresAt ?? null}
             // The receipt's main polaroid is always the user's, so its
             // scale strip prefix "you" is correct there. The CROWD

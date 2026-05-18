@@ -215,7 +215,7 @@ function ReceiptView({
   // hill. Shares the SDK cache key with the Receipt page's other
   // consensus subscribers (LiveConsensusCard, ComparisonPair,
   // ConsensusDriftSparkline) so this hook adds zero engine cost. The
-  // resulting y-array is forwarded to the Polaroid's `consensusCurve`
+  // resulting {x,y} curve is forwarded to the Polaroid's `consensusCurve`
   // prop so the back hill carries the EXACT shape of the market's
   // current consensus -- bimodal markets render as two peaks, not as
   // a single Gaussian approximation. Demo markets pass enabled:false
@@ -224,8 +224,8 @@ function ReceiptView({
   const { consensus: liveConsensus } = useConsensus(merged.marketId, undefined, {
     enabled: !isDemo,
   });
-  const consensusCurveY = useMemo(
-    () => (liveConsensus?.points ? liveConsensus.points.map((p) => p.y) : null),
+  const consensusCurvePoints = useMemo(
+    () => liveConsensus?.points ?? null,
     [liveConsensus],
   );
 
@@ -543,7 +543,7 @@ function ReceiptView({
         // back hill (centred on `consensusAtBet`) when the live
         // curve is unavailable -- demo bets, archived markets,
         // engine errors all gracefully degrade.
-        consensusCurve={consensusCurveY}
+        consensusCurve={consensusCurvePoints}
         // Scale-strip viewer perspective: only call the author "you" if
         // the signed-in viewer IS the author. When somebody else's
         // receipt opens (visiting their archive, a shared link, an

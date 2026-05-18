@@ -29,6 +29,7 @@ import {
  */
 
 export type PolaroidPreset = 'auto' | 'sunset' | 'twilight' | 'aurora' | 'botanical' | 'noir' | 'rosegold';
+export type PolaroidDensityCurve = number[] | Array<{ x: number; y: number }>;
 
 /**
  * Legacy preset list — kept exported so that older imports continue to
@@ -97,32 +98,29 @@ export interface PolaroidProps {
    */
   consensusAtBet?: number | null;
   /**
-   * Optional ACTUAL crowd-consensus density curve, sampled at any
-   * number of evenly-spaced X positions across [lowerBound,
-   * upperBound]. When provided, the back hill (consensus
-   * silhouette) is drawn directly from this array instead of being
-   * approximated as a Gaussian centred on `consensusAtBet`. This
+   * Optional ACTUAL crowd-consensus density curve, sampled as either
+   * raw y-values over [lowerBound, upperBound] or full {x,y} chart
+   * points. When provided, the back hill (consensus silhouette) is
+   * drawn directly from this curve instead of being approximated as
+   * a Gaussian centred on `consensusAtBet`. This
    * makes the polaroid's back hill the EXACT same shape as the
    * orange "Market Consensus" curve in the bottom-of-page
    * Probability Density chart -- including bimodal / multimodal /
    * heavy-tailed distributions that a single-Gaussian
-   * approximation flattens out. Pass the result of
-   * `evaluateDensityCurve(market.consensus, lowerBound,
-   * upperBound, n).map(p => p.y)` from the SDK's `useConsensus`
-   * hook. Length is unconstrained -- the polaroid resamples at its
-   * own internal grid via linear interpolation.
+   * approximation flattens out. Prefer passing `useConsensus(...).points`
+   * unchanged so the polaroid resamples against the same x coordinates
+   * as the chart.
    */
-  consensusCurve?: number[] | null;
+  consensusCurve?: PolaroidDensityCurve | null;
   /**
    * Optional ACTUAL user-belief density curve, same contract as
    * `consensusCurve` but for the foreground hill. When provided,
    * the polaroid's front hill matches the chart's purple "Trade
    * Preview" curve pixel-for-pixel instead of relying on the
-   * shape-driven `densityAt` reconstruction. Pass the result of
-   * `evaluateDensityCurve(previewBelief, lowerBound, upperBound,
-   * n).map(p => p.y)` from the SDK.
+   * shape-driven `densityAt` reconstruction. Prefer passing the full
+   * `{x,y}` result from `evaluateDensityCurve(previewBelief, ...)`.
    */
-  userCurve?: number[] | null;
+  userCurve?: PolaroidDensityCurve | null;
   /**
    * Label used in the scale strip to mark the prediction tick. Defaults
    * to "you" because the overwhelmingly common case is a polaroid that
@@ -397,7 +395,7 @@ function PolaroidImpl(props: PolaroidProps) {
   // `renderSvgCaption` decides whether the title fits in two or
   // three lines based on the available caption height; the user
   // sees the full title on every polaroid except pathological cases.
-  const subjectLabel = truncate(marketTitle, 120);
+  const subjectLabel = marketTitle || '';
   const makeDefId = (name: string) => `${name}-${seed}-${svgInstanceId}`;
   const filterId = makeDefId('develop');
   const grainId = makeDefId('grain');
@@ -1252,73 +1250,44 @@ function renderSvgCaption(args: {
     conviction,
   } = args;
 
-  const titleSize = Math.round(polaroidWidth * 0.05);
-  const titleLineHeight = Math.round(titleSize * 1.18);
-  const footerSize = Math.max(10, Math.round(polaroidWidth * 0.028));
-  const dateSize = Math.max(9, Math.round(polaroidWidth * 0.024));
-
-  // Per-character em width used to BUDGET how many characters fit on a
-  // line BEFORE we wrap. We want a CONSERVATIVE upper bound -- the
-  // estimate must NEVER undercount the real rendered width, or the
-  // last line of the title overflows the caption clipPath and gets
-  // sliced mid-word (the "Tesla Optimus Units Sold or / Deployed
-  // Internally by Dec 202(" bug on the desktop Receipt at width=380).
-  //
-  // The display font is now Bricolage Grotesque (see `fonts.display`
-  // in theme.ts). Bricolage has NO true italic, so applying
-  // `font-style="italic"` to the SVG <text> triggers either a browser-
-  // synthesised oblique or a cascade fall-through into "Funnel
-  // Display" / "Outfit" / system-ui italic -- all of which render at
-  // ~0.58-0.62em average. The legacy 0.56em estimate (originally
-  // tuned for Fraunces italic at ~0.46em) underestimates that real
-  // width by 4-10%, which on a 31-character second line at 19px
-  // overflows the 348px clipPath by ~5-15px. Picking 0.64 gives us
-  // 12-15% safety margin over the worst-case observed render, so the
-  // wrap budget always TRIGGERS A LINE BREAK before the browser
-  // actually runs out of room. The textLength="X" + lengthAdjust
-  // safety cap on the <text> elements below is a belt-and-braces
-  // second line of defence in case any future font swap pushes em
-  // width even wider.
   const titleEmEstimate = 0.64;
-  const titleCharsPerLine = Math.max(8, Math.floor(width / (titleSize * titleEmEstimate)));
-  // Pre-compute the footer baseline so we can decide whether a 3rd
-  // title line would overlap the footer. Mirrors the formula below.
-  const footerBaselineRel = height - 6 - footerSize - 6;
-  // Allow up to 3 title lines when the caption strip has vertical
-  // room for it (medium and large polaroids: receipt page, BetFlow
-  // preview at 1440 wide). On small gallery thumbnails the caption
-  // strip is too short for a 3rd line and we fall back to 2 lines
-  // with a final-line ellipsis. Threshold = last title baseline + a
-  // 6 px breathing margin must clear the footer baseline.
-  const lastTitleBaselineFor = (n: number) => titleSize + 4 + (n - 1) * titleLineHeight;
-  const canFitThreeLines = lastTitleBaselineFor(3) + 6 <= footerBaselineRel;
-  const maxTitleLines = canFitThreeLines ? 3 : 2;
-  const titleLines = wrapText(`"${subjectLabel}"`, titleCharsPerLine, maxTitleLines);
-
-  // Approximate em-width for the mono text in the footer/date lines.
-  // Space Mono (the active `fonts.mono`) renders at ~0.60em, and
-  // every mainstream monospace fallback ("IBM Plex Mono",
-  // "ui-monospace", "Cascadia Code", monospace) sits in the
-  // 0.60-0.62em band. 0.62em is the conservative ceiling for the
-  // family -- pushing it higher (e.g. 0.66) over-truncates the
-  // footer sentence and strips the "$stake" tail off the right end.
   const monoCharEm = 0.62;
-  const accuracyWidth = accuracyLabel.length * footerSize * monoCharEm;
-  const footerAvail = Math.max(0, width - accuracyWidth - 10);
-  const footerChars = Math.max(8, Math.floor(footerAvail / (footerSize * monoCharEm)));
-  const footerText = truncate(footerSentence, footerChars);
-
   const dateLine = `${dateLabel} · CONVICTION × ${Math.max(1, Math.round(conviction * 10))}/10`;
-  const dateChars = Math.max(8, Math.floor(width / (dateSize * monoCharEm)));
-  const dateTruncated = truncate(dateLine, dateChars);
+  const baseFooterSize = Math.max(10, Math.round(polaroidWidth * 0.028));
+  const baseDateSize = Math.max(9, Math.round(polaroidWidth * 0.024));
+  const fitMonoSize = (text: string, initialSize: number, availableWidth: number) => {
+    let size = initialSize;
+    while (size > 6 && text.length * size * monoCharEm > availableWidth) size -= 1;
+    return size;
+  };
+  const footerSize = fitMonoSize(
+    `${footerSentence}${accuracyLabel}`,
+    baseFooterSize,
+    width - 8,
+  );
+  const dateSize = fitMonoSize(dateLine, baseDateSize, width);
+  const dateBaseline = y + height - 6;
+  const footerBaseline = dateBaseline - dateSize - 6;
+  const maxTitleBottom = footerBaseline - 8;
 
+  let titleSize = Math.round(polaroidWidth * 0.05);
+  let titleLineHeight = Math.round(titleSize * 1.18);
+  let titleLines = wrapTextNoEllipsis(`"${subjectLabel}"`, Math.max(8, Math.floor(width / (titleSize * titleEmEstimate))));
+  while (
+    titleSize > 8 &&
+    (titleLines.length > 3 || y + titleSize + 4 + (titleLines.length - 1) * titleLineHeight > maxTitleBottom)
+  ) {
+    titleSize -= 1;
+    titleLineHeight = Math.round(titleSize * 1.18);
+    titleLines = wrapTextNoEllipsis(`"${subjectLabel}"`, Math.max(8, Math.floor(width / (titleSize * titleEmEstimate))));
+  }
+  if (titleLines.length > 3) {
+    titleLines = titleLines.slice(0, 3);
+  }
   const titleBaseline1 = y + titleSize + 4;
-  const lastTitleBaseline = titleBaseline1 + (titleLines.length - 1) * titleLineHeight;
-  const lowestDateBaseline = y + height - 6;
-  const lowestFooterBaseline = lowestDateBaseline - dateSize - 6;
-  const stackedFooterBaseline = lastTitleBaseline + Math.max(footerSize + 8, 16);
-  const footerBaseline = Math.min(stackedFooterBaseline, lowestFooterBaseline);
-  const dateBaseline = Math.min(footerBaseline + dateSize + 5, lowestDateBaseline);
+  const footerAvail = Math.max(0, width - accuracyLabel.length * footerSize * monoCharEm - 10);
+  const footerEstimatedWidth = footerSentence.length * footerSize * monoCharEm;
+  const dateEstimatedWidth = dateLine.length * dateSize * monoCharEm;
 
   return (
     <g clipPath={`url(#${clipId})`}>
@@ -1332,6 +1301,8 @@ function renderSvgCaption(args: {
           fontWeight={600}
           fontSize={titleSize}
           fill={palette.ink}
+          textLength={line.length * titleSize * titleEmEstimate > width ? width : undefined}
+          lengthAdjust={line.length * titleSize * titleEmEstimate > width ? 'spacingAndGlyphs' : undefined}
         >
           {line}
         </text>
@@ -1343,8 +1314,10 @@ function renderSvgCaption(args: {
         fontSize={footerSize}
         fill={palette.inkSoft}
         letterSpacing="0.4"
+        textLength={footerEstimatedWidth > footerAvail ? footerAvail : undefined}
+        lengthAdjust={footerEstimatedWidth > footerAvail ? 'spacingAndGlyphs' : undefined}
       >
-        {footerText}
+        {footerSentence}
       </text>
       <text
         x={x + width}
@@ -1365,8 +1338,10 @@ function renderSvgCaption(args: {
         fontSize={dateSize}
         fill={palette.inkMute}
         letterSpacing="0.5"
+        textLength={dateEstimatedWidth > width ? width : undefined}
+        lengthAdjust={dateEstimatedWidth > width ? 'spacingAndGlyphs' : undefined}
       >
-        {dateTruncated}
+        {dateLine}
       </text>
     </g>
   );
@@ -1575,13 +1550,13 @@ function buildPhoto(opts: {
   /**
    * ACTUAL crowd-consensus density curve (e.g. straight from
    * `useConsensus`). When provided, the back hill is drawn from
-   * this array verbatim, so a bimodal market consensus renders as
+   * this curve verbatim, so a bimodal market consensus renders as
    * an actual two-peak ridge instead of the single-Gaussian
    * approximation that ignored multi-modal shapes. Null/empty
    * falls back to the legacy `gaussian(x, consensusAtBet, ...)`
    * reconstruction.
    */
-  consensusCurve?: number[] | null;
+  consensusCurve?: PolaroidDensityCurve | null;
   /**
    * ACTUAL user-belief density curve (e.g. straight from
    * `evaluateDensityCurve(previewBelief, ...)`). When provided,
@@ -1590,7 +1565,7 @@ function buildPhoto(opts: {
    * silhouette is pixel-equivalent to the chart's "Trade Preview"
    * curve. Null/empty falls back to `densityAt`.
    */
-  userCurve?: number[] | null;
+  userCurve?: PolaroidDensityCurve | null;
 }): PhotoSpec {
   const range = opts.upperBound - opts.lowerBound;
   const rng = mulberry32(opts.seed);
@@ -1897,17 +1872,46 @@ function buildPhoto(opts: {
   // pass curves of any granularity straight from `useConsensus` /
   // `evaluateDensityCurve` without conforming to our internal sample
   // count.
-  const resampleCurve = (curve: number[]): number[] => {
+  const resampleCurve = (curve: PolaroidDensityCurve): number[] => {
     const out = new Array<number>(numSamples);
     if (curve.length === 0) return out.fill(0);
-    if (curve.length === 1) return out.fill(curve[0]);
+    const first = curve[0];
+    if (typeof first === 'number') {
+      const yValues = curve as number[];
+      if (yValues.length === 1) return out.fill(yValues[0]);
+      for (let i = 0; i < numSamples; i++) {
+        const t = i / (numSamples - 1);
+        const idx = t * (yValues.length - 1);
+        const lo = Math.floor(idx);
+        const hi = Math.min(yValues.length - 1, lo + 1);
+        const f = idx - lo;
+        out[i] = yValues[lo] * (1 - f) + yValues[hi] * f;
+      }
+      return out;
+    }
+
+    const points = (curve as Array<{ x: number; y: number }>)
+      .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y))
+      .slice()
+      .sort((a, b) => a.x - b.x);
+    if (points.length === 0) return out.fill(0);
+    if (points.length === 1) return out.fill(points[0].y);
+    let j = 0;
     for (let i = 0; i < numSamples; i++) {
       const t = i / (numSamples - 1);
-      const idx = t * (curve.length - 1);
-      const lo = Math.floor(idx);
-      const hi = Math.min(curve.length - 1, lo + 1);
-      const f = idx - lo;
-      out[i] = curve[lo] * (1 - f) + curve[hi] * f;
+      const x = opts.lowerBound + t * range;
+      while (j < points.length - 2 && points[j + 1].x < x) j++;
+      const left = points[j];
+      const right = points[Math.min(points.length - 1, j + 1)];
+      if (x <= left.x) {
+        out[i] = left.y;
+      } else if (x >= right.x) {
+        out[i] = right.y;
+      } else {
+        const span = Math.max(1e-9, right.x - left.x);
+        const f = (x - left.x) / span;
+        out[i] = left.y * (1 - f) + right.y * f;
+      }
     }
     return out;
   };
@@ -3015,6 +3019,30 @@ function wrapText(text: string, charsPerLine: number, maxLines: number): string[
     lines[lines.length - 1] = last.slice(0, Math.max(1, charsPerLine - 1)) + '…';
   }
   return lines;
+}
+
+function wrapTextNoEllipsis(text: string, charsPerLine: number): string[] {
+  const safeChars = Math.max(1, charsPerLine);
+  const words = text.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let line = '';
+  for (const word of words) {
+    const pieces: string[] = [];
+    for (let i = 0; i < word.length; i += safeChars) {
+      pieces.push(word.slice(i, i + safeChars));
+    }
+    for (const piece of pieces.length ? pieces : [word]) {
+      const next = line ? `${line} ${piece}` : piece;
+      if (next.length > safeChars && line) {
+        lines.push(line);
+        line = piece;
+      } else {
+        line = next;
+      }
+    }
+  }
+  if (line) lines.push(line);
+  return lines.length ? lines : [''];
 }
 
 function RarityStamp({

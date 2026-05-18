@@ -24,9 +24,9 @@ import { downloadPolaroidPng } from './downloadPolaroid';
  *
  * The intent: turn a receipt page into a one-tap share experience
  * without standing up an OG-image edge function. Social-crawler
- * preview cards are still served by the static `og-card.svg` baked
- * into `index.html`; this component is the FIRST-PARTY share flow
- * for the human author.
+ * preview cards are served by the static `og-card.png` linked from
+ * `index.html`; this component is the FIRST-PARTY share flow for the
+ * human author.
  *
  * Defensive design:
  *   - PNG generation runs in a try/catch; failures fall back gracefully
