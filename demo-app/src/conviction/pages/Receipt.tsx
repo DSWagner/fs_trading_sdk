@@ -199,6 +199,7 @@ function ReceiptView({
   // (Previous local `downloadState` removed; the ShareKit owns this state now.)
   const polaroidRef = useRef<HTMLDivElement | null>(null);
   const isMobile = useIsMobile();
+  const viewportWidth = useViewportWidth();
   const { user, isAuthenticated } = useAuth();
   // Curated Studio Pick galleries ship with synthetic market IDs that
   // are not real engine markets. Hitting the SDK with these IDs yields
@@ -361,10 +362,9 @@ function ReceiptView({
   //   480 / 720 size pushed the caption below the fold on every
   //   1024x768 / 1280x720 screen and looked like a cropped polaroid
   //   with "missing text" - the live receipts users kept reporting.
-  // Mobile: 280 wide / 420 tall. Fits inside iPhone SE (320 wide)
-  //   with 20 px slack on each side, and inside any phone viewport
-  //   in portrait without needing to pinch-zoom.
-  const polaroidWidth = isMobile ? 280 : 380;
+  // Mobile: use the safe viewport width so the receipt matches the downloaded
+  // artifact visually, while keeping a 280px floor for narrow phones.
+  const polaroidWidth = getReceiptPolaroidWidth(isMobile, viewportWidth);
   const isOwner = user?.username === merged.username;
   const isOpen = marketResolutionState !== 'resolved' && marketResolutionState !== 'voided';
   const showCashOutPanel = isOwner && isOpen && cashedOut == null;
@@ -936,6 +936,29 @@ function Stat({ k, v }: { k: string; v: string }) {
       <div style={{ fontSize: 13, color: palette.ink, fontWeight: 600 }}>{v}</div>
     </div>
   );
+}
+
+export function getReceiptPolaroidWidth(isMobile: boolean, viewportWidth: number | null): number {
+  if (!isMobile) return 380;
+  if (viewportWidth == null || viewportWidth <= 0) return 280;
+  return Math.max(280, Math.min(380, Math.floor(viewportWidth - 32)));
+}
+
+function useViewportWidth(): number | null {
+  const [width, setWidth] = useState<number | null>(() => {
+    if (typeof window === 'undefined') return null;
+    return window.innerWidth;
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onResize = () => setWidth(window.innerWidth);
+    onResize();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  return width;
 }
 
 const primaryButton: React.CSSProperties = {

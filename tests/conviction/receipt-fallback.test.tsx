@@ -68,7 +68,7 @@ vi.mock('@functionspace/react', () => ({
   useConsensus: (...args: any[]) => useConsensusMock(...args),
 }));
 
-import { ReceiptPage } from '../../demo-app/src/conviction/pages/Receipt';
+import { ReceiptPage, getReceiptPolaroidWidth } from '../../demo-app/src/conviction/pages/Receipt';
 import { recordBet } from '../../demo-app/src/conviction/storage';
 
 const localBet = {
@@ -692,5 +692,20 @@ describe('Receipt page: graceful market fallback', () => {
     // is the only handle reference allowed and it never starts with
     // "you".
     expect(svgText).not.toMatch(/you\s+·/);
+  });
+});
+
+describe('Receipt page: polaroid width selection', () => {
+  it('uses the full safe mobile viewport width instead of a tiny fixed card', () => {
+    expect(getReceiptPolaroidWidth(true, 390)).toBe(358);
+  });
+
+  it('keeps very narrow phones usable with a 280px minimum', () => {
+    expect(getReceiptPolaroidWidth(true, 300)).toBe(280);
+  });
+
+  it('caps wide mobile and desktop receipt polaroids at the editorial desktop size', () => {
+    expect(getReceiptPolaroidWidth(true, 820)).toBe(380);
+    expect(getReceiptPolaroidWidth(false, 390)).toBe(380);
   });
 });

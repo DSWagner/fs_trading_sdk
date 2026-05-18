@@ -8,7 +8,7 @@ Everything you need to submit Conviction to the [FunctionSpace Vibecoding Compet
 > | --- | --- |
 > | ✓ done | Public fork at https://github.com/DSWagner/fs_trading_sdk (parent: `functionspace/fs_trading_sdk`, default branch `main`, latest push 2026-05-15). |
 > | ✓ done | Vercel deploy live at https://conviction-receipts.vercel.app/ (production deploy rebuilt on Vercel, public SSO protection disabled, and the 1024px receipt polaroid regression verified in Chromium). |
-> | ✓ done | All 491 conviction tests pass + vite + docusaurus builds clean. |
+> | ✓ done | 489 deterministic conviction tests pass, 5 live smoke tests skipped + vite + docusaurus builds clean. |
 > | ☐ you | Follow [@functionspaceHQ on X](https://x.com/functionspaceHQ) — required for eligibility, the rule is checked manually before announcement. |
 > | ☐ you | Post about the build on X tagging `@functionSPACEHQ`. Suggested copy is in §1 below; attach a screenshot or short clip of the receipt developing. |
 > | ☐ you | Have your **Telegram handle** ready — the form requires it (winners are contacted via Telegram). |
@@ -171,9 +171,9 @@ The setup guide lists hard guardrails. Conviction satisfies all of them:
 
 ## 6. What the test suite proves
 
-Run from the repo root with `npx vitest run tests/conviction` (free, no money spent; the live tests hit the dev engine):
+Run from the repo root with `CONVICTION_SKIP_LIVE=1 npx vitest run tests/conviction` for deterministic local verification. The uns skipped live tests are free and hit the dev engine, but currently depend on a live market-list response that is missing `alpha_vector` for at least one item:
 
-- **491 Conviction-specific tests** across 37 files (60+ tests added in the late-evening 2026-05-13 work for the new replay sparkline, comparison pair, achievements engine + strip, ErrorBoundary, and unified ShareKit; 20 tests added 2026-05-14 midday for the `predictionLabel` prop on the Polaroid scale strip, the ComparisonPair crowd-polaroid render, the Profile section ordering, and the relocated Receipt share panel; **75 tests added 2026-05-14 afternoon for the four flagship features: streak halo math + render, Receipt-for-Receipt challenge plumbing + button visibility, calibration score + leaderboard aggregation, and the Ed25519 sign / verify / tamper-detect round-trip + verify-badge render**; 1 test added on 2026-05-18 for the desktop Receipt grid overflow that clipped the right-column polaroid; an early-Convex-Hull-Frontier widget plus its 14 tests were removed on 2026-05-17 after user feedback that the visualization did not communicate clearly enough to keep):
+- **494 Conviction-specific tests** across 37 files (60+ tests added in the late-evening 2026-05-13 work for the new replay sparkline, comparison pair, achievements engine + strip, ErrorBoundary, and unified ShareKit; 20 tests added 2026-05-14 midday for the `predictionLabel` prop on the Polaroid scale strip, the ComparisonPair crowd-polaroid render, the Profile section ordering, and the relocated Receipt share panel; **75 tests added 2026-05-14 afternoon for the four flagship features: streak halo math + render, Receipt-for-Receipt challenge plumbing + button visibility, calibration score + leaderboard aggregation, and the Ed25519 sign / verify / tamper-detect round-trip + verify-badge render**; 4 tests added on 2026-05-18 for the desktop Receipt grid overflow and mobile receipt width regressions; an early-Convex-Hull-Frontier widget plus its 14 tests were removed on 2026-05-17 after user feedback that the visualization did not communicate clearly enough to keep):
   - `hash.test.ts` (21 tests): URL-hash codec round-trip with empty / 4 KB / unicode / emoji / CJK / control chars; URL-safe alphabet; graceful failure; window-hash hydration.
   - `storage.test.ts` (19 tests): localStorage ledger record/read/replace, newest-first ordering, getBetsByUser filter, corrupt-store tolerance, username persistence.
   - `cashout-storage.test.ts` (9 tests): cash-out record persistence; round-trip, replace-existing, numeric/string id parity, corrupt-store tolerance, clearCashOuts wipe.
@@ -249,4 +249,4 @@ If anything in those files reads as wrong or off-message, fix before you push to
 
 ---
 
-*Last updated: 2026-05-18: desktop receipt polaroid fix. The Receipt page now reserves a fixed desktop polaroid column so long left-column content cannot push the SVG artifact off-screen. The Conviction suite is **491 tests across 37 files**, with a new regression for that grid contract.*
+*Last updated: 2026-05-18: receipt polaroid sizing fixes. The Receipt page now reserves a fixed desktop polaroid column and uses the safe viewport width on mobile instead of shrinking receipts to 280px. The Conviction suite is **494 tests across 37 files**; `CONVICTION_SKIP_LIVE=1` gives 489 passing deterministic tests and 5 skipped live smoke tests, with regressions for both sizing contracts.*
