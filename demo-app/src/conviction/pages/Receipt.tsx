@@ -431,134 +431,123 @@ function ReceiptView({
     </div>
   );
 
-  // The wrapper is pinned to the EXACT pixel rectangle the SVG
-  // renders at (`polaroidWidth` x `polaroidWidth * 1.5`). Why fixed
-  // pixels instead of `aspectRatio` or `max-width: 100%`:
+  // Polaroid wrapper -- a BLOCK-LEVEL div, NOT a flex item.
   //
-  //   v1 (FAILED): wrapper width: 480, height: 720 + SVG
-  //     `width: 100%; height: 100%` + global CSS `aspect-ratio: 2/3`
-  //     on the SVG. Grid cell at 1024 px viewport capped wrapper to
-  //     460 wide, but height stayed pinned at 720, leaving a 30 px
-  //     empty strip at the bottom.
-  //   v2 (FAILED): wrapper minimal (just `position: relative` +
-  //     `flexShrink: 0`), SVG dictates own size via attributes.
-  //     Looked right at 175% zoom (mobile layout) but at 100% zoom
-  //     on desktop, Chrome's flex layout under-resolved the SVG's
-  //     `height: auto` against the centered flex parent; the
-  //     `preserveAspectRatio="xMidYMid meet"` SVG then squashed the
-  //     photo (rendered wider than tall) and clipped the footer/date.
-  //   v3 (FAILED): wrapper width: polaroidWidth, maxWidth: '100%',
-  //     aspectRatio: '2 / 3' + receipt-scoped CSS forcing SVG to
-  //     `width: 100%; height: 100%`. Either the flex layout never
-  //     honoured the wrapper's aspect-ratio for the intrinsic main-
-  //     axis size, or the `max-width: 100%` interacted with the
-  //     aspect ratio to collapse the wrapper's height to roughly
-  //     the photo height -- the matte rect rendered correctly at
-  //     viewBox 0 0 380 570, but the SVG element on screen was
-  //     ~380 x ~420 px, so the rendered title + footer + date all
-  //     fell BELOW the SVG's pixel bottom and were invisible.
+  // Every previous attempt put the polaroid inside a
+  // `display: flex; align-items: center` parent so the polaroid +
+  // share kit + share block + cross-link could share one tidy
+  // centered column. That centered-flex parent is exactly what
+  // kept squashing the SVG: regardless of whether the wrapper used
+  // `flex-shrink: 0`, `aspect-ratio: 2/3`, hard-pinned pixel
+  // width+height, or a receipt-scoped CSS rule forcing the SVG to
+  // `width: 100%; height: 100%`, Chrome's flex layout would
+  // ultimately resolve the wrapper's main-axis (vertical) size to
+  // roughly the photo height (~420 px) -- not the 570 px the
+  // matte+caption needs -- and `preserveAspectRatio="xMidYMid meet"`
+  // would then either squash the photo into a rectangle or letter-
+  // box the content into the upper-left of the SVG, leaving the
+  // title + footer + date sitting BELOW the visible matte.
   //
-  //   v4 (CURRENT): pin BOTH dimensions in pixels. Wrapper is
-  //     exactly polaroidWidth x round(polaroidWidth * 1.5) px. The
-  //     SVG's intrinsic width/height attributes already declare the
-  //     same numbers, so wrapper and SVG match BYTE-FOR-BYTE with
-  //     no CSS arithmetic involved. The receipt-scoped CSS rule in
-  //     index.css just guarantees the SVG fills its wrapper exactly
-  //     (no CSS quirk can shrink it).
+  // Every OTHER polaroid in the app that renders correctly
+  // (Profile.tsx BetTile, Embed.tsx, Explore.tsx, LivePortfolio
+  // preview) uses the SAME minimal pattern: a single block-level
+  // wrapper element (`<a style="display: block">` or `<Link
+  // style="display: block">`) containing the polaroid SVG, with NO
+  // flex layout above it. The SVG's `width=` / `height=` HTML
+  // attributes drive its intrinsic pixel size, the global
+  // responsive CSS rule (`max-width: 100%; height: auto`) lets it
+  // shrink in narrow parents, and the matte+caption always fit
+  // inside their viewBox.
   //
-  //     This is safe at every viewport the receipt page targets:
-  //       - Desktop >= 900 px: isMobile=false, polaroidWidth=380,
-  //         wrapper=380x570. The 1fr grid cell at 900 px viewport
-  //         is (900 - 48 - 56) / 2 = 398 px, so the 380 px wrapper
-  //         fits with 18 px of slack. At wider viewports the slack
-  //         grows; the wrapper never overflows the cell.
-  //       - Mobile < 900 px: isMobile=true, polaroidWidth=280,
-  //         wrapper=280x420. The single-column layout has the full
-  //         viewport width minus 48 px padding available; 280 px
-  //         fits in every phone viewport (iPhone SE = 320 px wide).
-  //
-  //     No max-width, no aspect-ratio, no `height: auto`, no flex
-  //     intrinsic-size computation. Just numbers.
-  const polaroidHeight = Math.round(polaroidWidth * 1.5);
-  const polaroidNode = (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, width: '100%' }}>
-      <div
-        ref={polaroidRef}
-        style={{
-          position: 'relative',
-          width: polaroidWidth,
-          height: polaroidHeight,
-          flexShrink: 0,
-        }}
-        data-testid="receipt-polaroid-frame"
-      >
-        <Polaroid
-          marketId={merged.marketId}
-          positionId={merged.positionId}
-          marketTitle={merged.marketTitle ?? ''}
-          marketUnits={merged.marketUnits}
-          username={merged.username}
-          reasoning={merged.reasoning}
-          createdAt={merged.createdAt}
-          prediction={merged.prediction}
-          spread={merged.spread}
-          secondPeak={merged.shape === 'bimodal' ? merged.secondPeak ?? null : null}
-          conviction={merged.conviction}
-          collateral={merged.collateral}
-          shape={merged.shape}
-          lowerBound={merged.lowerBound ?? 0}
-          upperBound={merged.upperBound ?? 1}
-          resolutionState={marketResolutionState}
-          resolvedOutcome={resolvedOutcome}
-          width={polaroidWidth}
-          animateDevelop
-          consensusAtBet={merged.consensusAtBet ?? null}
-          expiresAt={(merged as any).expiresAt ?? null}
-          // Hand the literal market-consensus density curve to the
-          // polaroid so its back hill draws the EXACT shape of the
-          // chart's orange "Market Consensus" curve -- bimodal /
-          // multimodal markets render as actual multi-peak ridges
-          // instead of being collapsed to a single Gaussian
-          // approximation. Falls back to the legacy single-Gaussian
-          // back hill (centred on `consensusAtBet`) when the live
-          // curve is unavailable -- demo bets, archived markets,
-          // engine errors all gracefully degrade.
-          consensusCurve={consensusCurveY}
-          // Scale-strip viewer perspective: only call the author "you" if
-          // the signed-in viewer IS the author. When somebody else's
-          // receipt opens (visiting their archive, a shared link, an
-          // embed), the strip prints "@theirhandle" instead so the
-          // polaroid never falsely claims the conviction is yours.
-          predictionLabel={isOwner ? 'you' : `@${merged.username}`}
-        />
-        {showCashedStamp && cashedOut && (
-          <CashedOutStamp
-            polaroidWidth={polaroidWidth}
-            realizedPnl={cashedOut.realizedPnl}
-            animateLanding={landingPending}
-          />
-        )}
-      </div>
-      {/* Unified share kit. Wraps Web Share API (file-bearing on
-          mobile / modern Chromium), Twitter intent fallback on
-          desktop, a copy-link button, and the existing 2x DPR
-          PNG download — all behind one editorial pill row. The
-          previous standalone "Download as PNG" button is now the
-          third action in this kit, so the receipt page no longer
-          has TWO separate share affordances. */}
-      <ShareKit
-        polaroidRef={polaroidRef}
-        shareUrl={typeof window !== 'undefined' ? window.location.href : ''}
+  // Match the working pattern here: the polaroid sits inside a
+  // simple block wrapper (no flex), and the rest of the column
+  // (share kit, share block, cross-link) lives in a SEPARATE flex
+  // column rendered as a sibling BELOW the polaroid wrapper. The
+  // polaroid never participates in flex layout.
+  const polaroidFrame = (
+    <div
+      ref={polaroidRef}
+      data-testid="receipt-polaroid-frame"
+      style={{
+        position: 'relative',
+        display: 'block',
+        width: polaroidWidth,
+        margin: '0 auto',
+      }}
+    >
+      <Polaroid
+        marketId={merged.marketId}
+        positionId={merged.positionId}
+        marketTitle={merged.marketTitle ?? ''}
+        marketUnits={merged.marketUnits}
         username={merged.username}
-        marketTitle={merged.marketTitle ?? 'a market'}
+        reasoning={merged.reasoning}
+        createdAt={merged.createdAt}
+        prediction={merged.prediction}
+        spread={merged.spread}
+        secondPeak={merged.shape === 'bimodal' ? merged.secondPeak ?? null : null}
+        conviction={merged.conviction}
+        collateral={merged.collateral}
+        shape={merged.shape}
+        lowerBound={merged.lowerBound ?? 0}
+        upperBound={merged.upperBound ?? 1}
+        resolutionState={marketResolutionState}
+        resolvedOutcome={resolvedOutcome}
+        width={polaroidWidth}
+        animateDevelop
+        consensusAtBet={merged.consensusAtBet ?? null}
+        expiresAt={(merged as any).expiresAt ?? null}
+        // Hand the literal market-consensus density curve to the
+        // polaroid so its back hill draws the EXACT shape of the
+        // chart's orange "Market Consensus" curve -- bimodal /
+        // multimodal markets render as actual multi-peak ridges
+        // instead of being collapsed to a single Gaussian
+        // approximation. Falls back to the legacy single-Gaussian
+        // back hill (centred on `consensusAtBet`) when the live
+        // curve is unavailable -- demo bets, archived markets,
+        // engine errors all gracefully degrade.
+        consensusCurve={consensusCurveY}
+        // Scale-strip viewer perspective: only call the author "you" if
+        // the signed-in viewer IS the author. When somebody else's
+        // receipt opens (visiting their archive, a shared link, an
+        // embed), the strip prints "@theirhandle" instead so the
+        // polaroid never falsely claims the conviction is yours.
+        predictionLabel={isOwner ? 'you' : `@${merged.username}`}
       />
-      {shareBlockNode}
-      <Link
-        to={`/u/${encodeURIComponent(merged.username)}`}
-        style={{ fontFamily: fonts.body, fontSize: 13, color: palette.inkMute, textDecoration: 'none', marginTop: 4 }}
-      >
-        See @{merged.username}'s other convictions →
-      </Link>
+      {showCashedStamp && cashedOut && (
+        <CashedOutStamp
+          polaroidWidth={polaroidWidth}
+          realizedPnl={cashedOut.realizedPnl}
+          animateLanding={landingPending}
+        />
+      )}
+    </div>
+  );
+  const polaroidNode = (
+    <div>
+      {polaroidFrame}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, marginTop: 16 }}>
+        {/* Unified share kit. Wraps Web Share API (file-bearing on
+            mobile / modern Chromium), Twitter intent fallback on
+            desktop, a copy-link button, and the existing 2x DPR
+            PNG download — all behind one editorial pill row. The
+            previous standalone "Download as PNG" button is now the
+            third action in this kit, so the receipt page no longer
+            has TWO separate share affordances. */}
+        <ShareKit
+          polaroidRef={polaroidRef}
+          shareUrl={typeof window !== 'undefined' ? window.location.href : ''}
+          username={merged.username}
+          marketTitle={merged.marketTitle ?? 'a market'}
+        />
+        {shareBlockNode}
+        <Link
+          to={`/u/${encodeURIComponent(merged.username)}`}
+          style={{ fontFamily: fonts.body, fontSize: 13, color: palette.inkMute, textDecoration: 'none', marginTop: 4 }}
+        >
+          See @{merged.username}'s other convictions →
+        </Link>
+      </div>
     </div>
   );
 

@@ -264,60 +264,58 @@ describe('Receipt page: graceful market fallback', () => {
   });
 
   // ────────────────────────────────────────────────────────────────────
-  // POLAROID FRAME GEOMETRY -- pins the wrapper / SVG sizing contract.
+  // POLAROID FRAME GEOMETRY -- the wrapper matches the Profile.tsx
+  // / Embed.tsx pattern: a SIMPLE BLOCK-LEVEL div, NOT a flex item.
   //
-  // Design history & current contract:
+  // History: every attempt that put the polaroid inside a
+  // `display: flex; align-items: center` parent (so it could share
+  // a centered column with ShareKit, the share block, and the
+  // cross-link) ended up squashing the SVG. Whether the wrapper
+  // used aspect-ratio, hard-pinned pixels, or a receipt-scoped CSS
+  // override forcing the SVG to fill its parent, Chrome's flex
+  // layout kept under-resolving the wrapper's vertical size to
+  // roughly the photo height (~420 px) instead of the 570 px the
+  // matte + caption needs. preserveAspectRatio="xMidYMid meet"
+  // then either squashed the photo into a rectangle or letter-
+  // boxed the content into the upper-left of the SVG, and the
+  // title + footer + date ended up rendered BELOW the visible
+  // matte.
   //
-  //   v1 (FAILED): wrapper pinned to `width: 480, height: 720` with
-  //     SVG sized via `width: 100%; height: 100%`. The 1024 px-wide
-  //     desktop viewport capped the wrapper's WIDTH to ~460 px (grid
-  //     cell width) but left the wrapper's HEIGHT at 720 px, so the
-  //     SVG (preserving 2:3 via aspect-ratio) rendered 460 x 690
-  //     and left a 30 px strip of empty matte at the bottom.
+  // The final fix is to STOP putting the polaroid inside any flex
+  // layout at all. The receipt-page polaroid now sits inside the
+  // exact same wrapper shape every working polaroid in the app
+  // uses (Profile.tsx BetTile, Embed.tsx, Explore.tsx,
+  // LivePortfolio preview): a single block-level wrapper with an
+  // explicit width and no flex above it. The SVG's HTML width / 
+  // height attributes drive its intrinsic pixel size; the global
+  // responsive CSS rule (`svg[role="img"][aria-label^="Polaroid
+  // receipt"] { max-width: 100%; height: auto; }`) handles
+  // graceful shrinking inside narrow parents. The share kit, share
+  // block, and cross-link live in a SEPARATE flex column below the
+  // polaroid wrapper, so the polaroid never participates in any
+  // flex layout.
   //
-  //   v2 (FAILED): wrapper minimal -- only `position: relative` +
-  //     `flexShrink: 0`. Looked right at 175% zoom (where the page
-  //     falls into mobile layout) but at 100% desktop zoom Chrome's
-  //     flex layout under-resolved the SVG's `height: auto`; the
-  //     photo rendered wider than tall and the footer+date got
-  //     clipped.
-  //
-  //   v3 (FAILED): wrapper `width: polaroidWidth`, `maxWidth: 100%`,
-  //     `aspectRatio: 2 / 3` + receipt-scoped CSS forcing SVG to
-  //     `width:100%; height:100%`. Either the flex column never
-  //     honoured the aspect-ratio for the wrapper's intrinsic main
-  //     axis size, or the `max-width: 100%` interacted with the
-  //     aspect ratio to collapse the wrapper's height to roughly
-  //     the photo height -- the matte rect rendered at viewBox
-  //     0 0 380 570 but the SVG element on screen was ~380x420 px,
-  //     so the title + footer + date fell BELOW the visible SVG.
-  //
-  //   v4 (CURRENT): wrapper is HARD-PINNED to the SVG's exact
-  //     pixel rectangle (polaroidWidth x polaroidWidth*1.5). The
-  //     SVG's own `width=` / `height=` HTML attributes already
-  //     declare the same numbers, so wrapper and SVG match
-  //     byte-for-byte with no CSS arithmetic involved.
-  //     * `position: relative` -- still the absolute-overlay anchor
-  //       for the CashedOutStamp and ShareKit PNG export ref.
-  //     * `width: polaroidWidth` -- a fixed pixel width.
-  //     * `height: round(polaroidWidth * 1.5)` -- a fixed pixel
-  //       height. No `aspectRatio`, no `max-width: 100%`, no CSS
-  //       arithmetic that could under-resolve.
-  //     * `flexShrink: 0` -- prevents the flex parent from
-  //       attempting to shrink the wrapper on cross-axis pressure.
-  //     * still NO `overflow: hidden` -- the wrapper never clips
-  //       the SVG. The receipt-scoped CSS rule in index.css forces
-  //       the SVG to fill the wrapper at 100% x 100% (which equals
-  //       polaroidWidth x polaroidWidth*1.5 thanks to the pinned
-  //       wrapper).
-  //
-  //     Safe at every receipt-page viewport: desktop >=900 px gives
-  //     each 1fr grid cell ~398 px, polaroidWidth=380 fits with
-  //     ~18 px of slack. Mobile <900 px uses single-column layout
-  //     with polaroidWidth=280, which fits in every phone viewport.
+  // Current wrapper contract (pinned by the test below):
+  //   * `position: relative` -- absolute-overlay anchor for the
+  //     CashedOutStamp + ShareKit PNG export ref.
+  //   * `display: block` -- explicit block-level, so the wrapper
+  //     never gets pulled into a flex/grid context's sizing logic.
+  //   * `width: polaroidWidth` -- explicit pixel width matching the
+  //     polaroid's intrinsic SVG width attribute.
+  //   * `margin: 0 auto` -- centers the wrapper horizontally in
+  //     whatever container it lands in (the right grid cell on
+  //     desktop, the page main column on mobile).
+  //   * no `height` -- the SVG's intrinsic height (`width * 1.5`)
+  //     drives the wrapper's height via the standard responsive
+  //     `height: auto` behaviour. No CSS arithmetic, no flex
+  //     intrinsic-size pass.
+  //   * no `overflow: hidden` -- the wrapper never clips the SVG.
+  //   * no `flex-shrink`, `aspect-ratio`, `max-width` --
+  //     intentionally minimal, matching the working pattern used
+  //     everywhere else in the app.
   // ────────────────────────────────────────────────────────────────────
 
-  it('the polaroid frame wrapper is HARD-PINNED to the SVG\'s exact pixel rectangle so frame and content always match', () => {
+  it('the polaroid frame wrapper is a block-level div matching the Profile / Embed working pattern (NOT a flex item)', () => {
     useMarketMock.mockReturnValue({
       market: null,
       loading: false,
@@ -332,27 +330,54 @@ describe('Receipt page: graceful market fallback', () => {
     ) as HTMLElement | null;
     expect(frame).not.toBeNull();
     const style = (frame as HTMLElement).style;
-    // Still a relative-positioned anchor for the CashedOutStamp
-    // overlay and the polaroidRef PNG export.
+    // Anchor for the CashedOutStamp overlay and the polaroidRef
+    // PNG export ref.
     expect(style.position).toBe('relative');
-    // Explicitly no clipping. Previous incarnations had `overflow:
-    // hidden`, which silently amputated edges.
-    expect(style.overflow).not.toBe('hidden');
-    // Pinned pixel WIDTH equal to the polaroid SVG's intrinsic
-    // width attribute (380 desktop because jsdom matchMedia returns
-    // false so isMobile is false).
+    // Block-level wrapper, NOT a flex/grid item. This is the load-
+    // bearing property: it stops Chrome from running flex
+    // intrinsic-size resolution on the SVG inside.
+    expect(style.display).toBe('block');
+    // Explicit pixel width that matches the polaroid SVG's
+    // intrinsic width attribute (380 px on desktop because jsdom
+    // matchMedia returns false so isMobile is false).
     expect(style.width).toBe('380px');
-    // Pinned pixel HEIGHT equal to round(width * 1.5) = 570 px,
-    // the polaroid SVG's intrinsic height attribute.
-    expect(style.height).toBe('570px');
-    // No max-width that could interact with the flex column to
-    // collapse the wrapper. No aspect-ratio (height is pinned
-    // directly, not derived).
+    // No explicit height -- the SVG's intrinsic 2:3 ratio
+    // (`height = width * 1.5`) drives the wrapper height via the
+    // standard responsive `height: auto` behaviour on the SVG.
+    expect(style.height).toBe('');
+    // Centered horizontally in whatever container it lands in.
+    expect(style.margin).toBe('0px auto');
+    // No clipping, no aspect-ratio, no max-width, no flex-shrink.
+    // The wrapper is minimal.
+    expect(style.overflow).not.toBe('hidden');
     expect(style.maxWidth).toBe('');
     expect(style.aspectRatio).toBe('');
-    // No box-sizing override that could interact with future
-    // padding / borders to shrink the visible rectangle.
+    expect(style.flexShrink).toBe('');
     expect(style.boxSizing).toBe('');
+  });
+
+  it('the polaroid frame wrapper is NOT wrapped in a flex column with the share kit (avoids the flex-squash bug)', () => {
+    useMarketMock.mockReturnValue({
+      market: null,
+      loading: false,
+      isFetching: false,
+      error: null,
+      refetch: () => {},
+    });
+    recordBet(localBet);
+    const { container } = renderReceipt('archived-market', 'pos-1');
+    const frame = container.querySelector(
+      '[data-testid="receipt-polaroid-frame"]',
+    ) as HTMLElement | null;
+    expect(frame).not.toBeNull();
+    // The IMMEDIATE parent of the polaroid wrapper must NOT have
+    // `display: flex` -- that is the layout that kept squashing
+    // the SVG. The polaroid sits in a plain block container; the
+    // ShareKit + share block + cross-link sit in their OWN flex
+    // column rendered as a SIBLING below the polaroid wrapper.
+    const parent = frame!.parentElement as HTMLElement | null;
+    expect(parent).not.toBeNull();
+    expect(parent!.style.display).not.toBe('flex');
   });
 
   // ════════════════════════════════════════════════════════════════════
