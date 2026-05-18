@@ -273,44 +273,51 @@ describe('Receipt page: graceful market fallback', () => {
   //     desktop viewport capped the wrapper's WIDTH to ~460 px (grid
   //     cell width) but left the wrapper's HEIGHT at 720 px, so the
   //     SVG (preserving 2:3 via aspect-ratio) rendered 460 x 690
-  //     and left a 30 px strip of empty matte at the bottom of the
-  //     wrapper -- the original "polaroid is cut off" bug.
+  //     and left a 30 px strip of empty matte at the bottom.
   //
-  //   v2 (FAILED): wrapper minimal -- ONLY `position: relative` +
-  //     `flexShrink: 0`. The SVG's HTML width / height attributes
-  //     drove the wrapper's intrinsic size via shrink-to-fit. This
-  //     looked right at 175% zoom (where the page falls into mobile
-  //     layout and the polaroid sits in a single-column flow) but
-  //     broke at 100% desktop zoom: inside a `display: flex;
-  //     align-items: center` parent with no definite cross-axis
-  //     size, Chrome resolves the SVG's `height: auto` (from the
-  //     global responsive rule) against an UNDER-counted parent
-  //     height, the photo renders wider than tall, and the matte
-  //     truncates BEFORE the footer + date strip.
+  //   v2 (FAILED): wrapper minimal -- only `position: relative` +
+  //     `flexShrink: 0`. Looked right at 175% zoom (where the page
+  //     falls into mobile layout) but at 100% desktop zoom Chrome's
+  //     flex layout under-resolved the SVG's `height: auto`; the
+  //     photo rendered wider than tall and the footer+date got
+  //     clipped.
   //
-  //   v3 (CURRENT): wrapper owns a DEFINITE 2:3 box.
+  //   v3 (FAILED): wrapper `width: polaroidWidth`, `maxWidth: 100%`,
+  //     `aspectRatio: 2 / 3` + receipt-scoped CSS forcing SVG to
+  //     `width:100%; height:100%`. Either the flex column never
+  //     honoured the aspect-ratio for the wrapper's intrinsic main
+  //     axis size, or the `max-width: 100%` interacted with the
+  //     aspect ratio to collapse the wrapper's height to roughly
+  //     the photo height -- the matte rect rendered at viewBox
+  //     0 0 380 570 but the SVG element on screen was ~380x420 px,
+  //     so the title + footer + date fell BELOW the visible SVG.
+  //
+  //   v4 (CURRENT): wrapper is HARD-PINNED to the SVG's exact
+  //     pixel rectangle (polaroidWidth x polaroidWidth*1.5). The
+  //     SVG's own `width=` / `height=` HTML attributes already
+  //     declare the same numbers, so wrapper and SVG match
+  //     byte-for-byte with no CSS arithmetic involved.
   //     * `position: relative` -- still the absolute-overlay anchor
   //       for the CashedOutStamp and ShareKit PNG export ref.
-  //     * `width: polaroidWidth` -- a concrete cross-axis size the
-  //       flex parent can compute against, breaking the SVG /
-  //       wrapper circular sizing.
-  //     * `maxWidth: '100%'` -- the wrapper still shrinks gracefully
-  //       when the grid cell is narrower than polaroidWidth (no
-  //       horizontal overflow on phones / zoomed viewports).
-  //     * `aspectRatio: '2 / 3'` -- the wrapper carries the 2:3
-  //       portrait ratio itself, so its height is always exactly
-  //       1.5x its width. Even if the SVG's `height: auto` were
-  //       ever to misresolve, the wrapper box is the right shape
-  //       and the SVG (forced to width:100%; height:100% via the
-  //       receipt-scoped CSS rule in index.css, with
-  //       preserveAspectRatio="xMidYMid meet") renders its content
-  //       at the correct shape inside.
-  //     * still NO `overflow: hidden` -- the wrapper never clips the
-  //       SVG, the SVG never overflows the wrapper. The matte and
-  //       caption are guaranteed to be visible at every viewport.
+  //     * `width: polaroidWidth` -- a fixed pixel width.
+  //     * `height: round(polaroidWidth * 1.5)` -- a fixed pixel
+  //       height. No `aspectRatio`, no `max-width: 100%`, no CSS
+  //       arithmetic that could under-resolve.
+  //     * `flexShrink: 0` -- prevents the flex parent from
+  //       attempting to shrink the wrapper on cross-axis pressure.
+  //     * still NO `overflow: hidden` -- the wrapper never clips
+  //       the SVG. The receipt-scoped CSS rule in index.css forces
+  //       the SVG to fill the wrapper at 100% x 100% (which equals
+  //       polaroidWidth x polaroidWidth*1.5 thanks to the pinned
+  //       wrapper).
+  //
+  //     Safe at every receipt-page viewport: desktop >=900 px gives
+  //     each 1fr grid cell ~398 px, polaroidWidth=380 fits with
+  //     ~18 px of slack. Mobile <900 px uses single-column layout
+  //     with polaroidWidth=280, which fits in every phone viewport.
   // ────────────────────────────────────────────────────────────────────
 
-  it('the polaroid frame wrapper carries an explicit width + 2:3 aspect-ratio so the SVG cannot squash vertically', () => {
+  it('the polaroid frame wrapper is HARD-PINNED to the SVG\'s exact pixel rectangle so frame and content always match', () => {
     useMarketMock.mockReturnValue({
       market: null,
       loading: false,
@@ -325,27 +332,25 @@ describe('Receipt page: graceful market fallback', () => {
     ) as HTMLElement | null;
     expect(frame).not.toBeNull();
     const style = (frame as HTMLElement).style;
-    // The wrapper is still a relative-positioned anchor for the
-    // CashedOutStamp overlay and the polaroidRef PNG export.
+    // Still a relative-positioned anchor for the CashedOutStamp
+    // overlay and the polaroidRef PNG export.
     expect(style.position).toBe('relative');
-    // EXPLICITLY no clipping. Previous incarnations had `overflow:
-    // hidden`, which silently amputated the polaroid's right and
-    // bottom edges any time the wrapper's computed pixel rectangle
-    // drifted from the SVG's intrinsic size by even one frame.
+    // Explicitly no clipping. Previous incarnations had `overflow:
+    // hidden`, which silently amputated edges.
     expect(style.overflow).not.toBe('hidden');
-    // The wrapper now owns a DEFINITE width -- this is what gives
-    // the SVG inside a stable box to size against, instead of
-    // chasing the SVG's intrinsic width through a flex circular
-    // dependency that under-resolves on desktop Chrome.
+    // Pinned pixel WIDTH equal to the polaroid SVG's intrinsic
+    // width attribute (380 desktop because jsdom matchMedia returns
+    // false so isMobile is false).
     expect(style.width).toBe('380px');
-    // ...but the wrapper still shrinks gracefully when the grid
-    // cell is narrower than the polaroid's natural width.
-    expect(style.maxWidth).toBe('100%');
-    // The wrapper carries the 2:3 portrait ratio itself, so its
-    // height is always exactly 1.5x its width. This is the hard
-    // floor that survives any SVG `height: auto` misresolution.
-    expect(style.aspectRatio).toBe('2 / 3');
-    // Still no box-sizing override that could interact with future
+    // Pinned pixel HEIGHT equal to round(width * 1.5) = 570 px,
+    // the polaroid SVG's intrinsic height attribute.
+    expect(style.height).toBe('570px');
+    // No max-width that could interact with the flex column to
+    // collapse the wrapper. No aspect-ratio (height is pinned
+    // directly, not derived).
+    expect(style.maxWidth).toBe('');
+    expect(style.aspectRatio).toBe('');
+    // No box-sizing override that could interact with future
     // padding / borders to shrink the visible rectangle.
     expect(style.boxSizing).toBe('');
   });

@@ -431,36 +431,55 @@ function ReceiptView({
     </div>
   );
 
-  // The wrapper needs THREE properties for the SVG inside to render
-  // at the correct 2:3 portrait shape on every viewport:
+  // The wrapper is pinned to the EXACT pixel rectangle the SVG
+  // renders at (`polaroidWidth` x `polaroidWidth * 1.5`). Why fixed
+  // pixels instead of `aspectRatio` or `max-width: 100%`:
   //
-  //   1. `width: polaroidWidth` -- a DEFINITE cross-axis size so the
-  //      flex parent (`display: flex; align-items: center`) can
-  //      compute a stable width for the SVG to size against. Without
-  //      this the SVG's intrinsic width (from its `width` attribute)
-  //      and the wrapper's content-sized width chase each other in a
-  //      circular dependency, and Chrome's flex layout sometimes
-  //      lands on a SHORTER computed height than the viewBox aspect
-  //      ratio demands. The photo then renders wider than tall and
-  //      the bottom of the matte (footer + date lines) gets clipped
-  //      -- exactly the bug the user reported.
-  //   2. `maxWidth: '100%'` -- on viewports where the grid cell is
-  //      narrower than `polaroidWidth` (rare on desktop, the 1fr
-  //      cell at 1024 px is 460 px wide and polaroidWidth tops out
-  //      at 380), the wrapper shrinks to the cell and the SVG
-  //      shrinks with it via the global `max-width: 100%` rule.
-  //   3. `aspectRatio: '2 / 3'` -- a hard floor on the wrapper's
-  //      shape that survives ANY upstream layout glitch. Even if the
-  //      SVG's `height: auto` were ever to resolve wrong, the
-  //      wrapper itself would still hold a 2:3 box, and the SVG
-  //      (with `preserveAspectRatio="xMidYMid meet"`) would render
-  //      its full 380 x 570 content scaled to fit inside.
+  //   v1 (FAILED): wrapper width: 480, height: 720 + SVG
+  //     `width: 100%; height: 100%` + global CSS `aspect-ratio: 2/3`
+  //     on the SVG. Grid cell at 1024 px viewport capped wrapper to
+  //     460 wide, but height stayed pinned at 720, leaving a 30 px
+  //     empty strip at the bottom.
+  //   v2 (FAILED): wrapper minimal (just `position: relative` +
+  //     `flexShrink: 0`), SVG dictates own size via attributes.
+  //     Looked right at 175% zoom (mobile layout) but at 100% zoom
+  //     on desktop, Chrome's flex layout under-resolved the SVG's
+  //     `height: auto` against the centered flex parent; the
+  //     `preserveAspectRatio="xMidYMid meet"` SVG then squashed the
+  //     photo (rendered wider than tall) and clipped the footer/date.
+  //   v3 (FAILED): wrapper width: polaroidWidth, maxWidth: '100%',
+  //     aspectRatio: '2 / 3' + receipt-scoped CSS forcing SVG to
+  //     `width: 100%; height: 100%`. Either the flex layout never
+  //     honoured the wrapper's aspect-ratio for the intrinsic main-
+  //     axis size, or the `max-width: 100%` interacted with the
+  //     aspect ratio to collapse the wrapper's height to roughly
+  //     the photo height -- the matte rect rendered correctly at
+  //     viewBox 0 0 380 570, but the SVG element on screen was
+  //     ~380 x ~420 px, so the rendered title + footer + date all
+  //     fell BELOW the SVG's pixel bottom and were invisible.
   //
-  // The wrapper still has no fixed pixel height -- height tracks
-  // width via `aspectRatio`, so a narrower grid cell never leaves
-  // empty matte at the bottom (the previous-attempt failure mode
-  // described in the long comment block above).
-  const polaroidAspectRatio = '2 / 3';
+  //   v4 (CURRENT): pin BOTH dimensions in pixels. Wrapper is
+  //     exactly polaroidWidth x round(polaroidWidth * 1.5) px. The
+  //     SVG's intrinsic width/height attributes already declare the
+  //     same numbers, so wrapper and SVG match BYTE-FOR-BYTE with
+  //     no CSS arithmetic involved. The receipt-scoped CSS rule in
+  //     index.css just guarantees the SVG fills its wrapper exactly
+  //     (no CSS quirk can shrink it).
+  //
+  //     This is safe at every viewport the receipt page targets:
+  //       - Desktop >= 900 px: isMobile=false, polaroidWidth=380,
+  //         wrapper=380x570. The 1fr grid cell at 900 px viewport
+  //         is (900 - 48 - 56) / 2 = 398 px, so the 380 px wrapper
+  //         fits with 18 px of slack. At wider viewports the slack
+  //         grows; the wrapper never overflows the cell.
+  //       - Mobile < 900 px: isMobile=true, polaroidWidth=280,
+  //         wrapper=280x420. The single-column layout has the full
+  //         viewport width minus 48 px padding available; 280 px
+  //         fits in every phone viewport (iPhone SE = 320 px wide).
+  //
+  //     No max-width, no aspect-ratio, no `height: auto`, no flex
+  //     intrinsic-size computation. Just numbers.
+  const polaroidHeight = Math.round(polaroidWidth * 1.5);
   const polaroidNode = (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, width: '100%' }}>
       <div
@@ -468,8 +487,8 @@ function ReceiptView({
         style={{
           position: 'relative',
           width: polaroidWidth,
-          maxWidth: '100%',
-          aspectRatio: polaroidAspectRatio,
+          height: polaroidHeight,
+          flexShrink: 0,
         }}
         data-testid="receipt-polaroid-frame"
       >

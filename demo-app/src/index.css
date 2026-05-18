@@ -219,26 +219,39 @@ svg[role="img"][aria-label^="Polaroid receipt"] {
   height: auto;
 }
 
-/* Receipt-page polaroid wrapper: the wrapper itself owns a definite
- * 2:3 aspect-ratio box (see `polaroidNode` in Receipt.tsx), so the
- * SVG inside MUST fill the wrapper exactly -- otherwise Chrome's
- * flex layout can compute the SVG's `height: auto` to a SHORTER
- * value than the wrapper's actual height, the photo and matte
- * render squashed, and the footer + date lines get clipped below
- * the visible SVG box. Forcing `width: 100%; height: 100%` makes
- * the SVG fill the wrapper deterministically; the SVG's own
- * `preserveAspectRatio="xMidYMid meet"` (set on the element itself
- * in Polaroid.tsx) keeps its content's 2:3 ratio intact inside
- * whatever box the wrapper hands it.
+/* Receipt-page polaroid: the wrapper is HARD-PINNED in
+ * Receipt.tsx to the polaroid's exact pixel rectangle
+ * (`polaroidWidth` x `polaroidWidth * 1.5`), and the SVG itself
+ * carries the same numbers on its `width=` / `height=` HTML
+ * attributes. We need the SVG to render at THOSE intrinsic pixel
+ * attributes, not at the responsive `max-width: 100%; height: auto`
+ * that the global rule above applies to every other polaroid in
+ * the app.
+ *
+ * If we leave the global rule active, Chrome's flex layout
+ * collapses the SVG's `height: auto` to roughly the photo height
+ * (~420 px) inside the centered flex parent, the footer + date
+ * lines render BELOW the visible SVG bottom, and the user sees a
+ * polaroid that looks like the matte was cut off after the scale
+ * strip (the exact bug we are fixing here).
+ *
+ * Neutralising `max-width` and `height` on the SVG -- so it falls
+ * back to its own intrinsic numeric `width=` / `height=`
+ * attributes -- makes the SVG render at 380 x 570 px on desktop
+ * (or 280 x 420 px on mobile) regardless of flex context. The
+ * wrapper around it is the same size, so frame and content match
+ * exactly.
  *
  * Scope is intentionally tight: this only targets the receipt
  * page's polaroid (`data-testid="receipt-polaroid-frame"`). Every
- * other polaroid in the app (BetTile, Embed, Explore, LivePortfolio
- * preview, etc.) keeps the standard responsive `max-width: 100%;
- * height: auto` behaviour above. */
+ * other polaroid in the app (BetTile, Embed, Explore,
+ * LivePortfolio preview, etc.) keeps the standard responsive
+ * `max-width: 100%; height: auto` behaviour above so it shrinks
+ * gracefully inside narrow gallery thumbnails. */
 [data-testid="receipt-polaroid-frame"] > svg[role="img"][aria-label^="Polaroid receipt"] {
-  width: 100%;
-  height: 100%;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
 }
 
 a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible {
