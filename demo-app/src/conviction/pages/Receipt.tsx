@@ -611,9 +611,10 @@ function ReceiptView({
       )}
 
       <div
+        data-testid="receipt-layout-grid"
         style={{
           display: 'grid',
-          gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+          gridTemplateColumns: isMobile ? '1fr' : `minmax(0, 1fr) minmax(0, ${polaroidWidth}px)`,
           gap: isMobile ? 28 : 56,
           marginTop: isMobile ? 16 : 24,
           alignItems: 'start',

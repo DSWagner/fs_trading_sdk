@@ -19,3 +19,4 @@ packages/docs/.docusaurus/
 # artifacts the verifier scripts write while debugging and we don't
 # want them in the repo. The scripts themselves stay tracked.
 scripts/verify-conviction/snapshots/
+.vercel

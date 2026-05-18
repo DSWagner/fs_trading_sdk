@@ -6,7 +6,7 @@
 ## TL;DR for the next session
 
 1. Read `CLAUDE.md`, `internal_sdk_docs/CLAUDE.md`, and `internal_sdk_docs/PLAYBOOK.md` first.
-2. The active feature is **Conviction**, the receipts-first betting demo app in `demo-app/src/conviction/`. Live at `https://fs-trading-sdk-docs.vercel.app`. Repo `https://github.com/DSWagner/fs_trading_sdk` (branch `main`, Vercel auto-deploys on push).
+2. The active feature is **Conviction**, the receipts-first betting demo app in `demo-app/src/conviction/`. Live at `https://conviction-receipts.vercel.app`. Repo `https://github.com/DSWagner/fs_trading_sdk` (branch `main`, Vercel auto-deploys on push).
 3. All commits MUST be authored as **DSWagner** (see "Git rules" below). Local git config is currently set to "ADMIN David Wagner" which is WRONG. Override per-command with `git -c user.name="DSWagner" -c user.email="35304153+DSWagner@users.noreply.github.com" commit ...`.
 4. Latest verified state: the `/m/{id}` BetFlow page is a 50:50 grid with the form on the left and polaroid + chart stacked at identical dimensions on the right, both columns ending at the same vertical position. Rarity sky colors are grey/green/blue/purple/gold/orange. Reasoning quote sits in the lower portion of the photo.
 
@@ -350,7 +350,7 @@ Submissions can be updated until close (~18 May 2026) and the most recent submis
 ## Useful pointers
 
 - User's GitHub handle: `DSWagner` (personal). The competition fork lives at `https://github.com/DSWagner/fs_trading_sdk`. There's an older "submission" repo at `https://github.com/DSWagner/FS_SDK_Submission_1` but the active one is `fs_trading_sdk`.
-- Vercel project: `fs-trading-sdk-docs` (auto-deploys from `origin/main`). The competition prefers the demo-app build, not the docs build.
+- Vercel project: `fs_trading_sdk`, public alias `https://conviction-receipts.vercel.app` (production deploy rebuilt on 2026-05-18; SSO deployment protection disabled so judges can open it). The competition prefers the demo-app build, not the docs build.
 - Competition site: `https://ecosystem.functionspace.dev/competition`.
 - The `Polaroid` component is large (~1700 lines). Use the Grep / Read tools with specific line offsets; do NOT read it in one pass.
 

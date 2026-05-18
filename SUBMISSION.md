@@ -7,8 +7,8 @@ Everything you need to submit Conviction to the [FunctionSpace Vibecoding Compet
 > | Status | Item |
 > | --- | --- |
 > | ✓ done | Public fork at https://github.com/DSWagner/fs_trading_sdk (parent: `functionspace/fs_trading_sdk`, default branch `main`, latest push 2026-05-15). |
-> | ✓ done | Vercel deploy live at https://fs-trading-sdk-docs.vercel.app/ (renders the current `main` build). |
-> | ✓ done | All 476 conviction tests pass + vite + docusaurus builds clean. |
+> | ✓ done | Vercel deploy live at https://conviction-receipts.vercel.app/ (production deploy rebuilt on Vercel, public SSO protection disabled, and the 1024px receipt polaroid regression verified in Chromium). |
+> | ✓ done | All 491 conviction tests pass + vite + docusaurus builds clean. |
 > | ☐ you | Follow [@functionspaceHQ on X](https://x.com/functionspaceHQ) — required for eligibility, the rule is checked manually before announcement. |
 > | ☐ you | Post about the build on X tagging `@functionSPACEHQ`. Suggested copy is in §1 below; attach a screenshot or short clip of the receipt developing. |
 > | ☐ you | Have your **Telegram handle** ready — the form requires it (winners are contacted via Telegram). |
@@ -68,10 +68,10 @@ https://github.com/DSWagner/fs_trading_sdk
 ### Deployed URL
 
 ```
-https://fs-trading-sdk-docs.vercel.app/
+https://conviction-receipts.vercel.app/
 ```
 
-(One-click deploys: Vercel auto-detects `vercel.json`. Netlify auto-detects `netlify.toml`. Both already inject `VITE_FS_BASE_URL` at build time.)
+(One-click deploys: Vercel auto-detects `vercel.json`. Netlify auto-detects `netlify.toml`. Both already inject `VITE_FS_BASE_URL` at build time. The Vercel project now has the Conviction-branded alias above.)
 
 ### X post URL
 
@@ -85,7 +85,7 @@ Suggested tweet (≤280 chars):
 >
 > a publication tool that turns every prediction into a Polaroid receipt that "develops" when reality catches up. The reasoning rides in the share link.
 >
-> Live: https://fs-trading-sdk-docs.vercel.app/
+> Live: https://conviction-receipts.vercel.app/
 > Source: https://github.com/DSWagner/fs_trading_sdk
 > #vibecoding
 
@@ -173,7 +173,7 @@ The setup guide lists hard guardrails. Conviction satisfies all of them:
 
 Run from the repo root with `npx vitest run tests/conviction` (free, no money spent; the live tests hit the dev engine):
 
-- **476 Conviction-specific tests** across 37 files (60+ tests added in the late-evening 2026-05-13 work for the new replay sparkline, comparison pair, achievements engine + strip, ErrorBoundary, and unified ShareKit; 20 tests added 2026-05-14 midday for the `predictionLabel` prop on the Polaroid scale strip, the ComparisonPair crowd-polaroid render, the Profile section ordering, and the relocated Receipt share panel; **75 tests added 2026-05-14 afternoon for the four flagship features: streak halo math + render, Receipt-for-Receipt challenge plumbing + button visibility, calibration score + leaderboard aggregation, and the Ed25519 sign / verify / tamper-detect round-trip + verify-badge render**; an early-Convex-Hull-Frontier widget plus its 14 tests were removed on 2026-05-17 after user feedback that the visualization did not communicate clearly enough to keep):
+- **491 Conviction-specific tests** across 37 files (60+ tests added in the late-evening 2026-05-13 work for the new replay sparkline, comparison pair, achievements engine + strip, ErrorBoundary, and unified ShareKit; 20 tests added 2026-05-14 midday for the `predictionLabel` prop on the Polaroid scale strip, the ComparisonPair crowd-polaroid render, the Profile section ordering, and the relocated Receipt share panel; **75 tests added 2026-05-14 afternoon for the four flagship features: streak halo math + render, Receipt-for-Receipt challenge plumbing + button visibility, calibration score + leaderboard aggregation, and the Ed25519 sign / verify / tamper-detect round-trip + verify-badge render**; 1 test added on 2026-05-18 for the desktop Receipt grid overflow that clipped the right-column polaroid; an early-Convex-Hull-Frontier widget plus its 14 tests were removed on 2026-05-17 after user feedback that the visualization did not communicate clearly enough to keep):
   - `hash.test.ts` (21 tests): URL-hash codec round-trip with empty / 4 KB / unicode / emoji / CJK / control chars; URL-safe alphabet; graceful failure; window-hash hydration.
   - `storage.test.ts` (19 tests): localStorage ledger record/read/replace, newest-first ordering, getBetsByUser filter, corrupt-store tolerance, username persistence.
   - `cashout-storage.test.ts` (9 tests): cash-out record persistence; round-trip, replace-existing, numeric/string id parity, corrupt-store tolerance, clearCashOuts wipe.
@@ -249,4 +249,4 @@ If anything in those files reads as wrong or off-message, fix before you push to
 
 ---
 
-*Last updated: 2026-05-17: full-solution audit pass. The early Convex-Hull-Frontier widget that briefly lived on Discover was removed (user feedback: it did not communicate clearly to viewers, the empty / sparse states felt like a dead surface). Its component, its `convexHull.ts` math module, and its 14 dedicated tests were deleted at the same time. The remaining four 2026-05-14 flagships are still in place: **Conviction Streak Halo** (NavBar avatar ornament derived from local rarity ledger), **Receipt-for-Receipt Challenge** (Challenge this call button that mirrors the original prediction across consensus + quotes the original reasoning in BetFlow), **Live Calibration Leaderboard** at `/leaderboard` (ranks authors by `1 - mean(|conviction - accuracy|)` across local + demo gallery data), and **Receipt-as-NFT signing** (Ed25519 keypair in localStorage signs every receipt at bet time; the Receipt page shows a verified / tampered / invalid / unsigned / unsupported badge). The Conviction suite is **476 tests across 37 files**, all passing.*
+*Last updated: 2026-05-18: desktop receipt polaroid fix. The Receipt page now reserves a fixed desktop polaroid column so long left-column content cannot push the SVG artifact off-screen. The Conviction suite is **491 tests across 37 files**, with a new regression for that grid contract.*

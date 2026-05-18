@@ -392,6 +392,30 @@ describe('Receipt page: graceful market fallback', () => {
     expect(parent!.style.display).not.toBe('flex');
   });
 
+  it('the desktop receipt grid reserves a fixed polaroid column so text cannot push it off-screen', () => {
+    useMarketMock.mockReturnValue({
+      market: null,
+      loading: false,
+      isFetching: false,
+      error: null,
+      refetch: () => {},
+    });
+    recordBet({
+      ...localBet,
+      marketTitle: 'MrBeast YouTube Subscriber Count (Dec 31, 2026)',
+      reasoning: 'A narrow desktop viewport must wrap this column instead of clipping the receipt.',
+    });
+    const { container } = renderReceipt('archived-market', 'pos-1');
+
+    const grid = container.querySelector('[data-testid="receipt-layout-grid"]') as HTMLElement | null;
+    expect(grid).not.toBeNull();
+
+    const style = grid!.style;
+    expect(style.display).toBe('grid');
+    expect(style.gridTemplateColumns).toBe('minmax(0, 1fr) minmax(0, 380px)');
+    expect(style.alignItems).toBe('start');
+  });
+
   // ════════════════════════════════════════════════════════════════════
   // VALIDATION TEST -- the user explicitly demanded this.
   //
