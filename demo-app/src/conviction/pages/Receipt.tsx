@@ -431,49 +431,63 @@ function ReceiptView({
     </div>
   );
 
-  // Polaroid wrapper -- a BLOCK-LEVEL div, NOT a flex item.
+  // Polaroid wrapper -- IDENTICAL TO Explore.tsx's featured polaroid
+  // wrapper, the one the user just confirmed renders correctly on
+  // the live /explore page.
   //
-  // Every previous attempt put the polaroid inside a
-  // `display: flex; align-items: center` parent so the polaroid +
-  // share kit + share block + cross-link could share one tidy
-  // centered column. That centered-flex parent is exactly what
-  // kept squashing the SVG: regardless of whether the wrapper used
-  // `flex-shrink: 0`, `aspect-ratio: 2/3`, hard-pinned pixel
-  // width+height, or a receipt-scoped CSS rule forcing the SVG to
-  // `width: 100%; height: 100%`, Chrome's flex layout would
-  // ultimately resolve the wrapper's main-axis (vertical) size to
-  // roughly the photo height (~420 px) -- not the 570 px the
-  // matte+caption needs -- and `preserveAspectRatio="xMidYMid meet"`
-  // would then either squash the photo into a rectangle or letter-
-  // box the content into the upper-left of the SVG, leaving the
-  // title + footer + date sitting BELOW the visible matte.
+  // The working Explore wrapper is literally just:
+  //   <div style={{ display: 'flex', justifyContent: 'center' }}>
+  //     <Polaroid width={...} ... />
+  //   </div>
   //
-  // Every OTHER polaroid in the app that renders correctly
-  // (Profile.tsx BetTile, Embed.tsx, Explore.tsx, LivePortfolio
-  // preview) uses the SAME minimal pattern: a single block-level
-  // wrapper element (`<a style="display: block">` or `<Link
-  // style="display: block">`) containing the polaroid SVG, with NO
-  // flex layout above it. The SVG's `width=` / `height=` HTML
-  // attributes drive its intrinsic pixel size, the global
-  // responsive CSS rule (`max-width: 100%; height: auto`) lets it
-  // shrink in narrow parents, and the matte+caption always fit
-  // inside their viewBox.
+  // We add three additional concerns the receipt page needs that
+  // explore does not:
+  //   * `ref={polaroidRef}` -- ShareKit's PNG export reads the
+  //     polaroid's rendered pixels through this ref.
+  //   * `data-testid="receipt-polaroid-frame"` -- regression tests
+  //     pin the wrapper's structure to this hook.
+  //   * `position: relative` -- CashedOutStamp renders as an
+  //     `position: absolute` overlay and needs a positioned
+  //     ancestor to anchor against.
   //
-  // Match the working pattern here: the polaroid sits inside a
-  // simple block wrapper (no flex), and the rest of the column
-  // (share kit, share block, cross-link) lives in a SEPARATE flex
-  // column rendered as a sibling BELOW the polaroid wrapper. The
-  // polaroid never participates in flex layout.
+  // None of those touch the layout-relevant CSS. The wrapper is a
+  // horizontally-centred flex container that lets the polaroid SVG
+  // size itself entirely from its own `width=` / `height=` HTML
+  // attributes -- exactly like the explore page does. The matte and
+  // every caption line render inside the SVG's viewBox just like
+  // they do on /explore.
+  //
+  // ────────────────────────────────────────────────────────────
+  // History of EVERY previous wrapper attempt and why each broke:
+  //
+  //   v1: wrapper `width: 480, height: 720` + SVG `width: 100%;
+  //       height: 100%`. Grid cell capped width at 460 but height
+  //       stayed 720 => 30 px empty matte at the bottom.
+  //   v2: wrapper minimal (`position: relative; flexShrink: 0`),
+  //       SVG dictates intrinsic size. Squashed by the centered
+  //       flex column parent on desktop Chrome.
+  //   v3: wrapper `width: polaroidWidth; maxWidth: 100%;
+  //       aspectRatio: 2 / 3` + CSS forcing SVG to fill it. The
+  //       centered flex column STILL collapsed the wrapper's
+  //       intrinsic height.
+  //   v4: wrapper hard-pinned `width: polaroidWidth; height:
+  //       polaroidWidth * 1.5` + CSS forcing SVG to fill it. The
+  //       centered flex column STILL collapsed the wrapper.
+  //   v5: wrapper block-level (`display: block; width:
+  //       polaroidWidth; margin: 0 auto`), polaroid moved OUT of
+  //       the share-kit flex column. Still rendered broken on the
+  //       live receipt page (the user's screenshot at this commit).
+  //
+  // The pattern that ACTUALLY works -- and has always worked on
+  // /explore -- is the simplest: a `display: flex; justifyContent:
+  // center` wrapper around the polaroid, nothing else. Match it
+  // exactly here.
+  // ────────────────────────────────────────────────────────────
   const polaroidFrame = (
     <div
       ref={polaroidRef}
       data-testid="receipt-polaroid-frame"
-      style={{
-        position: 'relative',
-        display: 'block',
-        width: polaroidWidth,
-        margin: '0 auto',
-      }}
+      style={{ display: 'flex', justifyContent: 'center', position: 'relative' }}
     >
       <Polaroid
         marketId={merged.marketId}

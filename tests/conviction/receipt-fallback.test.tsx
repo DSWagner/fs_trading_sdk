@@ -315,7 +315,7 @@ describe('Receipt page: graceful market fallback', () => {
   //     everywhere else in the app.
   // ────────────────────────────────────────────────────────────────────
 
-  it('the polaroid frame wrapper is a block-level div matching the Profile / Embed working pattern (NOT a flex item)', () => {
+  it('the polaroid frame wrapper matches the working /explore wrapper EXACTLY (display:flex; justifyContent:center)', () => {
     useMarketMock.mockReturnValue({
       market: null,
       loading: false,
@@ -330,30 +330,35 @@ describe('Receipt page: graceful market fallback', () => {
     ) as HTMLElement | null;
     expect(frame).not.toBeNull();
     const style = (frame as HTMLElement).style;
-    // Anchor for the CashedOutStamp overlay and the polaroidRef
-    // PNG export ref.
+    // The wrapper is IDENTICAL to the Explore.tsx featured polaroid
+    // wrapper (see Explore.tsx line ~230) -- the one the user
+    // confirmed renders correctly on the live /explore page. We
+    // copy this exact CSS contract so the receipt-page polaroid
+    // never diverges from the only wrapper shape that has ever
+    // worked reliably.
+    expect(style.display).toBe('flex');
+    expect(style.justifyContent).toBe('center');
+    // Receipt-only additions: positioned ancestor for the
+    // CashedOutStamp absolute overlay.
     expect(style.position).toBe('relative');
-    // Block-level wrapper, NOT a flex/grid item. This is the load-
-    // bearing property: it stops Chrome from running flex
-    // intrinsic-size resolution on the SVG inside.
-    expect(style.display).toBe('block');
-    // Explicit pixel width that matches the polaroid SVG's
-    // intrinsic width attribute (380 px on desktop because jsdom
-    // matchMedia returns false so isMobile is false).
-    expect(style.width).toBe('380px');
-    // No explicit height -- the SVG's intrinsic 2:3 ratio
-    // (`height = width * 1.5`) drives the wrapper height via the
-    // standard responsive `height: auto` behaviour on the SVG.
+    // EVERY OTHER layout property must be DEFAULT -- no fixed
+    // width / height, no aspect-ratio, no max-width, no flex-shrink,
+    // no margin / padding, no overflow clip. The polaroid SVG
+    // inside dictates its own intrinsic size via its `width=` /
+    // `height=` HTML attributes, exactly as it does on /explore.
+    // Adding any of these to the wrapper has historically broken
+    // the layout (see the v1-v5 history block in the comment above
+    // the wrapper in Receipt.tsx).
+    expect(style.width).toBe('');
     expect(style.height).toBe('');
-    // Centered horizontally in whatever container it lands in.
-    expect(style.margin).toBe('0px auto');
-    // No clipping, no aspect-ratio, no max-width, no flex-shrink.
-    // The wrapper is minimal.
-    expect(style.overflow).not.toBe('hidden');
     expect(style.maxWidth).toBe('');
     expect(style.aspectRatio).toBe('');
     expect(style.flexShrink).toBe('');
+    expect(style.flexDirection).toBe('');
+    expect(style.alignItems).toBe('');
+    expect(style.margin).toBe('');
     expect(style.boxSizing).toBe('');
+    expect(style.overflow).not.toBe('hidden');
   });
 
   it('the polaroid frame wrapper is NOT wrapped in a flex column with the share kit (avoids the flex-squash bug)', () => {
