@@ -62,13 +62,33 @@
 :root[data-theme="dark"] {
   --c-paper: #161122;
   --c-paper-deep: #0E0A18;
-  --c-card: #1E1830;
+  /* Dark-mode card background. Previously #1E1830 -- only 4 hex
+   * points brighter than the page background #161122, giving a
+   * 1.31:1 contrast ratio (well below WCAG 3:1 for non-text UI).
+   * On desktop, the polaroid receipt's matte was visually
+   * indistinguishable from the page background: the photo at the
+   * top looked correct, but the empty matte area between the photo
+   * and the caption lines blended into the page, making the title
+   * and footer text appear to "float" on the page background as if
+   * the polaroid container had broken or the layout was cropped.
+   * Bumped to #29213F (contrast 1.85:1) so every dark-mode card --
+   * the polaroid matte, the live drift card, the comparison pair,
+   * the share-embed block, every popup -- has visible boundaries
+   * against the page. */
+  --c-card: #29213F;
   --c-ink: #F0E8F5;
   --c-ink-soft: #C9BCD8;
   --c-ink-mute: #9388AB;
   --c-ink-fade: #5C4F73;
-  --c-rule: #2D2440;
-  --c-rule-soft: #211B33;
+  /* Dark-mode border color. Previously #2D2440 -- only a few hex
+   * points brighter than the new card background, so card borders
+   * disappeared inside the matte. Bumped to #4A3F66 so the
+   * polaroid matte's 1 px border ring is clearly visible against
+   * both the matte fill and the page background, framing the
+   * polaroid as an editorial artifact instead of letting it bleed
+   * into the rest of the column. */
+  --c-rule: #4A3F66;
+  --c-rule-soft: #2D2440;
   --c-ember: #F4A572;
   --c-ember-deep: #E68A4F;
   --c-teal: #C5A3F0;

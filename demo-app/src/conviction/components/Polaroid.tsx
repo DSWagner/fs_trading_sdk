@@ -711,7 +711,12 @@ function PolaroidImpl(props: PolaroidProps) {
         rx="6"
         fill={palette.card}
         stroke={rarityMeta && rarity && rarity !== 'common' ? rarityMeta.color : palette.rule}
-        strokeWidth={rarityMeta && rarity && rarity !== 'common' ? rarityMeta.borderWidth : 1}
+        // Non-rarity matte border bumped from 1 -> 1.5 px so the
+        // polaroid matte's outline is clearly visible in dark mode
+        // (1 px borders disappear into the dark page background even
+        // with the bumped --c-rule contrast). Rarity tiers keep their
+        // own thicker, coloured borders.
+        strokeWidth={rarityMeta && rarity && rarity !== 'common' ? rarityMeta.borderWidth : 1.5}
       />
 
       {/* Photo */}

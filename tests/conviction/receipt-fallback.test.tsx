@@ -449,12 +449,19 @@ describe('Receipt page: graceful market fallback', () => {
     const viewBox = svg!.getAttribute('viewBox') || '';
     expect(viewBox).toBe(`0 0 ${svgW} ${svgH}`);
 
-    // The SVG must NOT carry any CSS stretch / letterbox contract.
-    // It renders at its intrinsic numeric pixel size, full stop.
+    // The SVG MUST carry inline width / height / max-width in pixels.
+    // This is the load-bearing v9 fix: pinning dimensions in the
+    // INLINE style attribute is the only way to guarantee the SVG
+    // element's CSS box matches its viewBox EXACTLY across every
+    // browser, every parent layout, every responsive media query --
+    // no `height: auto` quirk, no flex stretch, no preview-deployment
+    // CSS cache. Inline px values win over (or sit alongside) any
+    // external rule and need no `!important` to be authoritative.
     const style = (svg as SVGSVGElement).style;
     expect(style.position).not.toBe('absolute');
-    expect(style.width).toBe('');
-    expect(style.height).toBe('');
+    expect(style.width).toBe(`${svgW}px`);
+    expect(style.height).toBe(`${svgH}px`);
+    expect(style.maxWidth).toBe('none');
   });
 
   // ────────────────────────────────────────────────────────────────────
