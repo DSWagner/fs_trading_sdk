@@ -5,6 +5,18 @@
 
 Every prediction is signed, dated, and turned into a Polaroid receipt the user can share. Before the market resolves the photo is faint and "developing." When reality catches up, the photo sharpens, color blooms in, and a thin thread shows where truth landed compared to the call. The reasoning the user wrote at signing time is preserved permanently and rides along in every share link and embed.
 
+## Submission Links
+
+| Item | Link |
+| --- | --- |
+| Live app | https://conviction-receipts.vercel.app/ |
+| Source repo | https://github.com/DSWagner/fs_trading_sdk |
+| Submission guide | [`SUBMISSION.md`](./SUBMISSION.md) |
+| Full project walkthrough | [`CONVICTION.md`](./CONVICTION.md) |
+| Contact for competition form | `@dswagner9` on Telegram |
+
+Final submission state: Conviction has a public Vercel deploy, a public GitHub fork, 498 Conviction-specific tests across 37 files, live smoke tests passing, and focused regressions for the receipt Polaroid sizing, caption visibility, comparison-pair clipping, duplicate SVG definition IDs, and live market field drift.
+
 | Surface | Purpose |
 | --- | --- |
 | `/` (Landing) | Publication front page with three sample receipts and a develop demo. |

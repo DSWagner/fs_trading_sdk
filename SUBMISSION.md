@@ -11,7 +11,7 @@ Everything you need to submit Conviction to the [FunctionSpace Vibecoding Compet
 > | ✓ done | 498 conviction tests pass, including 5 live smoke tests + vite + docusaurus builds clean. |
 > | ☐ you | Follow [@functionspaceHQ on X](https://x.com/functionspaceHQ) — required for eligibility, the rule is checked manually before announcement. |
 > | ☐ you | Post about the build on X tagging `@functionSPACEHQ`. Suggested copy is in §1 below; attach a screenshot or short clip of the receipt developing. |
-> | ☐ you | Have your **Telegram handle** ready — the form requires it (winners are contacted via Telegram). |
+> | ✓ done | Telegram handle for the form: `@dswagner9`. |
 > | ☐ you | Open the [submission form](https://ecosystem.functionspace.dev/competition/submit) and paste the values from §1 below. Every text field already has a copy-paste-ready answer. |
 > | ☐ you | Tick both acknowledgement boxes on the form (follow on X + IP terms). |
 >
@@ -92,7 +92,7 @@ Suggested tweet (≤280 chars):
 ### Telegram handle
 
 ```
-<your @handle here>
+@dswagner9
 ```
 
 (Required so the team can reach you if you win. Not visible publicly.)
